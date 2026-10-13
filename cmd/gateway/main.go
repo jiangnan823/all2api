@@ -104,18 +104,25 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	// Graceful shutdown on SIGTERM/SIGINT — ≤10s total
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-		<-sigCh
-		cancel()
-	}()
+	// A2 (adversarial review): the signal channel drives server.Shutdown
+	// directly. The previous code cancelled a context with no consumer while
+	// ListenAndServe blocked, so the Shutdown block was unreachable and the
+	// ≤10s graceful-stop contract could never hold. Exit-code path is now
+	// explicit: real ListenAndServe errors exit 1, ErrServerClosed exits 0.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	if err := server.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "changed") {
-		fmt.Printf("Server error: %v\n", err)
-		os.Exit(1)
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
+
+	select {
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	case <-sigCh:
 	}
 
 	// Shutdown with 10s timeout
