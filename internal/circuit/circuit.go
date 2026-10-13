@@ -23,7 +23,7 @@ type Reason string
 const (
 	ReasonRateLimited  Reason = "rate_limited"  // 429
 	ReasonNotFound     Reason = "not_found"     // 404
-	ReasonPayment      Reason = "payment"       // 402
+	ReasonQuotaExhausted Reason = "quota_exhausted" // 402
 	ReasonConsecutive  Reason = "consecutive"   // too many failures
 	ReasonDisabled     Reason = "disabled"      // manual disable switch
 )
@@ -198,7 +198,7 @@ func (b *Breaker) cooldown(dur int64) {
 func (b *Breaker) hardCooldown(until time.Time) {
 	b.state = StateOpen
 	b.nextReset = until
-	b.reason = ReasonPayment
+	b.reason = ReasonQuotaExhausted
 }
 
 // trip permanently opens the circuit until manually reset.
