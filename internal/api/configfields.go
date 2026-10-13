@@ -6,6 +6,17 @@ import (
 	"all2api/internal/config"
 )
 
+// halveBudgetSupported implements the per-source filter decided for test
+// registration A (seq=482) / PM seq=486 leaning: the 「429 后当日额度减半」
+// stance is a signin-posture attribute (PRD v0.2 §7.1 / config.defaultThrottle
+// — currently Qoder only), so the editable FieldDef is delivered only for
+// that source class. The frozen key itself stays under
+// sources.<id>.throttle.halve_budget_after_429 and in the raw config
+// passthrough — no contract-surface change, no D2 needed.
+func halveBudgetSupported(source string) bool {
+	return source == "qoder"
+}
+
 // FieldDef metadata delivery (M1 queue ④). The panel form is backend-driven
 // (UI §5.13: 前端不硬编码表单). Wire keys/paths follow the frozen surface;
 // label/description are copy KEYS, never inline text (UI §5.16).
@@ -84,8 +95,11 @@ func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 			fnum(p+"backoff.base_429_sec", "config.field.base_429_sec.label", "sec", 600, 86400, "next_request"),
 			fnum(p+"backoff.not_found_sec", "config.field.not_found_sec.label", "sec", 0, 3600, "next_request"),
 			fnum(p+"jitter_minutes", "config.field.jitter_minutes.label", "min", 0, 120, "next_request"),
-			fbool(p+"halve_budget_after_429", "config.field.halve_budget_after_429.label", "next_request"),
 		}}
+		if halveBudgetSupported(id) {
+			th.Fields = append(th.Fields,
+				fbool(p+"halve_budget_after_429", "config.field.halve_budget_after_429.label", "next_request"))
+		}
 		groups = append(groups, th)
 
 		adv := configGroup{Group: "danger." + id, Fields: []fieldDef{

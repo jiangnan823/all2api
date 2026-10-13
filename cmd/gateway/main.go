@@ -14,6 +14,7 @@ import (
 	"all2api/internal/adapter"
 	"all2api/internal/api"
 	"all2api/internal/config"
+	"all2api/internal/host"
 	// Assembly layer for build-tag-based platform registration.
 	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
 	_ "all2api/internal/platforms"
@@ -78,8 +79,13 @@ func main() {
 	// Responses API (feature flag: disabled in MVP, enabled in M1)
 	mux.HandleFunc("/v1/responses", responsesHandler)
 
-	// Panel API surface (G3 consent gate + config delivery) — M1 queue ③.
-	api.Register(mux)
+	// Runtime control plane: per-source circuit breakers (fed by the frozen
+	// sources.<id>.throttle.backoff.* keys) + the shared account pool. The
+	// recover endpoint acts on this host — see internal/api/recover.go.
+	gwHost := host.New(cfg)
+
+	// Panel API surface (G3 consent gate + config delivery + recover wiring).
+	api.Register(mux, gwHost)
 
 	// Embedded panel with runtime __ALL2API_BASE__ injection (G5) — M1 queue ②.
 	// Registered last: "/" is the SPA fallback catch-all, specific patterns win.
@@ -122,6 +128,26 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Shutdown complete.")
+}
+
+// chatCompletionsHandler / responsesHandler — restored scaffold stubs (lost
+// in the c49601c main.go rewrite, which left the mux references dangling and
+// broke the build). The /v1 router layer is M2 scope: adapters expose no
+// upstream-send capability yet, so these endpoints honestly report 501
+// instead of faking a proxy.
+func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
+	// TODO: router layer implementation
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	fmt.Fprint(w, `{"error":"chat completions not yet implemented"}`)
+}
+
+func responsesHandler(w http.ResponseWriter, r *http.Request) {
+	// Feature flag controlled by config.router.responses_api.enabled;
+	// even with the flag on the upstream layer is not implemented yet.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	fmt.Fprint(w, `{"error":"responses API not yet implemented"}`)
 }
 
 // resolveConfigPath implements: -config <path> flag → ALL2API_CONFIG env →

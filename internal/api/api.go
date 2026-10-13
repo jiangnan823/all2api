@@ -11,13 +11,19 @@ import (
 
 	"all2api/internal/adapter"
 	"all2api/internal/config"
+	"all2api/internal/host"
 )
 
-// Register wires the M1 queue-③/④ routes onto mux.
-func Register(mux *http.ServeMux) {
+// Register wires the M1 queue-③/④ routes (plus the wiring-batch recover
+// endpoint) onto mux. The host carries the circuit↔pool wiring; recover is
+// registered only when a host exists so the endpoint can never hang empty.
+func Register(mux *http.ServeMux, h *host.Host) {
 	mux.HandleFunc("/api/config", withAPIKey(handleConfig))
 	mux.HandleFunc("/api/config/fields", withAPIKey(handleConfigFields))
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))
+	if h != nil {
+		mux.HandleFunc("POST /api/accounts/{id}/recover", withAPIKey(handleRecover(h)))
+	}
 }
 
 // withAPIKey guards the panel surface with the gateway api_key when one is

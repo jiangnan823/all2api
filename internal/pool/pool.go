@@ -208,6 +208,25 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 	}
 }
 
+// RecoverAccount clears an account's cooldown as part of the user-initiated
+// recover flow (POST /api/accounts/{id}/recover), after the caller has
+// verified the credential. A manual "disabled" status is never overridden —
+// only "cooling" returns to "active". Returns true if the account exists.
+func (s *WeightedRandomSelector) RecoverAccount(platform, accountID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	acc, ok := s.accounts[platform][accountID]
+	if !ok {
+		return false
+	}
+	if acc.Status == "cooling" {
+		acc.Status = "active"
+	}
+	acc.CooldownEnd = time.Time{}
+	return true
+}
+
 // ListAccounts returns all accounts for a platform.
 func (s *WeightedRandomSelector) ListAccounts(platform string) []*Account {
 	s.mu.RLock()
