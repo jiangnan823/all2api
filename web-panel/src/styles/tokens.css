@@ -42,7 +42,7 @@
   --bg-surface: #ffffff;
   --bg-surface-2: #fafbfc;
   --bg-elevated: #ffffff;
-  --scrim: rgba(23, 26, 33, 0.45);
+  --scrim: rgba(0, 0, 0, 0.45);
   --bg-hover: #f0f2f5;
   --bg-selected: #e8efff;
   --line-border: #e3e6eb;
@@ -83,7 +83,7 @@
   --bg-surface: #1b1f26;
   --bg-surface-2: #20252d;
   --bg-elevated: #232830;
-  --scrim: rgba(0, 0, 0, 0.62);
+  --scrim: rgba(0, 0, 0, 0.65);
   --bg-hover: #262c35;
   --bg-selected: #24304a;
   --line-border: #2c333d;

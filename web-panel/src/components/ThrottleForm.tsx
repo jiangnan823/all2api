@@ -40,8 +40,11 @@ export function ThrottleForm({ source, budget, onSave }: ThrottleFormProps) {
   const [errors, setErrors] = useState<FieldError[]>([]);
   const fields = useMemo(() => editableThrottleFields(source), [source]);
 
+  /** 空输入记为 NaN 而不是 0：min=0 的字段（min_gap_ms / jitter_minutes）若转 0 会被"合法"放行（F-5）。 */
+  const toInput = (v: number) => (Number.isFinite(v) ? String(v) : '');
+
   function setNumber(slot: Slot, raw: string) {
-    const n = raw === '' ? 0 : Number(raw);
+    const n = raw === '' ? NaN : Number(raw);
     setErrors([]);
     setDraft((d) => {
       switch (slot) {
@@ -104,14 +107,14 @@ export function ThrottleForm({ source, budget, onSave }: ThrottleFormProps) {
                       type="number" step="1" inputMode="numeric"
                       name={`${path}.0`}
                       aria-label={`${f.label} · ${THROTTLE.GAP_LO}`}
-                      value={draft.minGapMs[0]}
+                      value={toInput(draft.minGapMs[0])}
                       onChange={(e) => setNumber('min_gap_ms.lo', e.target.value)}
                     />
                     <input
                       type="number" step="1" inputMode="numeric"
                       name={`${path}.1`}
                       aria-label={`${f.label} · ${THROTTLE.GAP_HI}`}
-                      value={draft.minGapMs[1]}
+                      value={toInput(draft.minGapMs[1])}
                       onChange={(e) => setNumber('min_gap_ms.hi', e.target.value)}
                     />
                   </td>
@@ -137,7 +140,7 @@ export function ThrottleForm({ source, budget, onSave }: ThrottleFormProps) {
                     type="number" step="1" inputMode="numeric"
                     name={path}
                     aria-label={f.label}
-                    value={value}
+                    value={toInput(value)}
                     onChange={(e) => setNumber(f.key as Slot, e.target.value)}
                   />
                 </td>

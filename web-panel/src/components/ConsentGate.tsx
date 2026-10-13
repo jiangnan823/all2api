@@ -114,6 +114,8 @@ export function ConsentGate({ source, noticeVersion, scrollRequired = true, onAc
         </p>
       </div>
 
+      {/* 留痕说明句必须在 label 关联内（PM seq=501 ①，缺陷级验收线）：
+          脱离 label 时读屏聚焦勾选框只听到半句承诺，等于把 O-5 服务端留痕的边界藏在用户听不到的地方。 */}
       <label className="consent-gate__check">
         <input
           type="checkbox"
@@ -123,8 +125,8 @@ export function ConsentGate({ source, noticeVersion, scrollRequired = true, onAc
           onChange={(e) => setChecked(e.target.checked)}
         />
         <span>{consentCheckLabel(sourceDisplayName(source))}</span>
+        <span className="consent-gate__check-note">{CONSENT.CHECK_NOTE}</span>
       </label>
-      <p className="consent-gate__check-note">{CONSENT.CHECK_NOTE}</p>
 
       <footer className="consent-gate__actions">
         <button type="button" className="btn btn--abort" onClick={onAbort} disabled={false}>

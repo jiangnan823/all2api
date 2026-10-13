@@ -90,6 +90,22 @@ describe('G3 / F-V1 落点唯一', () => {
   });
 });
 
+/**
+ * 红线句扫描域（UI UE seq=478 第八条建议）：只看 402 出口面，不含 §9 须知正文。
+ * 分工：红线句式归本门，须知逐字归 TC-M1-033 的 copy §9 diff——两条门各管各的，不互相误伤。
+ * zh.ts 里的 §9 区段 = `export const CONSENT` 起、`export const THROTTLE` 止（含 CONSENT_APPENDIX 与来源名）。
+ */
+function stripNoticeBaseline(text: string): string {
+  const from = text.indexOf('export const CONSENT = {');
+  const to = text.indexOf('export const THROTTLE = {');
+  if (from < 0 || to < 0 || to < from) return text;
+  return text.slice(0, from) + text.slice(to);
+}
+const redLineCorpus = impl.map((f) => ({
+  rel: f.rel,
+  text: f.rel === 'i18n/zh.ts' ? stripNoticeBaseline(f.text) : f.text,
+}));
+
 describe('402 文案红线', () => {
   /**
    * seq=445 裁三：禁「冷却中」的范围收窄为 **402/quota_exhausted 语境**。
@@ -100,7 +116,7 @@ describe('402 文案红线', () => {
   const CTX_402 = /quota_exhausted|exhaust_402|额度耗尽|EXHAUST_/;
 
   it('唯一形式逐字在场', () => {
-    expect(impl.some((f) => f.text.includes('额度耗尽·次日04:00重置'))).toBe(true);
+    expect(redLineCorpus.some((f) => f.text.includes('额度耗尽·次日04:00重置'))).toBe(true);
   });
 
   it('402 语境行内不得出现「冷却中」', () => {
@@ -121,10 +137,122 @@ describe('402 文案红线', () => {
     expect(impl.find((f) => f.rel === 'components/ThrottleForm.tsx')?.text).toContain(
       "reasonCopy('quota_exhausted')",
     );
-    // 全实现层凡是"额度耗尽…重置"这条红线句，标点/空格形态必须与冻结串完全一致（自然语言里单独提到「额度耗尽」不受限）
+    // 红线句式只在 402 出口面内比对，标点/空格形态必须与冻结串完全一致
     const variants = new Set(
-      impl.flatMap((f) => f.text.match(/额度耗尽[^\n'"`]*重置/g) ?? []),
+      redLineCorpus.flatMap((f) => f.text.match(/额度耗尽[^\n'"`]*重置/g) ?? []),
     );
     expect([...variants]).toEqual(['额度耗尽·次日04:00重置']);
+    // 排除区必须是 §9 须知面本身，不能是随手划走的别的文件
+    const zh = impl.find((f) => f.rel === 'i18n/zh.ts');
+    expect(zh?.text).toContain('CONSENT_APPENDIX');
+    expect(stripNoticeBaseline(zh?.text ?? '').length).toBeLessThan((zh?.text.length ?? 0) - 10);
+  });
+});
+
+describe('§1.2 遮罩 token 定稿（UI UE seq=478 第四点）', () => {
+  const tokens = rawAll.find((f) => f.rel === 'styles/tokens.css')?.text ?? '';
+  const light = tokens.slice(0, tokens.indexOf('[data-theme="dark"]'));
+  const dark = tokens.slice(tokens.indexOf('[data-theme="dark"]'));
+
+  it('--scrim 值两档逐字对齐 UI UE 定稿', () => {
+    expect(light).toMatch(/--scrim:\s*rgba\(0,\s*0,\s*0,\s*0?\.45\)/);
+    expect(dark).toMatch(/--scrim:\s*rgba\(0,\s*0,\s*0,\s*0?\.65\)/);
+  });
+
+  it('遮罩不复用为禁用态/只读态覆盖层：scrim 只挂在危险确认弹窗上', () => {
+    const panel = rawAll.find((f) => f.rel === 'styles/panel.css')?.text ?? '';
+    const users = [...panel.matchAll(/([^{}]+)\{[^}]*var\(--scrim\)/gs)].map((m) => m[1].trim());
+    expect(users).toEqual(['.danger-action__scrim']);
+  });
+});
+
+describe('§1.1 层级纪律：只用四档，禁第五档与魔法数', () => {
+  const tokens = rawAll.find((f) => f.rel === 'styles/tokens.css')?.text ?? '';
+
+  it('z 档只有 sticky / drawer / dialog / toast 四个', () => {
+    const scales = [...tokens.matchAll(/--z-([a-z]+):/g)].map((m) => m[1]);
+    expect(scales.sort()).toEqual(['dialog', 'drawer', 'sticky', 'toast']);
+  });
+
+  it('样式里所有 z-index 都必须引用 var(--z-*)，且 toast 高于 dialog', () => {
+    for (const f of impl) {
+      for (const line of f.code.split('\n')) {
+        const m = line.match(/z-index:\s*([^;]+);/);
+        if (!m) continue;
+        expect(m[1].trim(), `${f.rel}: ${line.trim()}`).toMatch(/^var\(--z-(sticky|drawer|dialog|toast)\)$/);
+      }
+    }
+    expect(tokens).toMatch(/--z-toast:\s*60/);
+    expect(tokens).toMatch(/--z-dialog:\s*50/);
+    // 危险确认弹窗在 --z-dialog(50)，热生效回执必须走 --z-toast(60) 才压得住遮罩
+    expect(Number(tokens.match(/--z-toast:\s*(\d+)/)?.[1])).toBeGreaterThan(
+      Number(tokens.match(/--z-dialog:\s*(\d+)/)?.[1]),
+    );
+  });
+});
+
+describe('接口面字段集合冻结（D2-001 模子推广，UI UE seq=478 第二点）', () => {
+  const SRC: string = ROOT;
+  function fieldSet(file: string, iface: string): string[] {
+    const src = readFileSync(join(SRC, file), 'utf8');
+    const start = src.indexOf(`export interface ${iface}`);
+    expect(start, `${iface} 未找到`).toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf('\n}', start));
+    return [...body.matchAll(/^\s{2}(\w+)(\??):/gm)].map((m) => `${m[1]}${m[2] ? '?' : ''}`).sort();
+  }
+
+  it('DangerActionProps 集合已冻结：第五个 prop、别名或可选性变更 = 契约面改动走 D2', () => {
+    expect(fieldSet('components/DangerAction.tsx', 'DangerActionProps')).toEqual([
+      'confirmWord',
+      'impactSummary',
+      'onCancel?',
+      'onConfirm',
+    ]);
+  });
+
+  it('ConsentGateProps 集合已冻结（onAbort 必选在列）', () => {
+    expect(fieldSet('components/ConsentGate.tsx', 'ConsentGateProps')).toEqual([
+      'noticeVersion',
+      'onAbort',
+      'onAck',
+      'scrollRequired?',
+      'source',
+    ]);
+  });
+
+  it('ThrottleFormProps 集合已冻结（受控三字段）', () => {
+    expect(fieldSet('components/ThrottleForm.tsx', 'ThrottleFormProps')).toEqual([
+      'budget',
+      'onSave',
+      'source',
+    ]);
+  });
+});
+
+/**
+ * 留痕说明句的可达性与折行纪律（项目经理 seq=501 二①②，测试 seq=482 批三复验清单）。
+ * 归口提醒：本门只管"渲染位置 + 不许截断"这两条结构面；CHECK_NOTE 正文逐字仍由 TC-M1-033 的 copy §9 diff 独占守卫。
+ */
+describe('§5.19 留痕说明句：label 关联内 + 折行不缩句', () => {
+  const gate = impl.find((f) => f.rel === 'components/ConsentGate.tsx')?.text ?? '';
+  const panel = rawAll.find((f) => f.rel === 'styles/panel.css')?.text ?? '';
+
+  it('CHECK_NOTE 渲染在 <label className="consent-gate__check"> 之内（脱离 label = 读屏只听半句承诺，P1）', () => {
+    const labelOpen = gate.indexOf('<label className="consent-gate__check">');
+    const noteRender = gate.indexOf('{CONSENT.CHECK_NOTE}');
+    const labelClose = gate.indexOf('</label>', labelOpen);
+    expect(labelOpen).toBeGreaterThan(-1);
+    expect(noteRender).toBeGreaterThan(labelOpen);
+    expect(noteRender).toBeLessThan(labelClose);
+    // 反面写法钉死：不允许再退回 label 外的兄弟节点
+    expect(gate).not.toMatch(/<\/label>\s*<p className="consent-gate__check-note"/);
+  });
+
+  it('折行只许调行高/间距：note 规则内禁 text-overflow / line-clamp / nowrap', () => {
+    const rule = panel.match(/\.consent-gate__check-note\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('line-height');
+    for (const forbidden of ['text-overflow', 'line-clamp', 'white-space']) {
+      expect(rule, `${forbidden} 会把 §9 长句截掉`).not.toContain(forbidden);
+    }
   });
 });
