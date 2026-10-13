@@ -36,7 +36,7 @@ func (r *Registry) Register(a Adapter) error {
 	r.byName[name] = a
 
 	caps := a.Capabilities()
-	for bit := CapType(1); bit <= CapSSERebuild; bit <<= 1 {
+	for bit := CapType(1); bit <= _lastPlatformCap; bit <<= 1 {
 		if caps.Has(bit) {
 			r.byCap[bit] = append(r.byCap[bit], name)
 		}

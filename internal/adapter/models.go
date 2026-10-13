@@ -50,6 +50,7 @@ type Adapter interface {
 }
 
 // Platform CapType represents adapter capability bits for router择优.
+// These are the FIRST 5 bits — used by CapSet and byCap index lookups.
 type CapType uint32
 
 const (
@@ -60,10 +61,14 @@ const (
 	CapResponsesReasoning                  // reasoning_content semantic
 )
 
+// _lastPlatformCap is the highest platform bit index (used by registry.byCap loop).
+const _lastPlatformCap = CapResponsesReasoning
+
 // Gateway-level capabilities (not part of platform CapSet).
 // These are implementation concerns of the all2api gateway itself, not platform attributes.
+// They start at a high bit position to avoid collision with platform bits.
 const (
-	CapSSERebuild CapType = 1 << iota // SSE frame normalization rebuild (gateway internal)
+	CapSSERebuild CapType = 1 << 16 // SSE frame normalization rebuild (gateway internal)
 	// Add more gateway-only caps here as needed
 )
 
@@ -95,7 +100,7 @@ const (
 	ReasonPlatformDown   FailureReason = "platform_down"    // platform unreachable; wait and degrade
 	ReasonRateLimited    FailureReason = "rate_limited"      // 429 — "触发限流·已降频" minute countdown
 	ReasonNotFound       FailureReason = "not_found"         // 404 — "接口或模型不存在", jump to model view
-	ReasonPayment        FailureReason = "payment"           // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
+	ReasonQuotaExhausted  FailureReason = "quota_exhausted"     // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
 	ReasonProtocolMismatch FailureReason = "protocol_mismatch" // upstream API version changed; needs patch release
 	ReasonTimeout        FailureReason = "timeout"           // request timeout exceeded
 	ReasonDisabled       FailureReason = "disabled"          // manual disable switch (account/source); no circuit display

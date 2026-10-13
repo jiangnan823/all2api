@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"all2api/internal/adapter"
-	_ "all2api/internal/platform/workbuddy" // Register via init()
+	// Assembly layer for build-tag-based platform registration.
+	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
+	_ "all2api/internal/platforms"
 )
 
 // Version injected by ldflags at build time.
@@ -55,7 +57,7 @@ func main() {
 	server := &http.Server{
 		Addr:     addr,
 		Handler:  mux,
-		ReadTimeOut: 5 * time.Second,
+		ReadTimeout: 5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
