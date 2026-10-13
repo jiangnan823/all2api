@@ -53,3 +53,9 @@ Thumbs.db
 .qoder/
 .qoder-collab-runtime/
 .qoder-sop-runtime/
+
+# --- nested local git worktrees (feat/* branches checked out side-by-side) ----
+# They are separate working trees, never part of main's index. Ignoring them keeps
+# `git status` a real cleanliness signal and makes an accidental `git add -A` inert.
+.worktrees/
+.worktree/

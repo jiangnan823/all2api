@@ -34,25 +34,43 @@ jobs:
   panel:
     name: panel / build
     runs-on: ubuntu-latest
-    # GitHub forbids the `env` context in jobs.<job_id>.if (allowed: github, needs,
-    # vars, inputs) — so the panel dir is spelled literally here. If PANEL_DIR in the
-    # env block ever changes, this is the ONE other place to edit.
-    if: ${{ hashFiles('web-panel/package-lock.json') != '' }}
+    # No job-level `if` here, on purpose. GitHub evaluates jobs.<job_id>.if with only
+    # the github/needs/vars/inputs contexts and only the always/cancelled/success/
+    # failure functions — `env` AND `hashFiles()` are both rejected there, and a
+    # rejected expression fails the whole workflow before any job is created (the
+    # "0 jobs, instant failure" signature seen in runs 38413356374/38413358569 and
+    # 38428692560/38428694889). Panel presence is therefore detected in a step and
+    # each npm step is gated on that output.
+    outputs:
+      dist: ${{ steps.build.outputs.built }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect panel project
+        id: detect
+        run: |
+          if [ -f "${PANEL_DIR}/package-lock.json" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${PANEL_DIR} has no locked Node project yet — panel steps are a no-op (M1 item, fronted)"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.detect.outputs.present == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ${{ env.PANEL_DIR }}/package-lock.json
 
       - name: Install
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: npm ci
 
       # typecheck/test are hard gates whenever the scripts exist.
       - name: Typecheck + unit tests (if defined)
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: |
           set -e
@@ -66,6 +84,7 @@ jobs:
       # `build` script lands, this step runs it and any failure is blocking.
       - name: Build panel (skipped while no build script is defined)
         id: build
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: |
           set -e

@@ -20,9 +20,10 @@ help:
 deps: ## download module deps
 	go mod download
 
-tidy: ## keep go.mod/go.sum honest (run before committing)
+tidy: ## keep go.mod (and go.sum, once deps exist) honest — run before committing
 	go mod tidy
-	-git diff --exit-code go.mod go.sum || echo "go.mod/go.sum changed — commit them"
+	-@git diff --exit-code -- go.mod $$(test -f go.sum && echo go.sum) \
+		|| echo "go.mod/go.sum changed — commit them"
 
 embed: ## ensure the go:embed target exists so the build can compile
 	@mkdir -p $(EMBED_DIR)

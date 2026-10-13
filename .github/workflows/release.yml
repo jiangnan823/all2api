@@ -66,9 +66,10 @@ jobs:
   panel:
     name: release / panel
     runs-on: ubuntu-latest
-    # `env` context is not available in jobs.<job_id>.if (github/needs/vars/inputs only);
-    # the path is literal. Keep it in sync with env.PANEL_DIR.
-    if: ${{ hashFiles('web-panel/package-lock.json') != '' }}
+    # No job-level `if`: jobs.<job_id>.if is evaluated with github/needs/vars/inputs and
+    # only the always/cancelled/success/failure functions, so both `env` and hashFiles()
+    # are rejected there — and a rejected expression fails the entire workflow before any
+    # job exists (the "0 jobs, instant failure" signature). Detection is a step instead.
     outputs:
       # Consumers must key off this, not off package-lock presence: web-panel has
       # typecheck/test before it has a bundler (M1), so a lockfile does not imply
@@ -76,14 +77,26 @@ jobs:
       dist: ${{ steps.build.outputs.built }}
     steps:
       - uses: actions/checkout@v4
+      - name: Detect panel project
+        id: detect
+        run: |
+          if [ -f "${PANEL_DIR}/package-lock.json" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${PANEL_DIR} has no locked Node project — release embeds the placeholder panel"
+          fi
       - uses: actions/setup-node@v4
+        if: steps.detect.outputs.present == 'true'
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: ${{ env.PANEL_DIR }}/package-lock.json
       - run: npm ci
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
       - name: Typecheck + unit tests (hard when defined)
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: |
           set -e
@@ -91,6 +104,7 @@ jobs:
           npm run --if-present test
       - name: Build (skipped while no build script is defined)
         id: build
+        if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: |
           set -e
@@ -113,8 +127,9 @@ jobs:
     name: release / bin ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     needs: [meta, panel]
-    # panel is conditional (it only exists once web-panel has a lockfile); a skipped
-    # panel must not skip the release binaries.
+    # always() so a panel job that ends skipped/failure (no lockfile yet, or a red
+    # frontend gate) is visible here instead of silently skipping the binaries; the
+    # binaries themselves gate on needs.panel.outputs.dist for the embed step.
     if: ${{ always() && needs.meta.result == 'success' && (needs.panel.result == 'success' || needs.panel.result == 'skipped') }}
     strategy:
       fail-fast: false

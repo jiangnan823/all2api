@@ -47,7 +47,10 @@ WORKDIR /src
 
 RUN apk add --no-cache ca-certificates tzdata git
 
-COPY go.mod go.sum ./
+# go.mod only: the module is dependency-free today, so there is no go.sum to copy and
+# `COPY go.mod go.sum ./` would abort the build with "file not found". When backend adds
+# the first third-party dependency, commit go.sum AND add it to this COPY line.
+COPY go.mod ./
 RUN go mod download
 
 COPY . .

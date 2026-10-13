@@ -177,3 +177,42 @@ panel job 必红，且极易被误记成 Go 线故障。修订：
 `hashFiles` 在 job 级 `if` 属"可用于 key"，保留。
 
 
+
+### 9.7 二跑实测与根因二次修正（16:13Z，run 38428692560 / 38428694889，head=8d327ec）
+
+远端 `refs/heads/main == 8d327ec18d47d9306ae7c8076fcf6f94e6a2a2b9`（API 实测，pushed_at 16:13:12Z），
+本次 push **确实自动触发**两条 run，两条仍 `completed/failure`、**jobs = 0**、`run_started_at == updated_at`、
+`billable` 为空、`spendable_runner_ms` 无、仓库 artifacts total = 0。
+即：**消耗的 runner 分钟 = 0**，代价只是两条 run 记录（校验层拒绝，作业从未创建）。
+
+根因修正（推翻我在 §9.6 末段的判断）：官方 context 可用性表里
+`jobs.<job_id>.if` 的 **可用函数白名单只有 `always / cancelled / success / failure`**，
+`hashFiles` 只在 `steps.<step_id>.if` 可用。
+我上一次的"修复"只是把违规的 `env` context 换成违规的 `hashFiles` 函数，
+所以 8d327ec 里的 ci.yml/release.yml 依旧整体被拒 —— 这是**同一个缺陷的第二种形态，仍归 devops 工件线**，
+与 backend / fronted 代码无关。§9.6 那句"`hashFiles` 属可用于 key，保留"是错的，正式作废。
+
+另记：GitHub 的校验错误文案**只在 Web UI 出现**，REST（runs / jobs / timing / check-suites / check-runs）
+全部拿不到 reason（check-runs total = 0）。所以静态复扫必须自证充分，不能指望"跑一次看报错"。
+
+修复（本轮落盘，未 push）：panel job **取消 job 级 `if`**，改为 checkout 后的 `Detect panel project` 步骤
+（纯 shell 判 `-f ${PANEL_DIR}/package-lock.json`，不依赖任何 context 白名单）写 `present` 输出，
+npm 各步骤统一 `if: steps.detect.outputs.present == 'true'`；job 输出 `dist` 仍取 `steps.build.outputs.built`，
+无面板时为空 ⇒ release 的 binaries 走占位嵌入分支。复扫口径：job 级 `if` 只剩 `needs`/`github` + `always()`。
+
+同时修掉两处只在"真实构建"才暴露的工件缺陷（本机静态判定，非猜测）：
+1. `Dockerfile` 的 `COPY go.mod go.sum ./` —— 仓库**没有 go.sum**（`go.mod` 零第三方依赖，30 个 .go 文件 import
+   全部 stdlib 或模块内路径，已脚本核验），该 COPY 会让 `docker build` 直接 "file not found" 失败，
+   image / smoke / release 全红。已改为 `COPY go.mod ./` 并写明"backend 引入第一个依赖时必须同处加回 go.sum"。
+2. `.dockerignore` 未排除 `.worktrees/`（仓库内并存的嵌套 worktree，含完整源码 + node_modules），
+   `COPY . .` 会把它们带进上下文；已排除，并显式 `!internal/web/dist/**` 保住 `go:embed all:dist` 的目录。
+   `.gitignore` 同步加 `.worktrees/`，让 `git status` 仍是可信的干净度信号、`git add -A` 误操作失效。
+
+### 9.8 本地等效门禁（云端 Actions 由主人冻结后的替代口径）
+
+本机工具链实测：`node v24.18.0` / `npm` / `git` 可用；`go`、`docker`、`make`、`gh`、`gitleaks`、`gosec`、
+`govulncheck`、`golangci-lint`、`podman` **全部缺失**（`C:\Users\User\go` 只是 GOPATH，不是工具链）。
+所以按 PM 改道令：能真跑的真跑，跑不了的标 `skipped-with-reason`，不判红、不假 Pass。
+详见群内「本地等效门禁报告」。要让 Go 线与镜像线拿到真实证据，只有两条路：
+便携版 Go 解压到临时目录（不装系统、不改 PATH、用完删）或主人侧跑一次 `make build-all && docker build`。
+两者都需要主人点头，我不擅自装工具链。

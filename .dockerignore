@@ -9,6 +9,10 @@
 .qoder
 .qoder-collab-runtime
 .qoder-sop-runtime
+# Nested local git worktrees hold full duplicate source trees (incl. node_modules);
+# they must never enter the build context or get pulled in by `COPY . .`.
+.worktrees/
+.worktree/
 
 # Runtime state must never be baked into an image — these hold credentials.
 auths/
@@ -34,6 +38,11 @@ vendor/
 web-panel/node_modules
 web-panel/.next
 web-panel/tmp
+
+# Belt-and-braces for the `dist/` rule above: go:embed all:dist fails at compile time
+# if the embed dir (or its .gitkeep placeholder) is ever filtered out of the context.
+!internal/web/dist/
+!internal/web/dist/**
 
 # Docs / deploy assets not needed to build the binary
 deploy/
