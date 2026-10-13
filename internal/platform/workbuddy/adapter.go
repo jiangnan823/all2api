@@ -43,12 +43,12 @@ func (a *Adapter) ExecuteTask(ctx interface{}, taskID string) error {
 }
 
 func (a *Adapter) GetTaskSchema(ctx interface{}) ([]*adapter.TaskSchema, error) {
-	return [](*TaskSchema){
-		{ID: "signin_09", Name: "签到 (09:00)", DisplayType: adapter.DisplayCalendar, CronSpec: "0 9 * * *", Description: "每日 09:00 自动签到", MaxDailyRun: 1},
-		{ID: "signin_21", Name: "签到 (21:00)", DisplayType: adapter.DisplayCalendar, CronSpec: "0 21 * * *", Description: "每日 21:00 自动签到 + 连登管家", MaxDailyRun: 1},
-		{ID: "cat_travel", Name: "猫猫旅行", DisplayType: adapter.DisplayCountdown, CronSpec: "0 9,21 * * *", Description: "每日两次猫猫旅行任务", MaxDailyRun: 2},
-		{ID: "token_keepalive", Name: "Token 保活", DisplayType: adapter.DisplayStatusLight, CronSpec: "0 22 * * *", Description: "每日 22:00 token 刷新", MaxDailyRun: 1},
-		{ID: "active_check", Name: "活跃上报", DisplayType: adapter.DisplayStatusLight, CronSpec: "0 10 * * *", Description: "每日 10:00 活跃上报 + streak 自检", MaxDailyRun: 1},
+	return []*adapter.TaskSchema{
+		{ID: "signin_09", Name: "签到 (09:00)", Type: "signin", Display: adapter.DisplayCalendarStreak, CronSpec: "0 9 * * *", Description: "每日 09:00 自动签到", MaxDailyRun: 1},
+		{ID: "signin_21", Name: "签到 (21:00)", Type: "signin", Display: adapter.DisplayCalendarStreak, CronSpec: "0 21 * * *", Description: "每日 21:00 自动签到 + 连登管家", MaxDailyRun: 1},
+		{ID: "cat_travel", Name: "猫猫旅行", Type: "cat_travel", Display: adapter.DisplayQuotaCountdown, CronSpec: "0 9,21 * * *", Description: "每日两次猫猫旅行任务", MaxDailyRun: 2},
+		{ID: "token_keepalive", Name: "Token 保活", Type: "token_keepalive", Display: adapter.DisplayValidityGauge, CronSpec: "0 22 * * *", Description: "每日 22:00 token 刷新", MaxDailyRun: 1},
+		{ID: "active_check", Name: "活跃上报", Type: "active_check", Display: adapter.DisplayValidityGauge, CronSpec: "0 10 * * *", Description: "每日 10:00 活跃上报 + streak 自检", MaxDailyRun: 1},
 	}, nil
 }
 

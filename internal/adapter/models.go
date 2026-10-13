@@ -103,22 +103,34 @@ type TaskState struct {
 }
 
 // TaskSchema metadata for UI declaration-based rendering.
+// Two fields for display: Type (business semantic for filtering/logs)
+// and Display (closed-set presentation primitive for component selection).
+// This separation enables "zero frontend changes when adding new platforms" —
+// unknown Display values fall back to DisplayStatusPlain with a console warning.
 type TaskSchema struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayType string `json:"display_type"` // calendar, progress_bar, countdown, status_light, generic
-	CronSpec    string `json:"cron_spec"`
-	Description string `json:"description"`
-	MaxDailyRun int    `json:"max_daily_run"`
+	ID          string `json:"id"`           // unique task identifier
+	Name        string `json:"name"`         // display name
+	Type        string `json:"type"`         // business semantic: signin / active_check / cat_travel / ...
+	Display     string `json:"display"`      // closed-set display primitive for component selection
+	CronSpec    string `json:"cron_spec"`    // cron expression
+	Description string `json:"description"`  // human-readable description
+	MaxDailyRun int    `json:"max_daily_run"` // max runs per day
 }
 
-// DisplayType values maintained by UI team.
+// DisplayPrimitives are closed-set presentation primitives maintained by the UI team.
+// Frontend maps each primitive to exactly one React component. Unknown values fall
+// back to DisplayStatusPlain + console warning, ensuring new platforms require zero frontend changes.
 const (
-	DisplayCalendar      = "calendar"       // signin → calendar heatmap + streak count
-	DisplayProgressBar   = "progress_bar"   // streak_manager → tier progress bar
-	DisplayCountdown     = "countdown"      // cat_travel → remaining time countdown
-	DisplayStatusLight   = "status_light"   // token keepalive/active_check → status indicator
-	DisplayGeneric       = "generic"        // fallback simple row display
+	// calendar_streak: calendar heatmap with streak count (签到场景)
+	DisplayCalendarStreak = "calendar_streak"
+	// tier_progress: tier progress bar (档位进度，如连登管家已解锁 x/y)
+	DisplayTierProgress = "tier_progress"
+	// quota_countdown: remaining time/usage countdown (猫猫旅行等一次性任务)
+	DisplayQuotaCountdown = "quota_countdown"
+	// validity_gauge: credential/pool validity indicator (token 保活、活跃上报)
+	DisplayValidityGauge = "validity_gauge"
+	// status_plain: generic plain-text fallback (所有无法分类的场景)
+	DisplayStatusPlain = "status_plain"
 )
 
 // CredentialInfo credential status for frontend aging progress bar.
