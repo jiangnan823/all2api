@@ -1,4 +1,4 @@
-//go:build workbuddy || full
+//go:build workbuddy || full || (!qoder && !trae)
 
 package workbuddy
 
