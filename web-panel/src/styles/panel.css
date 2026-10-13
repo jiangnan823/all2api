@@ -1,0 +1,381 @@
+/* ConsentGate / ThrottleForm / AdvancedToggle 样式；token 全部来自 tokens.css（UI UE v0.2.4 §1） */
+
+.consent-gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  max-width: 72ch;
+  font-family: var(--font);
+  color: var(--text-primary);
+}
+
+.consent-gate__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+}
+
+.consent-gate__subtitle {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-md);
+}
+
+.consent-gate__note,
+.consent-gate__check-note,
+.consent-gate__abort-hint,
+.consent-gate__version {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  color: var(--text-secondary);
+}
+
+.consent-gate__scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--sp-3);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+  line-height: var(--lh-loose);
+  font-size: var(--fs-md);
+}
+
+.consent-gate__list {
+  margin: 0 0 var(--sp-3);
+  padding-left: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.consent-gate__list--source {
+  border-left: 3px solid var(--status-warn);
+  padding-left: var(--sp-3);
+  list-style: none;
+  background: var(--soft-warn);
+  border-radius: var(--r-sm);
+}
+
+.consent-gate__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.consent-gate__bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-surface-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.consent-gate__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transition: width 120ms linear;
+}
+
+.consent-gate__progress-text {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.consent-gate__check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-height: var(--row-h);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.consent-gate__check input:disabled + span {
+  color: var(--text-tertiary);
+}
+
+.consent-gate__actions {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.btn {
+  min-height: var(--row-h);
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-tertiary);
+}
+
+/* 放弃接入与继续同尺寸同级：退出必须比继续容易，不允许做成难找的次级灰字 */
+.btn--abort {
+  border-color: var(--line-strong);
+  font-weight: 600;
+}
+
+.btn--primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--brand-hover);
+}
+
+.btn--primary:disabled {
+  background: var(--bg-surface-2);
+  color: var(--text-tertiary);
+}
+
+.btn--danger-outline {
+  border: 1px solid var(--status-danger);
+  color: var(--status-danger);
+  background: transparent;
+}
+
+.throttle-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+  font-family: var(--font);
+  color: var(--text-primary);
+}
+
+.throttle-form__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.throttle-form__sub,
+.throttle-form__footer {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.throttle-form__scroll {
+  overflow-x: auto;
+}
+
+.throttle-form__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+.throttle-form__table th,
+.throttle-form__table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.throttle-form__table thead th {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+}
+
+/* 单位与范围不得折行：折成两行的「次/分钟」正是单位误读的人机界面入口 */
+.throttle-form__table td:nth-child(3),
+.throttle-form__table td:nth-child(4) {
+  white-space: nowrap;
+}
+
+.throttle-form__table input[type='number'] {
+  width: 8ch;
+  min-height: 32px;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--mono);
+}
+
+.throttle-form__pair {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.throttle-form__err {
+  color: var(--status-danger);
+}
+
+.throttle-form__readonly td {
+  background: var(--bg-surface-2);
+}
+
+.throttle-form__reason {
+  font-family: var(--mono);
+}
+
+.throttle-form__actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.adv-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.adv-toggle__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.adv-toggle__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.adv-toggle__switch {
+  width: 44px;
+  height: 24px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-surface-2);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+}
+
+.adv-toggle__switch[aria-checked='true'] {
+  background: var(--soft-warn);
+  border-color: var(--status-warn);
+}
+
+.adv-toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--status-idle);
+  transition: transform 120ms linear, background 120ms linear;
+}
+
+.adv-toggle__switch[aria-checked='true'] .adv-toggle__knob {
+  transform: translateX(20px);
+  background: var(--status-warn);
+}
+
+.adv-toggle__state {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.adv-toggle__state--on {
+  color: var(--status-warn);
+  font-weight: 600;
+}
+
+.adv-toggle__note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+.danger-action {
+  position: relative;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--status-danger);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.danger-action__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--status-danger);
+}
+
+.danger-action__impact {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  white-space: pre-line;
+}
+
+.danger-action__type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+}
+
+.danger-action__type input {
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.danger-action__word {
+  font-family: var(--mono);
+}
+
+.danger-action__actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 767px) {
+  /* S 档：表格横向滚动而不是把单位/范围挤成两行（UI UE §2「表格横向滚动」） */
+  .throttle-form__table {
+    min-width: 560px;
+  }
+
+  .throttle-form__table input[type='number'] {
+    width: 100%;
+  }
+
+  .throttle-form__pair {
+    flex-direction: column;
+  }
+
+  .consent-gate__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}

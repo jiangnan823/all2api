@@ -1,0 +1,138 @@
+/* 设计 token 落值 = UI UE《all2api-panel-tokens-props》v0.2.4 §1（冻结件），本文件为其 CSS 表达 */
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+
+  --z-sticky: 20;
+  --z-drawer: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+
+  --font: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  --lh-tight: 1.2;
+  --lh-base: 1.5;
+  --lh-loose: 1.7;
+
+  --rail-w: 64px;
+  --rail-w-open: 200px;
+  --topbar-h: 52px;
+  --row-h: 44px;
+  --max-w: 1440px;
+
+  --bg-canvas: #f6f7f9;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #fafbfc;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0f2f5;
+  --bg-selected: #e8efff;
+  --line-border: #e3e6eb;
+  --line-strong: #d0d5dd;
+  --line-divider: #eceff3;
+  --text-primary: #1f2329;
+  --text-secondary: #5b6572;
+  --text-tertiary: #8b95a3;
+  --text-link: #2f6fed;
+  --brand: #2f6fed;
+  --brand-hover: #2559c4;
+  --brand-soft: #e8efff;
+
+  --status-idle: #8b95a3;
+  --status-running: #2f6fed;
+  --status-success: #1a9d5a;
+  --status-warn: #c77d08;
+  --status-danger: #d14343;
+  --status-skipped: #aab3bf;
+  --soft-success: #e6f5ee;
+  --soft-warn: #fdf3e2;
+  --soft-danger: #fdeceb;
+  --soft-skipped: #f0f2f5;
+
+  --heat-0: #eef1f5;
+  --heat-1: #cde8d8;
+  --heat-2: #8fd2ac;
+  --heat-3: #3fae73;
+  --heat-4: #1a9d5a;
+
+  --shadow-sm: 0 1px 2px rgba(16, 20, 28, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 20, 28, 0.1);
+  --shadow-lg: 0 12px 32px rgba(16, 20, 28, 0.16);
+}
+
+[data-theme="dark"] {
+  --bg-canvas: #14171c;
+  --bg-surface: #1b1f26;
+  --bg-surface-2: #20252d;
+  --bg-elevated: #232830;
+  --bg-hover: #262c35;
+  --bg-selected: #24304a;
+  --line-border: #2c333d;
+  --line-strong: #3a424e;
+  --line-divider: #252b33;
+  --text-primary: #e9edf3;
+  --text-secondary: #a4adba;
+  --text-tertiary: #79828f;
+  --text-link: #6ea3ff;
+  --brand: #4d84ff;
+  --brand-hover: #6b9aff;
+  --brand-soft: #22304d;
+
+  --status-idle: #79828f;
+  --status-running: #4d84ff;
+  --status-success: #31b877;
+  --status-warn: #e0a03a;
+  --status-danger: #ef6b6b;
+  --status-skipped: #5f6874;
+  --soft-success: #16301f;
+  --soft-warn: #33270f;
+  --soft-danger: #331a1a;
+  --soft-skipped: #232830;
+
+  --heat-0: #242a33;
+  --heat-1: #1e3a2a;
+  --heat-2: #22513a;
+  --heat-3: #2a7d51;
+  --heat-4: #31b877;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:where(button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
