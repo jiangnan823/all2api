@@ -47,6 +47,16 @@ func main() {
 	}
 	cfg := config.Shared.Get()
 
+	// Open-mode disclosure (PM seq=461 audit point): with api_key unset the
+	// /api/* surface (including the raw config passthrough) is unauthenticated.
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		fmt.Fprintf(os.Stderr, "\n"+
+			"WARNING: api_key is not configured — running in OPEN MODE.\n" +
+			"         The panel and /api/* (including GET /api/config raw config) have NO\n" +
+			"         authentication. Do NOT expose listen %q to an untrusted network.\n\n",
+			cfg.Listen)
+	}
+
 	start := time.Now()
 	addr := cfg.Listen
 	if addr == "" {

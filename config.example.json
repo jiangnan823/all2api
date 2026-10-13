@@ -1,5 +1,5 @@
 {
-  "_note": "all2api 配置样例。频率数值为产品建议默认值（PRD v0.2 §7.1 / PM 调研 §4 / UI §5.20），面板标'可调整'，非平台承诺；not_found_sec=300 为工程建议（PM O-2），非外部条款。指纹类开关默认 false（PM 调研 §4.1 / PRD §3.3 R6），开启需 DangerAction 二次确认。",
+  "_note": "all2api 配置样例。频率数值为产品建议默认值（PRD v0.2 §7.1 / PM 调研 §4 / UI §5.20），面板标'可调整'，非平台承诺；not_found_sec=300 为工程建议（PM O-2），非外部条款。指纹类开关默认 false（PM 调研 §4.1 / PRD §3.3 R6），开启需 DangerAction 二次确认。安全披露：api_key 为空 = 开放形态，/api/* 与面板无鉴权（含 GET /api/config 的 raw 配置透传），仅限可信内网，禁止端口暴露到 LAN/公网；启动时进程会输出醒目告警（PM seq=461 核对点）。",
   "listen": ":7863",
   "api_key": "",
   "auth_dir": "./auths",
