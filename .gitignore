@@ -1,3 +1,55 @@
+# all2api .gitignore
+# Credentials and runtime state must never enter git history.
+# gitleaks runs in CI, but a gitignore is the first line of defence.
+
+# --- runtime state / secrets -------------------------------------------------
+auths/
+data/
+config.json
+.env
+.env.*
+!.env.example
+*.jwt
+*.token
+*.key
+secrets/
+
+# --- go build ----------------------------------------------------------------
+/dist/
+/out/
+/staging/
+/bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+
+# --- web panel ---------------------------------------------------------------
+web-panel/node_modules/
+web-panel/.vite/
+web-panel/coverage/
+# Panel build output is ignored, but the committed placeholder file must survive:
+# `//go:embed all:dist` fails to compile against an empty/absent directory.
+# Note the `/*` form — negating a file inside an ignored *directory* does not work.
+web-panel/dist/*
+!web-panel/dist/.gitkeep
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+
+# --- fnOS packaging output ---------------------------------------------------
+deploy/fnos/build/
+*.fpk
+
+# --- editors / os ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- qoder agent runtime (not project source) --------------------------------
+.qoder/
 .qoder-collab-runtime/
 .qoder-sop-runtime/
-.qoder/
