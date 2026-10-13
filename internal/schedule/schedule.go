@@ -198,13 +198,16 @@ func (s *Scheduler) tickLoop() {
 	}
 }
 
-// execute runs the actual task logic in a goroutine to avoid blocking the scheduler.
+// execute runs the actual task logic in a goroutine to avoid blocking the
+// scheduler. A3 (adversarial review): every shared-field access happens under
+// the write lock and the function never returns holding the lock — the old
+// form unlocked a mutex it did not hold (runtime fatal), wrote task.Status
+// without any lock, and returned still locked (deadlock on the next tick).
 func (s *Scheduler) execute(task *Task) {
 	start := time.Now()
-	task.Status = StatusRunning
-	s.mu.Unlock()
-	s.mu.Lock() // re-acquire after unlock
 
+	s.mu.Lock()
+	task.Status = StatusRunning
 	handler, ok := s.handlers[task.Name]
 	if !ok {
 		// No handler registered yet (stub)
@@ -213,9 +216,9 @@ func (s *Scheduler) execute(task *Task) {
 		task.Duration = time.Since(start).Round(time.Millisecond)
 		task.NextRunAt = s.nextOccurrence(time.Now(), task.CronSpec)
 		s.mu.Unlock()
-		s.mu.Lock()
 		return
 	}
+	s.mu.Unlock()
 
 	go func() {
 		err := handler(nil)
