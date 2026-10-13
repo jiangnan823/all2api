@@ -216,3 +216,43 @@ npm 各步骤统一 `if: steps.detect.outputs.present == 'true'`；job 输出 `d
 详见群内「本地等效门禁报告」。要让 Go 线与镜像线拿到真实证据，只有两条路：
 便携版 Go 解压到临时目录（不装系统、不改 PATH、用完删）或主人侧跑一次 `make build-all && docker build`。
 两者都需要主人点头，我不擅自装工具链。
+
+### 9.9 本地 Go 补证（临时便携 Go，零 Actions 消耗）+ 首次真实 run 事实
+
+**首次真实 run（主人 push 9963226 后自动触发）**：run 38433219562 / workflow `ci`（**名字已能解析 ⇒ 校验层通过，
+§9.7 的修复有效**）/ head `9963226` / 16:46:17Z→16:47:05Z（墙钟 48s）/ 7 个 job 真实创建。
+`billable.UBUNTU.total_ms = 0`（7 个 job 各 0ms）：**公共仓库 GitHub-hosted standard runner 不计额度**，
+主人实测消耗 = 0 分钟。panel job **绿**（detect→npm ci→typecheck+test→build 步骤 built=false，断言与上传按预期 skip）。
+lint（`go vet` 红）与 test（`go test -race` 红）失败 ⇒ build / image / smoke / security 四个下游 job 全部 skip。
+release.yml 未触发（tag-only，符合设计）。
+
+**本地补证工具链**：`go1.24.13.windows-amd64.zip` 取自官方 dl.google.com，SHA256
+`40b16bc8f00540a2cb02dff4de72b73e966fdd8d65f95e33d8e4080b48a2459a` **实测 MATCH**；解压在
+`%LOCALAPPDATA%\Temp\devops-go\go`，GOROOT/GOCACHE 全在临时目录，**未装系统、未改全局 PATH、未写入仓库**。
+`golangci-lint 1.64.8 windows-amd64` 取自官方 release，SHA256 `54c2ed3a…a8f` MATCH；
+`built with go1.24.1` ⇒ §7 挂账的"golangci 与 Go 1.24 toolchain 兼容性"**判掉**（与 ci.yml pin 版本一致，可跑通）。
+
+**编译面真因（5 条硬错误，3 个包，全在 Go 线 = backend）**：
+- `internal/schedule/schedule.go:70` 调 `s.initNextRuns()`，全仓**无该方法定义**（grep 只命中调用）。
+- `internal/schedule/schedule.go:283` 调 `splitByComma(field)`，**无该函数**。
+- `internal/schedule/schedule.go:276` `(24 + firstH) * time.Hour`：`firstH` 是 int ⇒ 需 `time.Duration(...)`。
+- `internal/sessions/stickiness.go:154` `for platform, platformMap := range` 中 `platform` **declared and not used**。
+- `cmd/gateway/main.go:108` `ctx, cancel := context.WithCancel(...)` 中 **ctx 未使用**（全文件只有 `:108` 声明与 `:113` cancel）。
+
+**由第 5 条带出的一条实质问题（要更正我自己的旧结论）**：ctx 从未传给任何组件 ⇒ SIGTERM 只走
+`server.Shutdown(10s ctx)`，**调度器 tickLoop 没有 ctx 可取消**。因此 §9.1 里我把"backend 必做第 4 项
+（SIGTERM 优雅退出 ≤10s，签到调度器/在途请求挂 ctx）"判为 ✅ **收回到"部分满足"**：HTTP 面满足，
+调度面未接。smoke 的 `docker stop ≤10s` 断言在真实 run 里能过（进程随 SIGTERM 退出），但**"10s 内停止派发"没有实现**——
+这不是 CI 红，是语义缺口，归 backend 线，M1 内应补。
+
+**其余门禁实测结果**：四目标 `go build`（linux/amd64、linux/arm64、windows/amd64、darwin/arm64）**全部同点失败**
+（`main.go:108`），失败原因与平台无关 ⇒ 交叉编译能力本身未证伪；逐包 linux/amd64 编译矩阵：**12/15 包 OK**，
+FAIL = `cmd/gateway` / `internal/schedule` / `internal/sessions`。
+`go test ./...`：`internal/api` **ok 0.544s**（recover 5 个用例全 PASS，含 402/凭证失效/未知 source/需要 APIKey 四条语义），
+其余包因编译失败 build failed。`go test -race` **维持挂账**，两层实测原因：
+`go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` ⇒ `cgo: C compiler "gcc" not found`（本机无 gcc/cc/clang）。
+`golangci-lint run ./...`：**2 条 errcheck**（`internal/platform/workbuddy/adapter.go:24` Register 未查错、
+`internal/web/panel.go:89` `w.Write` 未查错）+ 3 条 typechecking error；诚实边界——3 个包因编译不过**未被完整分析**，
+修完后 lint 结果需重跑。`gofmt`：以 HEAD blob（LF 真源，已排除 autocrlf 假阳性）口径 **10/30 文件未格式化**，
+差异是常量块/结构体字段的对齐（如 `internal/circuit/circuit.go` 的 Reason 注释列），CI 的 gofmt 步骤会红。
+docker / 镜像 / smoke / gitleaks / gosec / govulncheck 本机仍无工具 ⇒ skipped-with-reason 不变。
