@@ -66,7 +66,9 @@ jobs:
   panel:
     name: release / panel
     runs-on: ubuntu-latest
-    if: ${{ hashFiles(format('{0}/package-lock.json', env.PANEL_DIR)) != '' }}
+    # `env` context is not available in jobs.<job_id>.if (github/needs/vars/inputs only);
+    # the path is literal. Keep it in sync with env.PANEL_DIR.
+    if: ${{ hashFiles('web-panel/package-lock.json') != '' }}
     outputs:
       # Consumers must key off this, not off package-lock presence: web-panel has
       # typecheck/test before it has a bundler (M1), so a lockfile does not imply
@@ -113,9 +115,7 @@ jobs:
     needs: [meta, panel]
     # panel is conditional (it only exists once web-panel has a lockfile); a skipped
     # panel must not skip the release binaries.
-    if: >-
-      ${{ always() && needs.meta.result == 'success' &&
-          (needs.panel.result == 'success' || needs.panel.result == 'skipped') }}
+    if: ${{ always() && needs.meta.result == 'success' && (needs.panel.result == 'success' || needs.panel.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:

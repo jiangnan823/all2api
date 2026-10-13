@@ -34,7 +34,10 @@ jobs:
   panel:
     name: panel / build
     runs-on: ubuntu-latest
-    if: ${{ hashFiles(format('{0}/package-lock.json', env.PANEL_DIR)) != '' }}
+    # GitHub forbids the `env` context in jobs.<job_id>.if (allowed: github, needs,
+    # vars, inputs) — so the panel dir is spelled literally here. If PANEL_DIR in the
+    # env block ever changes, this is the ONE other place to edit.
+    if: ${{ hashFiles('web-panel/package-lock.json') != '' }}
     steps:
       - uses: actions/checkout@v4
 

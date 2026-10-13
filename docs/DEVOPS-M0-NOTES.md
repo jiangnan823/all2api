@@ -151,10 +151,29 @@ panel job 必红，且极易被误记成 Go 线故障。修订：
    （healthy + HTTP 200 + 含 `"service"` + `docker stop --time 10` 计时 ≤10s）、gitleaks/gosec/govulncheck。
 3. `fnos-fpk` job 首跑仍 `continue-on-error: true`，前置条件是 `deploy/fnos/README.md` 六项字段真机核销；未核销不转阻塞。
 4. panel job 在 bundler 落地前允许 `built=false`，该状态记为「前端 M1 项未完成」，不是 CI 失败。
+5. **`jobs = 0` 且 run 瞬间 `completed/failure` ⇒ 判为 workflow 校验层失败（devops 工件缺陷），不计入 backend/fronted 任何回归**，
+   由 devops 直接修 workflow。只有 jobs 数 ≥1 且出现具体 step 红，才进入代码线归因。
 
 ### 9.5 本机仍无法验证的项（诚实边界）
 
 本轮 GitHub API 已可达（此前不通），所以远程状态是实测；但本机无 `go`/`docker`/`fnpack`，因此：三变体实际编译、镜像构建与
 多架构、golangci-lint 与 Go 1.24 的 toolchain 兼容、Trivy/SBOM 产物、fpk 字段名，仍只能由首个真实 run 给结论。
 `npm ci` 能否通过（lockfile 与 package.json 一致性）同理只能由 CI 判。
+
+### 9.6 首跑实测记录（14:26Z，run 38413356374 / 38413358569）
+
+远端 `refs/heads/main` 已到 `6733337`，两个 workflow 均注册为 `active`，但两个 run 都在 `run_started_at == updated_at`
+瞬间 `completed/failure` 且 **jobs = 0** —— 这是 workflow **校验层**失败（作业从未建立），不是任何一步跑挂。
+
+根因（官方 context 可用性表实证）：`jobs.<job_id>.if` 只允许 `github / needs / vars / inputs`，
+**不允许 `env`**。我的 panel job 写了 `if: ${{ hashFiles(format('{0}/package-lock.json', env.PANEL_DIR)) != '' }}`
+⇒ ci.yml 与 release.yml 各中一处，两个文件同时被拒，与"两条 run 同时瞬间失败"完全吻合。
+本机 PyYAML 只查语法、不查 context 作用域，所以 §7 的"YAML 已校验通过"覆盖不到这一层——这条要记进口径：
+**workflow 的 YAML 合法 ≠ GitHub 接受**，只有真实 run 能判。
+
+修复：job 级 `if` 改为字面路径 `hashFiles('web-panel/package-lock.json')`（加注释标明这是 PANEL_DIR 之外唯一要同改的一处）；
+另把 release.yml `binaries` 的 `if: >-` 折行表达式压成单行，避免表达式跨行的未定义行为。
+全量复扫（context 作用域 / 重复键 / 括号配平 / 函数白名单 / needs 图与环 / steps·needs 引用声明 / uses 格式）已零命中。
+`hashFiles` 在 job 级 `if` 属"可用于 key"，保留。
+
 
