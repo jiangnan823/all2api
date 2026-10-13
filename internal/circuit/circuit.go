@@ -55,8 +55,8 @@ type Breaker struct {
 	state   State
 	reason  Reason
 	openedAt time.Time
-	lastFailure time.Time
 	failures  int
+	rateLimitHits int // consecutive 429 count — sole backoff exponent (P2: not polluted by 404/5xx failures)
 	nextReset time.Time
 	noAutoRecover bool // set by trip(): stays open until Reset()
 	accountState map[string]*AccountState // optional per-account tracking
@@ -114,7 +114,6 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 	defer b.mu.Unlock()
 
 	now := time.Now()
-	b.lastFailure = now
 
 	// Track per-account state
 	if accountID != "" {
@@ -144,7 +143,19 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 		}
 		b.hardCooldown(resetAt)
 	default:
-		if statusCode >= 500 || statusCode == 0 {
+		if statusCode >= 200 && statusCode < 400 {
+			// Success (R-A / TC-M1-009 closure path): clears the consecutive
+			// counter, and a half-open probe closes the circuit back to
+			// StateClosed so recovery is automatic — no caller has to invoke
+			// Reset() explicitly for the probe to land.
+			b.failures = 0
+			b.rateLimitHits = 0
+			if b.state == StateHalfOpen {
+				b.state = StateClosed
+				b.reason = ""
+				b.nextReset = time.Time{}
+			}
+		} else if statusCode >= 500 || statusCode == 0 {
 			// Server error or connection error
 			b.failures++
 			if b.failures >= b.config.ConsecutiveFailures {
@@ -160,6 +171,7 @@ func (b *Breaker) Reset() {
 	defer b.mu.Unlock()
 	b.state = StateClosed
 	b.failures = 0
+	b.rateLimitHits = 0
 	b.reason = ""
 	b.nextReset = time.Time{}
 	b.noAutoRecover = false
@@ -191,7 +203,7 @@ func (b *Breaker) IsTripped() bool {
 // The previous formula (initial * multiplier * failures) was linear, not exponential.
 func (b *Breaker) handleRateLimit(now time.Time) {
 	backoff := float64(b.config.InitialBackoffSec)
-	for i := 0; i < b.failures; i++ {
+	for i := 0; i < b.rateLimitHits; i++ {
 		backoff *= b.config.BackoffMultiplier
 		if backoff >= float64(b.config.SoftRateMax) {
 			backoff = float64(b.config.SoftRateMax)
@@ -200,6 +212,7 @@ func (b *Breaker) handleRateLimit(now time.Time) {
 	}
 
 	b.cooldown(int64(backoff), ReasonRateLimited)
+	b.rateLimitHits++
 }
 
 // cooldown sets the circuit to open for dur seconds with the given reason.
