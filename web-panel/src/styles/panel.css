@@ -26,7 +26,6 @@
 }
 
 .consent-gate__note,
-.consent-gate__check-note,
 .consent-gate__abort-hint,
 .consent-gate__version {
   margin: 0;
@@ -91,12 +90,28 @@
 }
 
 .consent-gate__check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--sp-2);
+  row-gap: var(--sp-1);
   min-height: var(--row-h);
   font-size: var(--fs-md);
   cursor: pointer;
+}
+
+.consent-gate__check input {
+  margin-top: var(--sp-1);
+}
+
+/* 留痕长句折行只许调行高/间距（PM seq=501 ②）：不设省略号、不限行数、不 nowrap——缩句等于破 §9 逐字基准。 */
+.consent-gate__check-note {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
 }
 
 .consent-gate__check input:disabled + span {

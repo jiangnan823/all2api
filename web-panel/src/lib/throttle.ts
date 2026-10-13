@@ -53,8 +53,10 @@ function checkInt(
   min: number,
   max: number,
 ): void {
-  if (value === undefined || Number.isNaN(value)) return;
-  if (!Number.isInteger(value)) {
+  if (value === undefined) return;
+  // F-5（测试 seq=482 欠账③）：空输入是 NaN，不再静默转 0 放行写回。
+  // code 仍复用冻结三值里的 "range"——空值不新增第四个 code。
+  if (Number.isNaN(value) || !Number.isInteger(value)) {
     out.push({ key: path, message: fmt(THROTTLE.ERR_INT, { label }), code: 'range' });
     return;
   }

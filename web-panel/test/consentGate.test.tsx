@@ -264,3 +264,51 @@ describe('ConsentGate — scrollRequired=false 出口', () => {
     expect(continueBtn().disabled).toBe(true);
   });
 });
+
+describe('ConsentGate — 批三：CHECK_NOTE 留痕边界写实（copy §9 v0.1.3 / 裁二）', () => {
+  /** 勾选框的可及名称来源 = 包住它的 label 的全部文本；label 关联没建立时拿到空串。 */
+  const checkLabel = (): string => {
+    const el: Element | null = document.querySelector('label.consent-gate__check');
+    return el ? el.textContent ?? '' : '';
+  };
+  const note = () => checkLabel().replace(/\s+/g, '');
+
+  it('① 留痕说明句在 label 关联内：读屏念勾选框时会带出完整边界，不只半句承诺', () => {
+    gate();
+    const text = checkLabel();
+    expect(text).not.toBe('');
+    // 勾选框本身必须落在这个 label 内部，否则 textContent 一致也没用
+    expect(document.querySelector('label.consent-gate__check')?.contains(checkbox())).toBe(true);
+    expect(text).toContain('我已阅读并理解上述风险');
+    expect(text).toContain(CONSENT.CHECK_NOTE);
+    // 结构反面钉死：note 不再是 label 的兄弟节点
+    expect(document.querySelector('label.consent-gate__check .consent-gate__check-note')).not.toBeNull();
+  });
+
+  it('② 新句写实三要素 + 用途限定，旧"不上传任何个人数据"的越界承诺绝迹', () => {
+    gate();
+    expect(note()).toContain('来源、须知版本、确认时间（由网关落时钟）');
+    expect(note()).toContain('仅用于在平台争议时证明你同意过');
+    expect(note()).toContain('不含你的凭证和对话内容');
+    expect(note()).toContain('凭证与对话内容只存在本机，不上传');
+    expect(document.body.textContent).not.toContain('不上传任何个人数据');
+    expect(document.body.textContent).not.toContain('勾选记录仅保存在本机');
+  });
+
+  it('③ 冲突消解后仍不得声称"服务端不留痕"，也不得泄漏超出三要素的采集面', () => {
+    gate();
+    const t = note();
+    expect(t).not.toMatch(/不记录|不会记录|仅本机/);
+    for (const extra of ['IP', 'UA', '设备型号', '对话内容全文', '聊天记录']) {
+      expect(t, `留痕说明句不得把采集面扩到「${extra}」`).not.toContain(extra);
+    }
+  });
+});
+
+describe('ConsentGate — 批三：F-7 STALE 定句（测试 seq=482 欠账②）', () => {
+  it('重确认提示逐字采用定句，旧的自拟形态（含版本号括注）不得回潮', () => {
+    expect(CONSENT.STALE).toBe('接入须知已更新，请重新阅读并勾选后再继续。');
+    expect(CONSENT.STALE).not.toContain('{noticeVersion}');
+    expect(CONSENT.STALE).not.toContain('须知文本已更新');
+  });
+});

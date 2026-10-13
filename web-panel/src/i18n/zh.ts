@@ -1,6 +1,6 @@
 /**
  * 面板冻结文案层（fronted）。组件内不内联中文（UI UE §5.16 / §5.19）。
- * 逐字基准 = PM《PM-credential-wizard-copy》v0.1.1 §9（notice_version = "1"）。
+ * 逐字基准 = PM《PM-credential-wizard-copy》v0.1.3 §9（notice_version = "1"，v0.1.3 属定稿补全非正文修订，PM 已裁）。
  * 唯一加工：markdown 强调记号 ** 不入库，字符本身逐字未改；勾选标签的「{来源}」为占位符 {source}。
  * 本节任一处改动必须同步 all2api-panel-hifi-v0.2.html#consent 并递增 noticeVersion（PM 复核）。
  */
@@ -24,15 +24,17 @@ export const CONSENT = {
   ],
 
   CHECK_LABEL: '我已阅读并理解上述风险，确认这是我本人的 {source} 账号，并自愿承担账号被处置的风险。',
+  /** copy §9 v0.1.3（项目经理 seq=445 裁二）：留痕边界写实——网关落戳三要素、不含凭证/对话内容；
+   *  「本机存储不上传」限定到凭证与对话内容。原句"仅保存在本机…不上传任何个人数据"与 G3/O-5 服务端留痕冲突，已消解（F-1/R-B 案）。 */
   CHECK_NOTE:
-    '勾选记录仅保存在本机（时间戳 + 须知版本），不上传任何个人数据；在「设置 · 接入须知」可查看历史确认。',
+    '网关只记录你的确认留痕三项：来源、须知版本、确认时间（由网关落时钟），仅用于在平台争议时证明你同意过；不含你的凭证和对话内容。凭证与对话内容只存在本机，不上传；可在「设置 · 接入须知」查看历史确认。',
 
   REGION_LABEL: '接入须知正文，需滚动到文末',
   PROGRESS_ARIA: '阅读进度',
   VERSION: '须知版本 {noticeVersion}',
   PROGRESS: '阅读进度{percent}% · 需滚动到文末才能勾选',
   REACHED: '已读到底',
-  STALE: '须知文本已更新（当前版本 {noticeVersion}），请重新阅读并勾选。',
+  STALE: '接入须知已更新，请重新阅读并勾选后再继续。',
 
   CONTINUE: '继续',
   ABORT: '放弃接入',

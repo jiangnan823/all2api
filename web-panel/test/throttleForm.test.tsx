@@ -167,3 +167,61 @@ describe('ThrottleForm — 按源有无决定渲染', () => {
     expect(steady().value).toBe('4');
   });
 });
+
+describe('ThrottleForm — F-5 空值拦截（测试 seq=482 欠账③：不再静默转 0）', () => {
+  const gapLo = () => screen.getByLabelText(`最小间隔 · ${THROTTLE.GAP_LO}`) as HTMLInputElement;
+
+  it('清空字段显示为空，不回显 0', () => {
+    setup();
+    fireEvent.change(steady(), { target: { value: '' } });
+    expect(steady().value).toBe('');
+  });
+
+  it('清空后保存被拦截，且绝不写回 0', () => {
+    const { onSave } = setup();
+    fireEvent.change(steady(), { target: { value: '' } });
+    fireEvent.click(save());
+    expect(onSave).not.toHaveBeenCalled();
+    expect(save().disabled).toBe(true);
+    const alerts = screen.getAllByRole('alert').map((a) => a.textContent ?? '');
+    expect(alerts.some((t) => t.includes('稳态请求'))).toBe(true);
+  });
+
+  it('min=0 的字段（min_gap_ms 下界）清空同样拦截——原缺陷正是 0 会被"合法"放行', () => {
+    const { onSave } = setup();
+    fireEvent.change(gapLo(), { target: { value: '' } });
+    fireEvent.click(save());
+    expect(onSave).not.toHaveBeenCalled();
+    const errs = validateThrottleBudget('qoder', { ...QODER, minGapMs: [NaN, 1200] });
+    expect(errs.some((e) => e.key === 'sources.qoder.throttle.min_gap_ms')).toBe(true);
+  });
+
+  it('空值分派 code 复用冻结三值里的 "range"，不新增第四个 code', () => {
+    const blanked: ThrottleBudget[] = [
+      { ...QODER, steadyRpm: NaN },
+      { ...QODER, dailyCap: NaN },
+      { ...QODER, minGapMs: [NaN, 1200] },
+      { ...QODER, jitterMinutes: NaN },
+    ];
+    for (const budget of blanked) {
+      const errs = validateThrottleBudget('qoder', budget);
+      expect(errs.length).toBeGreaterThan(0);
+      for (const e of errs) expect(e.code).toBe('range');
+    }
+  });
+
+  it('重新填入合法值后拦截解除', () => {
+    const { onSave } = setup();
+    fireEvent.change(steady(), { target: { value: '' } });
+    fireEvent.click(save());
+    expect(save().disabled).toBe(true);
+    fireEvent.change(steady(), { target: { value: '6' } });
+    fireEvent.click(save());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0]).toEqual({ steadyRpm: 6 });
+  });
+
+  it('undefined（字段不适用）仍不报错——只有"被清空"才是缺陷面', () => {
+    expect(validateThrottleBudget('trae', { ...TRAE, jitterMinutes: undefined })).toEqual([]);
+  });
+});
