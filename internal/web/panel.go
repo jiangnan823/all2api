@@ -1,8 +1,10 @@
 // Panel serving with runtime Base URL injection (G5 ruling).
 //
 // Contract (contract-json-tags-v0.5.md §6, frozen attachment):
-//   - index.html carries an inline <script>window.__ALL2API_BASE__=%q</script>
-//     placed before the bundle;
+//   - index.html carries an inline <script>window.__ALL2API_BASE__=<string
+//     literal></script> placed before the bundle (A1 hardening: the literal is
+//     JSON-encoded with <, > and & escaped — same parsed value as the old %q
+//     form, but attacker header text can no longer close the script tag);
 //   - value priority: config external_base_url → request X-Forwarded-Prefix → "";
 //   - when empty the frontend falls back to location.origin itself, so the
 //     backend must not invent a origin here.
@@ -10,7 +12,7 @@ package web
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -31,16 +33,52 @@ func deriveBase(r *http.Request) string {
 	if prefix == "" {
 		return ""
 	}
+	// A1 minimal sanitation: a header value that cannot be a legitimate
+	// path/scheme/host fragment is treated as absent — the frontend then
+	// falls back to location.origin instead of rendering attacker text.
+	if unsafeProxyValue(prefix) {
+		return ""
+	}
 	prefix = "/" + strings.Trim(prefix, "/")
 	scheme := "http"
-	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
+	if p := r.Header.Get("X-Forwarded-Proto"); p != "" && !unsafeProxyValue(p) {
 		scheme = strings.TrimSpace(strings.Split(p, ",")[0])
 	}
 	host := r.Host
-	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
+	if h := r.Header.Get("X-Forwarded-Host"); h != "" && !unsafeProxyValue(h) {
 		host = strings.TrimSpace(strings.Split(h, ",")[0])
 	}
+	if unsafeProxyValue(host) {
+		return ""
+	}
 	return scheme + "://" + host + prefix + "/v1"
+}
+
+// unsafeProxyValue rejects proxy header fragments containing whitespace,
+// control characters, or HTML/JS structural characters (quotes, angle
+// brackets, backslash, backtick). Legitimate host/prefix/scheme values never
+// contain them. Defense in depth — the final value is additionally
+// JSON-escaped by jsStringLiteral.
+func unsafeProxyValue(v string) bool {
+	return strings.IndexFunc(v, func(c rune) bool {
+		switch c {
+		case '<', '>', '"', '\'', '`', '\\', ' ', '\t':
+			return true
+		}
+		return c < 0x20 || c == 0x7f
+	}) >= 0
+}
+
+// jsStringLiteral encodes s as a JS string literal via JSON, then escapes
+// <, > and & so the value can never terminate the inline <script> element
+// (%q does not escape those — adversarial review A1). The parsed JS value is
+// identical to the previous %q form for all legitimate inputs.
+func jsStringLiteral(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""` // unreachable: encoding a string cannot fail
+	}
+	return strings.NewReplacer(`<`, `\u003c`, `>`, `\u003e`, `&`, `\u0026`).Replace(string(b))
 }
 
 // NewPanelHandler serves the embedded dist/ with SPA fallback to index.html
@@ -72,7 +110,7 @@ func NewPanelHandler() http.Handler {
 // serveIndexInjected renders index.html (or a placeholder while the frontend
 // build has not landed) with the injection tag immediately after <head>.
 func serveIndexInjected(w http.ResponseWriter, r *http.Request, sub fs.FS) {
-	tag := fmt.Sprintf("<script>window.__ALL2API_BASE__=%q</script>", deriveBase(r))
+	tag := "<script>window.__ALL2API_BASE__=" + jsStringLiteral(deriveBase(r)) + "</script>"
 
 	var html []byte
 	doc, err := fs.ReadFile(sub, "index.html")
@@ -86,7 +124,9 @@ func serveIndexInjected(w http.ResponseWriter, r *http.Request, sub fs.FS) {
 	// The injected base depends on request headers and hot-reloadable config;
 	// caching index.html would freeze a stale derivation.
 	w.Header().Set("Cache-Control", "no-store")
-	w.Write(html)
+	// Response headers are already committed; a write failure here cannot be
+	// recovered or reported to the client.
+	_, _ = w.Write(html)
 }
 
 // injectTag places the tag right after the opening <head> tag, guaranteeing

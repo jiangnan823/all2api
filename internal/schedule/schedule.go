@@ -15,24 +15,24 @@ import (
 type Status string
 
 const (
-	StatusPending   Status = "pending"
-	StatusRunning   Status = "running"
-	StatusSuccess   Status = "success"
-	StatusFailed    Status = "failed"
-	StatusSkipped   Status = "skipped"
+	StatusPending Status = "pending"
+	StatusRunning Status = "running"
+	StatusSuccess Status = "success"
+	StatusFailed  Status = "failed"
+	StatusSkipped Status = "skipped"
 )
 
 // Task represents a single scheduled job entry.
 type Task struct {
-	Name      string    `json:"name"`
-	Source    string    `json:"source"`   // platform source: workbuddy, qoder, trae
-	CronSpec  string    `json:"cron_spec"`
-	Enabled   bool      `json:"enabled"`
-	Status    Status    `json:"status"`     // last run result
-	LastRunAt time.Time `json:"last_run_at"`
-	NextRunAt time.Time `json:"next_run_at"`
+	Name      string        `json:"name"`
+	Source    string        `json:"source"` // platform source: workbuddy, qoder, trae
+	CronSpec  string        `json:"cron_spec"`
+	Enabled   bool          `json:"enabled"`
+	Status    Status        `json:"status"` // last run result
+	LastRunAt time.Time     `json:"last_run_at"`
+	NextRunAt time.Time     `json:"next_run_at"`
 	Duration  time.Duration `json:"duration,omitempty"`
-	Error   string    `json:"error,omitempty"`
+	Error     string        `json:"error,omitempty"`
 }
 
 // Scheduler manages all platform-specific schedules.
@@ -85,6 +85,16 @@ func (s *Scheduler) Stop() {
 	}
 	close(s.stopCh)
 	<-s.stopped
+}
+
+// initNextRuns seeds NextRunAt for tasks that do not have one yet.
+// Caller must hold s.mu; nextOccurrence itself is lock-free.
+func (s *Scheduler) initNextRuns() {
+	for _, t := range s.tasks {
+		if t.CronSpec != "" && t.NextRunAt.IsZero() {
+			t.NextRunAt = s.nextOccurrence(time.Now(), t.CronSpec)
+		}
+	}
 }
 
 // AddTask registers a new scheduled task with an optional handler.
@@ -198,13 +208,16 @@ func (s *Scheduler) tickLoop() {
 	}
 }
 
-// execute runs the actual task logic in a goroutine to avoid blocking the scheduler.
+// execute runs the actual task logic in a goroutine to avoid blocking the
+// scheduler. A3 (adversarial review): every shared-field access happens under
+// the write lock and the function never returns holding the lock — the old
+// form unlocked a mutex it did not hold (runtime fatal), wrote task.Status
+// without any lock, and returned still locked (deadlock on the next tick).
 func (s *Scheduler) execute(task *Task) {
 	start := time.Now()
-	task.Status = StatusRunning
-	s.mu.Unlock()
-	s.mu.Lock() // re-acquire after unlock
 
+	s.mu.Lock()
+	task.Status = StatusRunning
 	handler, ok := s.handlers[task.Name]
 	if !ok {
 		// No handler registered yet (stub)
@@ -213,9 +226,9 @@ func (s *Scheduler) execute(task *Task) {
 		task.Duration = time.Since(start).Round(time.Millisecond)
 		task.NextRunAt = s.nextOccurrence(time.Now(), task.CronSpec)
 		s.mu.Unlock()
-		s.mu.Lock()
 		return
 	}
+	s.mu.Unlock()
 
 	go func() {
 		err := handler(nil)
@@ -273,14 +286,14 @@ func (s *Scheduler) nextOccurrence(after time.Time, cronSpec string) time.Time {
 	// Fallback: tomorrow first occurrence
 	firstH := hours[0]
 	firstM := minutes[0]
-	return nextTime.Add((24 + firstH) * time.Hour + time.Duration(firstM) * time.Minute)
+	return nextTime.Add(time.Duration(24+firstH)*time.Hour + time.Duration(firstM)*time.Minute)
 }
 
 // parseCronField parses a cron field (supports *, number, comma-separated).
 func parseCronField(field string, min, max int) ([]int, error) {
 	var result []int
 
-	for _, part := range splitByComma(field) {
+	for _, part := range strings.Split(field, ",") {
 		part = strings.TrimSpace(part)
 		if part == "*" || part == "" {
 			continue

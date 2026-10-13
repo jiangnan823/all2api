@@ -61,10 +61,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // ---------- GET /api/config ----------
 
 type featureFlagsResponse struct {
-	ResponsesAPI        bool `json:"responses_api"`
-	SessionStickiness   bool `json:"session_stickiness"`
-	RedisMirror         bool `json:"redis_mirror"`
-	DebugBodySampling   bool `json:"debug_body_sampling"`
+	ResponsesAPI      bool `json:"responses_api"`
+	SessionStickiness bool `json:"session_stickiness"`
+	RedisMirror       bool `json:"redis_mirror"`
+	DebugBodySampling bool `json:"debug_body_sampling"`
 }
 
 type sourceAdvancedResponse struct {
@@ -72,11 +72,11 @@ type sourceAdvancedResponse struct {
 }
 
 type panelConfigResponse struct {
-	Raw          json.RawMessage                        `json:"raw"`
-	FeatureFlags featureFlagsResponse                   `json:"feature_flags"`
-	Throttle     map[string]config.ThrottleConfig       `json:"throttle"`
-	Advanced     map[string]sourceAdvancedResponse      `json:"advanced"`
-	NoticeVersion string                                `json:"notice_version"`
+	Raw           json.RawMessage                   `json:"raw"`
+	FeatureFlags  featureFlagsResponse              `json:"feature_flags"`
+	Throttle      map[string]config.ThrottleConfig  `json:"throttle"`
+	Advanced      map[string]sourceAdvancedResponse `json:"advanced"`
+	NoticeVersion string                            `json:"notice_version"`
 }
 
 func handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -145,19 +145,19 @@ type quotaResponse struct {
 }
 
 type credentialStatusResponse struct {
-	Supported     bool                `json:"supported"`
-	Valid         bool                `json:"valid"`
-	ExpiresAt     *adapter.TimeLocal  `json:"expires_at"`
-	DaysLeftCache int                 `json:"days_left_cache,omitempty"`
+	Supported     bool               `json:"supported"`
+	Valid         bool               `json:"valid"`
+	ExpiresAt     *adapter.TimeLocal `json:"expires_at"`
+	DaysLeftCache int                `json:"days_left_cache,omitempty"`
 }
 
 type authVerifyResponse struct {
-	OK           bool                  `json:"ok"`
-	AccountLabel string                `json:"account_label,omitempty"`
-	Quota        *quotaResponse        `json:"quota,omitempty"`
+	OK           bool                      `json:"ok"`
+	AccountLabel string                    `json:"account_label,omitempty"`
+	Quota        *quotaResponse            `json:"quota,omitempty"`
 	Credential   *credentialStatusResponse `json:"credential,omitempty"`
-	ReasonCode   adapter.FailureReason `json:"reason_code,omitempty"`
-	FieldErrors  []adapter.FieldError  `json:"field_errors,omitempty"`
+	ReasonCode   adapter.FailureReason     `json:"reason_code,omitempty"`
+	FieldErrors  []adapter.FieldError      `json:"field_errors,omitempty"`
 }
 
 // requiresConsent encodes the product rule (Q11 / PRD §6⑥): Qoder always

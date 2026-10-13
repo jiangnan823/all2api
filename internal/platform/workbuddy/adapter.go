@@ -21,7 +21,9 @@ func init() {
 	a.SetCapabilities(adapter.CapSet{
 		Value: adapter.CapChatCompletion | adapter.CapResponsesStreaming,
 	})
-	adapter.Default.Register(a)
+	if err := adapter.Default.Register(a); err != nil {
+		panic("workbuddy: register adapter: " + err.Error())
+	}
 }
 
 func (a *Adapter) ConvertRequest(req *adapter.UnifiedRequest) (*adapter.PlatformRequest, error) {

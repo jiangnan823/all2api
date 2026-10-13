@@ -54,11 +54,11 @@ type Adapter interface {
 type CapType uint32
 
 const (
-	CapChatCompletion CapType = 1 << iota // /v1/chat/completions
-	CapResponsesStreaming                  // /v1/responses streaming
-	CapResponsesToolChain                  // tool_calls chain invocation
-	CapResponsesStructuredOutput           // structured output / JSON schema
-	CapResponsesReasoning                  // reasoning_content semantic
+	CapChatCompletion            CapType = 1 << iota // /v1/chat/completions
+	CapResponsesStreaming                            // /v1/responses streaming
+	CapResponsesToolChain                            // tool_calls chain invocation
+	CapResponsesStructuredOutput                     // structured output / JSON schema
+	CapResponsesReasoning                            // reasoning_content semantic
 )
 
 // _lastPlatformCap is the highest platform bit index (used by registry.byCap loop).
@@ -95,23 +95,23 @@ var AllPlatformCapabilities = CapSet{Value: CapChatCompletion | CapResponsesStre
 type FailureReason string
 
 const (
-	ReasonOK             FailureReason = "ok"               // healthy
-	ReasonAuthExpired    FailureReason = "auth_expired"     // per-account removed from pool; does NOT enter source-level circuit
-	ReasonPlatformDown   FailureReason = "platform_down"    // platform unreachable; wait and degrade
-	ReasonRateLimited    FailureReason = "rate_limited"      // 429 — "触发限流·已降频" minute countdown
-	ReasonNotFound       FailureReason = "not_found"         // 404 — "接口或模型不存在", jump to model view
-	ReasonQuotaExhausted  FailureReason = "quota_exhausted"     // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
+	ReasonOK               FailureReason = "ok"                // healthy
+	ReasonAuthExpired      FailureReason = "auth_expired"      // per-account removed from pool; does NOT enter source-level circuit
+	ReasonPlatformDown     FailureReason = "platform_down"     // platform unreachable; wait and degrade
+	ReasonRateLimited      FailureReason = "rate_limited"      // 429 — "触发限流·已降频" minute countdown
+	ReasonNotFound         FailureReason = "not_found"         // 404 — "接口或模型不存在", jump to model view
+	ReasonQuotaExhausted   FailureReason = "quota_exhausted"   // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
 	ReasonProtocolMismatch FailureReason = "protocol_mismatch" // upstream API version changed; needs patch release
-	ReasonTimeout        FailureReason = "timeout"           // request timeout exceeded
-	ReasonDisabled       FailureReason = "disabled"          // manual disable switch (account/source); no circuit display
-	ReasonConsecutive    FailureReason = "consecutive"       // consecutive failures threshold reached; maps to protocol_mismatch display
+	ReasonTimeout          FailureReason = "timeout"           // request timeout exceeded
+	ReasonDisabled         FailureReason = "disabled"          // manual disable switch (account/source); no circuit display
+	ReasonConsecutive      FailureReason = "consecutive"       // consecutive failures threshold reached; maps to protocol_mismatch display
 )
 
 // HealthStatus carries health check result with detailed failure classification.
 type HealthStatus struct {
-	Reason   FailureReason
-	Message  string
-	Latency  int64  // milliseconds
+	Reason    FailureReason
+	Message   string
+	Latency   int64 // milliseconds
 	ExpiresAt int64 // Unix timestamp of credential expiry, 0 if not applicable
 }
 
@@ -130,51 +130,51 @@ type ProgressRenderData struct {
 
 // QuotaRenderData countdown data for quota_countdown display primitive.
 type QuotaRenderData struct {
-	RestartAt   int64 `json:"restart_at"`         // Unix timestamp of next reset
-	HumanRestart string `json:"human_restart"`     // server-local date string, e.g. "2026-10-13 21:00"
+	RestartAt    int64  `json:"restart_at"`    // Unix timestamp of next reset
+	HumanRestart string `json:"human_restart"` // server-local date string, e.g. "2026-10-13 21:00"
 }
 
 // ValidityRenderData validity gauge data for validity_gauge display primitive.
 type ValidityRenderData struct {
-	ExpiresAt   int64 `json:"expires_at"`     // Unix timestamp, 0 = platform-managed (no expiry info available)
-	DaysLeft    int   `json:"days_left"`      // days remaining; negative if expired
-	HumanDate   string `json:"human_date"`    // server-local date string
-	Supported   bool  `json:"supported"`     // true iff credential expiry can be detected
+	ExpiresAt int64  `json:"expires_at"` // Unix timestamp, 0 = platform-managed (no expiry info available)
+	DaysLeft  int    `json:"days_left"`  // days remaining; negative if expired
+	HumanDate string `json:"human_date"` // server-local date string
+	Supported bool   `json:"supported"`  // true iff credential expiry can be detected
 }
 
 // TaskState runtime state of a scheduled task.
 // Optional render fields (nil = fallback to status_plain): each corresponds
 // to exactly one Display primitive variant in TaskSchema.Display.
 type TaskState struct {
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Status      string           `json:"status"` // pending, running, success, failed, skipped
-	Source      string           `json:"source"` // platform source namespace for cross-source dedup
-	LastRunAt   int64            `json:"last_run_at"`
-	NextRunAt   int64            `json:"next_run_at"`
-	SkipReason  string           `json:"skip_reason,omitempty"`
-	DailyRuns   int              `json:"daily_runs"`
-	CronSpec    string           `json:"cron_spec"`
-	UrgencyRank *int             `json:"urgency_rank,omitempty"` // backend-assigned priority (lower = more urgent)
-	Calendar    *CalendarRenderData `json:"calendar,omitempty"`    // nil → not calendar_streak display
-	Progress    *ProgressRenderData `json:"progress,omitempty"`    // nil → not tier_progress display
-	Quota       *QuotaRenderData    `json:"quota,omitempty"`       // nil → not quota_countdown display
-	Validity    *ValidityRenderData `json:"validity,omitempty"`    // nil → not validity_gauge display
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Status      string              `json:"status"` // pending, running, success, failed, skipped
+	Source      string              `json:"source"` // platform source namespace for cross-source dedup
+	LastRunAt   int64               `json:"last_run_at"`
+	NextRunAt   int64               `json:"next_run_at"`
+	SkipReason  string              `json:"skip_reason,omitempty"`
+	DailyRuns   int                 `json:"daily_runs"`
+	CronSpec    string              `json:"cron_spec"`
+	UrgencyRank *int                `json:"urgency_rank,omitempty"` // backend-assigned priority (lower = more urgent)
+	Calendar    *CalendarRenderData `json:"calendar,omitempty"`     // nil → not calendar_streak display
+	Progress    *ProgressRenderData `json:"progress,omitempty"`     // nil → not tier_progress display
+	Quota       *QuotaRenderData    `json:"quota,omitempty"`        // nil → not quota_countdown display
+	Validity    *ValidityRenderData `json:"validity,omitempty"`     // nil → not validity_gauge display
 }
 
 // TaskSchema metadata for UI declaration-based rendering.
 // ID MUST include source namespace prefix: "workbuddy.signin_09" (not bare "signin_09").
 // This enables cross-source join/dedup and log traceability.
 type TaskSchema struct {
-	ID          string `json:"id"`           // namespaced: "{source}.{task_id}"
-	Source      string `json:"source"`       // platform source: workbuddy/qoder/trae (deduplication key)
-	Name        string `json:"name"`         // display name
-	Type        string `json:"type"`         // business semantic: signin / active_check / cat_travel / ...
-	Display     string `json:"display"`      // closed-set display primitive for component selection
-	CronSpec    string `json:"cron_spec"`    // cron expression
-	Description string `json:"description"`  // human-readable description
+	ID          string `json:"id"`            // namespaced: "{source}.{task_id}"
+	Source      string `json:"source"`        // platform source: workbuddy/qoder/trae (deduplication key)
+	Name        string `json:"name"`          // display name
+	Type        string `json:"type"`          // business semantic: signin / active_check / cat_travel / ...
+	Display     string `json:"display"`       // closed-set display primitive for component selection
+	CronSpec    string `json:"cron_spec"`     // cron expression
+	Description string `json:"description"`   // human-readable description
 	MaxDailyRun int    `json:"max_daily_run"` // max runs per day
-	Enabled     bool   `json:"enabled"`      // whether this task is currently enabled (from config)
+	Enabled     bool   `json:"enabled"`       // whether this task is currently enabled (from config)
 }
 
 // DisplayPrimitives are closed-set presentation primitives maintained by the UI team.
@@ -197,10 +197,10 @@ const (
 // Supported=true means this adapter can detect/read credential expiry;
 // false → grey "expiry managed by platform", NEVER Ok:false (that renders as "expired").
 type CredentialInfo struct {
-	ExpiresAt int64  `json:"expires_at"` // Unix timestamp; 0 if unsupported or unknown
-	Ok        bool   `json:"ok"`         // true if valid (when supported); meaningless when not supported
-	Supported bool   `json:"supported"`  // true iff credential expiry is detectable
-	DaysLeft  int    `json:"days_left"`  // calculated only when supported=true; negative if expired
+	ExpiresAt int64 `json:"expires_at"` // Unix timestamp; 0 if unsupported or unknown
+	Ok        bool  `json:"ok"`         // true if valid (when supported); meaningless when not supported
+	Supported bool  `json:"supported"`  // true iff credential expiry is detectable
+	DaysLeft  int   `json:"days_left"`  // calculated only when supported=true; negative if expired
 }
 
 // ModelInfo represents a model available on a platform. Used by P4 panel view.
@@ -215,19 +215,19 @@ type ModelInfo struct {
 
 // UnifiedRequest the canonical request shape passed through pool → router → adapter.
 type UnifiedRequest struct {
-	Model    string                 `json:"model"`
+	Model    string                   `json:"model"`
 	Messages []map[string]interface{} `json:"messages"`
-	Stream   bool                   `json:"stream"`
-	Source   string                 `json:"source"` // override: ?source= or X-Upstream header
+	Stream   bool                     `json:"stream"`
+	Source   string                   `json:"source"` // override: ?source= or X-Upstream header
 }
 
 // UnifiedResponse the canonical response shape returned to client.
 type UnifiedResponse struct {
-	ID      string                 `json:"id"`
-	Model   string                 `json:"model"`
+	ID      string                   `json:"id"`
+	Model   string                   `json:"model"`
 	Choices []map[string]interface{} `json:"choices"`
-	Usage   map[string]interface{} `json:"usage"`
-	Error   string                 `json:"error,omitempty"`
+	Usage   map[string]interface{}   `json:"usage"`
+	Error   string                   `json:"error,omitempty"`
 }
 
 // PlatformRequest abstracts the platform-specific request format.

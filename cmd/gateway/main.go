@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,8 +53,8 @@ func main() {
 	// /api/* surface (including the raw config passthrough) is unauthenticated.
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		fmt.Fprintf(os.Stderr, "\n"+
-			"WARNING: api_key is not configured — running in OPEN MODE.\n" +
-			"         The panel and /api/* (including GET /api/config raw config) have NO\n" +
+			"WARNING: api_key is not configured — running in OPEN MODE.\n"+
+			"         The panel and /api/* (including GET /api/config raw config) have NO\n"+
 			"         authentication. Do NOT expose listen %q to an untrusted network.\n\n",
 			cfg.Listen)
 	}
@@ -70,7 +71,7 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","service":"all2api","version":"%s","uptime":"%s"}`, version, time.Since(start).String())
+		fmt.Fprintf(w, `{"status":"ok","service":"all2api","version":"%s","buildDate":"%s","uptime":"%s"}`, version, buildDate, time.Since(start).String())
 	})
 
 	// Router endpoint placeholder
@@ -98,24 +99,31 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:     addr,
-		Handler:  mux,
-		ReadTimeout: 5 * time.Second,
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	// Graceful shutdown on SIGTERM/SIGINT — ≤10s total
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-		<-sigCh
-		cancel()
-	}()
+	// A2 (adversarial review): the signal channel drives server.Shutdown
+	// directly. The previous code cancelled a context with no consumer while
+	// ListenAndServe blocked, so the Shutdown block was unreachable and the
+	// ≤10s graceful-stop contract could never hold. Exit-code path is now
+	// explicit: real ListenAndServe errors exit 1, ErrServerClosed exits 0.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	if err := server.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "changed") {
-		fmt.Printf("Server error: %v\n", err)
-		os.Exit(1)
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Printf("Server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	case <-sigCh:
 	}
 
 	// Shutdown with 10s timeout

@@ -3,7 +3,7 @@ package adapter
 // BaseAdapter provides common scaffolding for platform adapters.
 // Concrete adapters embed this and override platform-specific methods.
 type BaseAdapter struct {
-	name     string
+	name         string
 	capabilities CapSet
 }
 

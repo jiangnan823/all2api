@@ -10,7 +10,7 @@ import (
 // if a platform is excluded via build tag, its init() never runs,
 // so it never registers. No runtime plugin loading needed.
 type Registry struct {
-	mu    sync.RWMutex
+	mu     sync.RWMutex
 	byName map[string]Adapter
 	byCap  map[CapType][]string // cap → list of adapter names supporting it
 }

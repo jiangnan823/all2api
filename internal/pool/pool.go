@@ -98,9 +98,14 @@ func (s *WeightedRandomSelector) RemoveAccount(platform, accountID string) {
 
 // Select returns one account for the given platform using weighted random.
 // Returns nil if no eligible account exists.
+//
+// A4 (adversarial review): the success path writes s.leases and draws from
+// s.rng, so this path holds the write lock, not RLock — concurrent Select
+// under RLock was a concurrent-map-write fatal plus an rng data race.
+// Selection logic is byte-for-byte unchanged.
 func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*Account, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	platformMap := s.accounts[platform]
 	if platformMap == nil || len(platformMap) == 0 {
