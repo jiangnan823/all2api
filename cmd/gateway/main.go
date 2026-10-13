@@ -12,9 +12,12 @@ import (
 	"time"
 
 	"all2api/internal/adapter"
+	"all2api/internal/api"
+	"all2api/internal/config"
 	// Assembly layer for build-tag-based platform registration.
 	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
 	_ "all2api/internal/platforms"
+	"all2api/internal/web"
 )
 
 // Version injected by ldflags at build time.
@@ -30,8 +33,25 @@ func main() {
 		return
 	}
 
+	// Config resolution: -config flag (Dockerfile CMD) → ALL2API_CONFIG env
+	// (compose/fpk) → ./config.json. A missing file is tolerated (defaults
+	// from config.Load) so bare-binary runs still start.
+	cfgPath := resolveConfigPath()
+	if err := config.Load(cfgPath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("config: %s not found, using built-in defaults\n", cfgPath)
+		} else {
+			fmt.Printf("config: load %s: %v\n", cfgPath, err)
+			os.Exit(1)
+		}
+	}
+	cfg := config.Shared.Get()
+
 	start := time.Now()
-	addr := ":7863"
+	addr := cfg.Listen
+	if addr == "" {
+		addr = ":7863"
+	}
 
 	mux := http.NewServeMux()
 
@@ -47,6 +67,13 @@ func main() {
 
 	// Responses API (feature flag: disabled in MVP, enabled in M1)
 	mux.HandleFunc("/v1/responses", responsesHandler)
+
+	// Panel API surface (G3 consent gate + config delivery) — M1 queue ③.
+	api.Register(mux)
+
+	// Embedded panel with runtime __ALL2API_BASE__ injection (G5) — M1 queue ②.
+	// Registered last: "/" is the SPA fallback catch-all, specific patterns win.
+	mux.Handle("/", web.NewPanelHandler())
 
 	fmt.Printf("All2API gateway v%s (%s) listening on %s\n", version, commit, addr)
 	fmt.Printf("Registered adapters:\n")
@@ -85,6 +112,23 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Shutdown complete.")
+}
+
+// resolveConfigPath implements: -config <path> flag → ALL2API_CONFIG env →
+// ./config.json. Matches the devops Dockerfile CMD and compose env contract.
+func resolveConfigPath() string {
+	for i := 1; i < len(os.Args); i++ {
+		if os.Args[i] == "-config" && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		if strings.HasPrefix(os.Args[i], "-config=") {
+			return strings.TrimPrefix(os.Args[i], "-config=")
+		}
+	}
+	if p := os.Getenv("ALL2API_CONFIG"); p != "" {
+		return p
+	}
+	return "./config.json"
 }
 
 // runHealthcheck performs an HTTP GET on /healthz and exits based on status.
