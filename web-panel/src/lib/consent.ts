@@ -1,4 +1,4 @@
-import type { ConsentAck, TimeLocal } from '../types/api-contract';
+import type { ConsentAck, FieldError, TimeLocal } from '../types/api-contract';
 
 /**
  * POST /api/auth/verify 的 consent 请求体（G3 冻结：唯一顶层键 consent，内部只有两个字段）。
@@ -15,4 +15,19 @@ export function echoTimeLocal(at: Date = new Date()): TimeLocal {
     unix: Math.floor(at.getTime() / 1000),
     local: `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}:${p(at.getSeconds())}`,
   };
+}
+
+/**
+ * consent 类拒绝的处置分派（TC-M1-029 口径）：只看 FieldError.code，绝不比较中文 message。
+ * 返回 null 表示这批错误与知情同意无关，交由各字段自身落点渲染。
+ */
+export function consentRejectionOf(
+  fieldErrors: FieldError[] | undefined,
+): 'consent_missing' | 'consent_stale' | null {
+  if (!fieldErrors) return null;
+  for (const e of fieldErrors) {
+    if (e.code === 'consent_missing') return 'consent_missing';
+    if (e.code === 'consent_stale') return 'consent_stale';
+  }
+  return null;
 }

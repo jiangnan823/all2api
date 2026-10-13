@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { ConsentGate, isReadToBottom } from '../src/components/ConsentGate';
-import { consentRequestBody } from '../src/lib/consent';
+import { consentRequestBody, consentRejectionOf } from '../src/lib/consent';
 import { CONSENT } from '../src/i18n/zh';
 
 const SH = 1000; // scrollHeight
@@ -155,6 +155,23 @@ describe('ConsentGate — 留痕最小化（G3 / O-5）', () => {
     gate();
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('consent 拒绝分派（TC-M1-029：只认 code，不匹配中文 message）', () => {
+  it('consent_missing / consent_stale 各自命中，其余返回 null', () => {
+    expect(consentRejectionOf([{ key: 'consent.notice_version', message: '请先阅读并勾选接入须知', code: 'consent_missing' }]))
+      .toBe('consent_missing');
+    expect(consentRejectionOf([{ key: 'consent.notice_version', message: '须知已更新', code: 'consent_stale' }]))
+      .toBe('consent_stale');
+    expect(consentRejectionOf([{ key: 'sources.qoder.throttle.steady_rpm', message: '越界', code: 'range' }])).toBeNull();
+    expect(consentRejectionOf(undefined)).toBeNull();
+  });
+
+  it('message 扰动不影响分派结果', () => {
+    const a = consentRejectionOf([{ key: 'k', message: '文案甲', code: 'consent_stale' }]);
+    const b = consentRejectionOf([{ key: 'k', message: '完全不同的一句话', code: 'consent_stale' }]);
+    expect(a).toBe(b);
   });
 });
 
