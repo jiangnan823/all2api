@@ -203,6 +203,60 @@ describe('ConsentGate — §9 逐字基准（Qoder 硬要求，禁止删弱）',
   });
 });
 
+describe('ConsentGate — copy §9 v0.1.2 WorkBuddy / Trae 逐字基准（PM seq=438）', () => {
+  const text = () => document.body.textContent ?? '';
+
+  it('WorkBuddy 三条逐字在场，含「代你执行例行操作」与保活项', () => {
+    gate({ source: 'workbuddy' });
+    expect(text()).toContain('WorkBuddy 账号需特别注意');
+    expect(text()).toContain(
+      '除了转发你的对话请求，网关还会代你执行例行操作：自动签到、活跃上报、凭证保活。这类操作等同于让网关代替你操作账号，平台若判定异常，可能限流或使凭证失效。',
+    );
+    expect(text()).toContain(
+      '出现「凭证已过期」提示时，通常是平台的处置表现，不是你设备或网关的故障；出路是回到账号页重新授权即可恢复。',
+    );
+    expect(text()).toContain(
+      '本来源默认节奏已按保守档配置：稳态 6 次/分钟、日请求上限 600、请求间随机间隔 0.1–0.9 秒、同一时刻最多 2 个在途请求。保守频率仅降低触发风控的概率，不能消除上述风险。',
+    );
+  });
+
+  it('Trae 三条逐字在场，含额度规则不公开与本机撤换说明', () => {
+    gate({ source: 'trae' });
+    expect(text()).toContain('Trae 账号需特别注意');
+    expect(text()).toContain(
+      'Trae 的免费额度规则由平台不公开说明，平台可随时调整额度或可用模型。额度缩水、模型下线属平台行为，非网关故障；网关无法替你承诺额度长期不变。',
+    );
+    expect(text()).toContain(
+      '本来源默认节奏已按最保守档配置：稳态 2 次/分钟、日请求上限 100、请求间随机间隔 0.5–2 秒、同一时刻仅 1 个在途请求。保守频率仅降低触发风控的概率，不能消除上述风险。',
+    );
+    expect(text()).toContain(
+      '设备验证只是把你已授予的授权换取凭证保存在本机；随时可在「账号管理」删除账号并撤销留存凭证。',
+    );
+  });
+
+  it('WorkBuddy 段只出现本段数值，不串写他源数值', () => {
+    gate({ source: 'workbuddy' });
+    expect(text()).toContain('稳态 6 次/分钟、日请求上限 600');
+    expect(text()).not.toContain('稳态 4 次/分钟');
+    expect(text()).not.toContain('稳态 2 次/分钟');
+  });
+
+  it('Trae 段只出现本段数值，不串写他源数值', () => {
+    gate({ source: 'trae' });
+    expect(text()).toContain('稳态 2 次/分钟、日请求上限 100');
+    expect(text()).not.toContain('稳态 4 次/分钟');
+    expect(text()).not.toContain('稳态 6 次/分钟');
+  });
+
+  it('Qoder 段数值与末句措辞未被 W/T 基准带偏（上述条款风险 vs 上述风险）', () => {
+    gate({ source: 'qoder' });
+    expect(text()).toContain('稳态 4 次/分钟、日请求上限 300');
+    // W/T 段末句逐字为「不能消除上述风险。」，Qoder 段为「…上述条款风险。」——两种基准形态都不得归一
+    expect(text()).toContain('不能消除上述条款风险。');
+    expect(text()).not.toContain('不能消除上述风险。');
+  });
+});
+
 describe('ConsentGate — scrollRequired=false 出口', () => {
   it('关闭滚动门槛时勾选框直接可用（勾选仍是人工动作）', () => {
     gate({ scrollRequired: false });
