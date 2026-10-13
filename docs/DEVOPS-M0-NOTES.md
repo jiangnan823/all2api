@@ -256,3 +256,50 @@ FAIL = `cmd/gateway` / `internal/schedule` / `internal/sessions`。
 修完后 lint 结果需重跑。`gofmt`：以 HEAD blob（LF 真源，已排除 autocrlf 假阳性）口径 **10/30 文件未格式化**，
 差异是常量块/结构体字段的对齐（如 `internal/circuit/circuit.go` 的 Reason 注释列），CI 的 gofmt 步骤会红。
 docker / 镜像 / smoke / gitleaks / gosec / govulncheck 本机仍无工具 ⇒ skipped-with-reason 不变。
+
+### 9.10 R1 分支复验（tip `b308646`，Go 线由「已验证=红」转「已验证=绿」）
+
+复验对象：backend R1 分支栈顶 `b308646` = `b308646d08d6a84b741c74d77aa9a129aa4e7615`，
+`git merge-base 9963226 b308646` = `9963226e…`（确系 main 直接后代，非分叉），
+`git log --oneline 9963226..b308646` = 5 个 commit（`152138e` A1 / `6dde5cb` A2 / `a375993` A3 / `ce83f7d` A4 / `b308646` B），
+`git diff --stat 9963226..b308646` = **13 files, +231 / −161**，与其自报一致。
+权威 blob 坐标全部核对命中：`main.go 3bdb79e`、`schedule.go e158f03`、`stickiness.go e402ed1`、
+`panel.go d65388a`、`pool.go 03a3d05`、`workbuddy/adapter.go c37fadc`。
+
+**冻结面扫描**：`git diff --name-only 9963226..b308646 -- web-panel/ .github/ docs/ Dockerfile Makefile
+docker-compose.yml deploy/ go.mod config.example.json .gitignore .dockerignore .golangci.yml` ⇒ **零命中**。
+R1 没碰任何契约冻结面，也未侵入我的工件线（除 `.golangci.yml` 的 noctx 豁免归我，见下）。
+
+**门禁实测（同一便携工具链 go1.24.13 + golangci-lint 1.64.8，`git archive` 导出，不碰 main 检出与 backend worktree）**：
+
+| 门禁 | 结果 | 证据 |
+| --- | --- | --- |
+| `go vet ./...` | **0 错** | exit=0 |
+| `go build ./...` | **通过** | exit=0 |
+| 四目标交叉编译 | **4/4 出真产物** | linux/amd64 6,529,208 B；linux/arm64 6,160,568 B；windows/amd64 6,718,464 B；darwin/arm64 6,291,426 B（`CGO_ENABLED=0`、`-trimpath`、`-s -w`、ldflags 注入 version/commit/buildDate） |
+| 逐包编译矩阵 | **15/15 OK** | §9.9 的 3 个 FAIL 包（`cmd/gateway`/`internal/schedule`/`internal/sessions`）全部转绿 |
+| `go test ./...` | **0 FAIL** | `internal/api ok 0.554s`，其余包 `[no test files]` |
+| `go test -v ./internal/api` | **5/5 PASS** | recover 402 / 凭证失效 / 未知 source / 需要 APIKey + halve-budget source 过滤 |
+| `gofmt -l` | **0/30**（§9.9 为 10/30） | 以 `git cat-file blob` 镜像判定（30 文件 0 个 CR）；`git archive`+MSYS tar 会转 CRLF ⇒ 该法在 Windows 上是假阳性源，弃用 |
+| `golangci-lint run ./...` | 加豁免前 **1 条**，加豁免后 **0 条 / exit=0** | 唯一命中 = `cmd/gateway/main.go:181` `noctx`（裁定三.4 判免）；§9.9 的 2 条 errcheck（`workbuddy/adapter.go:24`、`panel.go:89`）与新增可见的 `stickiness.go:173/:175` 全部消失 |
+| `golangci-lint config verify` | **exit=0** | 豁免配置 schema 合法，且 `noctx` 仍在启用 linter 列表中（不是整条 linter 被关） |
+
+**裁定二（buildDate 必须被 healthz 引用）已验**：`cmd/gateway/main.go:29` 声明 `buildDate = "unknown"`，
+`:74` 的 `/healthz` 响应体 `fmt.Fprintf` 直接引用 `version, buildDate, uptime`——**无分支逻辑**，缺省即输出
+`unknown`，满足「容忍空/unknown」的要求。PM 原句的行号映射是 `:28 → :73`，实际偏移一行，语义成立。
+
+**新增：本机原生运行时冒烟（不是 docker，但首次在真进程上验）**：用同点构建的 `windows-amd64` 产物起真服务，
+- `GET /healthz` → HTTP 200，body `{"status":"ok","service":"all2api","version":"r1-verify","buildDate":"2026-10-13T17:17:49Z","uptime":"1.61s"}`
+  ⇒ ci.yml smoke job 的 `"service"` 身份字段断言在真实 payload 上成立，且 ldflags 注入的 buildDate 确实透到 HTTP 面。
+- `all2api.exe healthcheck` → 打印 `healthcheck OK`，**exit=0** ⇒ Docker `HEALTHCHECK` 与 fpk `cmd/main status` 所依赖的子命令路径可用。
+- 启动日志含 open-mode 警告（未配 api_key 时明示面板与 `/api/*` 无鉴权、不得暴露给不可信网络）⇒ 安全提示面存在，非静默裸跑。
+- 收尾确认：进程已退出、`:7863` 无 LISTEN 残留（仅 TIME_WAIT）。
+
+**仍挂账（本机环境硬限制，非代码问题）**：`go test -race`（`-race requires cgo` ⇒ `C compiler "gcc" not found`，
+gcc/cc/clang 全缺）；docker 镜像构建 + `docker stop ≤10s` 的 SIGTERM 优雅窗口断言（`command -v docker` 无）；
+gitleaks / gosec / govulncheck 无二进制。Windows 原生无法等价验证 Linux 的 SIGTERM 语义，这一条不因本机冒烟而改口。
+
+**非阻塞观察（M2 处理，不卡 R1）**：`runHealthcheck`（`:180-195`）把 `http://localhost:7863/healthz` 写死，
+不读 `cfg.Listen`；若部署改端口，容器 HEALTHCHECK 与 fpk status 会误判失败。裁定三.4 只免 `noctx` 这一条 lint，
+未授权改行为，故本轮登记不动。裁定一（调度器 ctx 未接线）维持 M2 前置条件登记。
+

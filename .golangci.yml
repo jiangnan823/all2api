@@ -58,5 +58,21 @@ issues:
     - path: _test\.go
       linters:
         - errcheck
+
+    # 裁定三.4 (PM seq=679): the `healthcheck` subcommand's http.Get is registered as
+    # exempt, not fixed. Rationale: runHealthcheck is a one-shot CLI probe (Docker
+    # HEALTHCHECK, fpk status, CI smoke) that exits immediately after one request, so
+    # there is no long-lived request whose missing context could leak or hang.
+    #
+    # Deliberately triple-scoped (path + message + source line) instead of a blanket
+    # `noctx` disable: the moment the call is removed, rewritten to http.NewRequest,
+    # or moved to another file, this rule stops matching and noctx goes back to
+    # guarding the whole tree. Any NEW noctx finding still fails the gate.
+    - linters:
+        - noctx
+      path: ^cmd/gateway/main\.go$
+      text: net/http\.Get must not be called
+      source: 'resp, err := http\.Get\('
+
   max-issues-per-linter: 0
   max-same-issues: 0
