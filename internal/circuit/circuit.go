@@ -58,6 +58,7 @@ type Breaker struct {
 	lastFailure time.Time
 	failures  int
 	nextReset time.Time
+	noAutoRecover bool // set by trip(): stays open until Reset()
 	accountState map[string]*AccountState // optional per-account tracking
 }
 
@@ -81,20 +82,29 @@ func NewBreaker(source string, cfg Config) *Breaker {
 // Allow checks if a request should pass through the circuit.
 // Returns true if allowed, false if blocked.
 func (b *Breaker) Allow() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	switch b.state {
 	case StateClosed:
 		return true
 	case StateOpen:
-		if time.Since(b.openedAt).Seconds() >= float64(b.config.CooldownSec) {
+		if b.noAutoRecover {
+			return false // tripped: stays open until manual Reset()
+		}
+		deadline := b.nextReset
+		if deadline.IsZero() {
+			deadline = b.openedAt.Add(time.Duration(b.config.CooldownSec) * time.Second)
+		}
+		if time.Now().Before(deadline) {
 			return false // still in cooldown
 		}
-		// Transition to half-open for probe
-		return false
+		// Cooldown expired: transition to half-open and allow a probe.
+		b.state = StateHalfOpen
+		b.nextReset = time.Time{}
+		return true
 	default:
-		return true // half-open allows limited traffic
+		return true // half-open allows limited probe traffic
 	}
 }
 
@@ -118,21 +128,21 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 
 	switch statusCode {
 	case 429:
-		// Rate limited — exponential backoff from soft_rate_max ceiling
+		// Rate limited — exponential backoff capped at soft_rate_max
 		b.handleRateLimit(now)
 	case 404:
 		// Short cooldown only
-		b.cooldown(b.config.CooldownSec)
+		b.cooldown(b.config.CooldownSec, ReasonNotFound)
 	case 402:
-		// Hard cooldown until next day 04:00
-		nextDay := now.Add(24 * time.Hour)
-		hour, _ := nextDay.Clock()
-		if hour < 4 {
-			nextDay = nextDay.Add(time.Duration(4-hour) * time.Hour)
-		} else {
-			nextDay = nextDay.Add(24*time.Hour + time.Duration(4-hour) * time.Hour)
+		// Hard cooldown until the next upcoming 04:00 local time
+		// (frozen contract: sources.<id>.throttle.backoff.exhaust_402_until = "next-04:00").
+		// The previous "+24h then clock-adjust" formula landed on the day after
+		// tomorrow's 04:00 — one full day too late.
+		resetAt := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, now.Location())
+		if !resetAt.After(now) {
+			resetAt = resetAt.AddDate(0, 0, 1)
 		}
-		b.hardCooldown(nextDay)
+		b.hardCooldown(resetAt)
 	default:
 		if statusCode >= 500 || statusCode == 0 {
 			// Server error or connection error
@@ -151,6 +161,8 @@ func (b *Breaker) Reset() {
 	b.state = StateClosed
 	b.failures = 0
 	b.reason = ""
+	b.nextReset = time.Time{}
+	b.noAutoRecover = false
 }
 
 // State returns current breaker state.
@@ -175,36 +187,46 @@ func (b *Breaker) IsTripped() bool {
 }
 
 // handleRateLimit applies exponential backoff for 429 responses.
+// Geometric growth InitialBackoffSec * multiplier^failures, capped at SoftRateMax.
+// The previous formula (initial * multiplier * failures) was linear, not exponential.
 func (b *Breaker) handleRateLimit(now time.Time) {
-	exponential := int64(float64(b.config.InitialBackoffSec) * 
-		b.config.BackoffMultiplier * float64(b.failures))
-	backoffSec := min(exponential, b.config.SoftRateMax)
+	backoff := float64(b.config.InitialBackoffSec)
+	for i := 0; i < b.failures; i++ {
+		backoff *= b.config.BackoffMultiplier
+		if backoff >= float64(b.config.SoftRateMax) {
+			backoff = float64(b.config.SoftRateMax)
+			break
+		}
+	}
 
-	b.cooldown(backoffSec)
+	b.cooldown(int64(backoff), ReasonRateLimited)
 }
 
-// cooldown sets the circuit to open for dur seconds.
-func (b *Breaker) cooldown(dur int64) {
+// cooldown sets the circuit to open for dur seconds with the given reason.
+// The previous version recursed into itself once failures crossed the
+// consecutive threshold, causing unbounded recursion (stack overflow).
+func (b *Breaker) cooldown(dur int64, reason Reason) {
 	b.state = StateOpen
 	b.openedAt = time.Now()
-	b.reason = ReasonRateLimited
+	b.nextReset = b.openedAt.Add(time.Duration(dur) * time.Second)
+	b.reason = reason
 	b.failures++
-	if b.failures >= b.config.ConsecutiveFailures {
-		b.cooldown(dur)
-	}
 }
 
 // hardCooldown sets the circuit to open until a specific time.
 func (b *Breaker) hardCooldown(until time.Time) {
 	b.state = StateOpen
+	b.openedAt = time.Now()
 	b.nextReset = until
 	b.reason = ReasonQuotaExhausted
 }
 
-// trip permanently opens the circuit until manually reset.
+// trip opens the circuit until manually reset.
 func (b *Breaker) trip(reason Reason) {
 	b.state = StateOpen
 	b.openedAt = time.Now()
+	b.nextReset = time.Time{}
+	b.noAutoRecover = true
 	b.reason = reason
 	b.failures = 0 // reset counter on trip
 }
