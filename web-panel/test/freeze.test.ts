@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { REASON_COPY, reasonCopy } from '../src/i18n/zh';
 
 /**
  * 冻结令（seq=405）自检门禁：把"别再引新名 / 单位硬门 / 402 红线"变成可执行断言。
@@ -90,8 +91,40 @@ describe('G3 / F-V1 落点唯一', () => {
 });
 
 describe('402 文案红线', () => {
-  it('唯一形式逐字在场，"冷却中"绝迹', () => {
+  /**
+   * seq=445 裁三：禁「冷却中」的范围收窄为 **402/quota_exhausted 语境**。
+   * 语境判定 = 同一行活代码里出现 402 锚点（quota_exhausted / exhaust_402 / 额度耗尽 / EXHAUST_*）。
+   * 非 402 语境的"冷却"（熔断/退避冷却、紧急度排序，pool-02 同族）按 UI UE v0.2.4 口径合法存在，
+   * 全层禁词会在队列③ 接线时被迫破例，故不设全局绝迹断言。
+   */
+  const CTX_402 = /quota_exhausted|exhaust_402|额度耗尽|EXHAUST_/;
+
+  it('唯一形式逐字在场', () => {
     expect(impl.some((f) => f.text.includes('额度耗尽·次日04:00重置'))).toBe(true);
-    expect(impl.filter((f) => f.code.includes('冷却中')).map((f) => f.rel)).toEqual([]);
+  });
+
+  it('402 语境行内不得出现「冷却中」', () => {
+    const hits: string[] = [];
+    for (const f of impl) {
+      f.code.split('\n').forEach((line, i) => {
+        if (CTX_402.test(line) && line.includes('冷却中')) hits.push(`${f.rel}:${i + 1}`);
+      });
+    }
+    expect(hits, `402 行被改写成冷却语义：${hits.join(', ')}`).toEqual([]);
+  });
+
+  it('402 锚点文案只有一个来源：REASON_COPY.quota_exhausted.label 逐字等于冻结串', () => {
+    // 硬门从"扫字面"升级为"判值"：任何第二写法（含标点/空格变体）都会在这里红，而不是靠 grep 白名单
+    expect(reasonCopy('quota_exhausted').label).toBe('额度耗尽·次日04:00重置');
+    expect(REASON_COPY.quota_exhausted?.label).toBe('额度耗尽·次日04:00重置');
+    // ThrottleForm 只读锚点行共用同一值，不另立第四种写法
+    expect(impl.find((f) => f.rel === 'components/ThrottleForm.tsx')?.text).toContain(
+      "reasonCopy('quota_exhausted')",
+    );
+    // 全实现层凡是"额度耗尽…重置"这条红线句，标点/空格形态必须与冻结串完全一致（自然语言里单独提到「额度耗尽」不受限）
+    const variants = new Set(
+      impl.flatMap((f) => f.text.match(/额度耗尽[^\n'"`]*重置/g) ?? []),
+    );
+    expect([...variants]).toEqual(['额度耗尽·次日04:00重置']);
   });
 });

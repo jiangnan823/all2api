@@ -309,12 +309,22 @@
   max-width: 60ch;
 }
 
-.danger-action {
-  position: relative;
+.danger-action__scrim {
+  position: fixed;
+  inset: 0;
   z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: var(--scrim);
+}
+
+.danger-action {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  width: min(460px, 100%);
   padding: var(--sp-4);
   background: var(--bg-elevated);
   border: 1px solid var(--status-danger);
