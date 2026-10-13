@@ -11,11 +11,11 @@ import (
 
 // Binding maps a conversation to its assigned account within a source.
 type Binding struct {
-	Platform   string    `json:"platform"`
-	Conversation string `json:"conversation"` // conversation_id from client
-	AccountID  string    `json:"account_id"`
-	CreatedAt  time.Time `json:"created_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	Platform     string    `json:"platform"`
+	Conversation string    `json:"conversation"` // conversation_id from client
+	AccountID    string    `json:"account_id"`
+	CreatedAt    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 // SessionStickiness manages conversation-to-account bindings per platform.
@@ -151,7 +151,7 @@ func (s *SessionStickiness) ClearExpired() {
 	defer s.mu.Unlock()
 
 	now := time.Now()
-	for platform, platformMap := range s.bindings {
+	for _, platformMap := range s.bindings {
 		for conv, binding := range platformMap {
 			if binding.ExpiresAt.Before(now) {
 				delete(platformMap, conv)
@@ -167,12 +167,14 @@ func (s *SessionStickiness) scheduleSync() {
 	if elapsed < 5*time.Second {
 		return
 	}
-	
+
 	go func() {
 		time.Sleep(2 * time.Second) // debounce
-		s.Persist()
+		// Best-effort background sync: this goroutine has no caller to report to,
+		// and the next scheduleSync cycle retries.
+		_ = s.Persist()
 		if s.redisURL != "" {
-			s.SyncToRedis()
+			_ = s.SyncToRedis()
 		}
 		s.mu.Lock()
 		s.lastSync = time.Now()

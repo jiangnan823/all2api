@@ -124,7 +124,9 @@ func serveIndexInjected(w http.ResponseWriter, r *http.Request, sub fs.FS) {
 	// The injected base depends on request headers and hot-reloadable config;
 	// caching index.html would freeze a stale derivation.
 	w.Header().Set("Cache-Control", "no-store")
-	w.Write(html)
+	// Response headers are already committed; a write failure here cannot be
+	// recovered or reported to the client.
+	_, _ = w.Write(html)
 }
 
 // injectTag places the tag right after the opening <head> tag, guaranteeing

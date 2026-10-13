@@ -21,20 +21,20 @@ const (
 type Reason string
 
 const (
-	ReasonRateLimited  Reason = "rate_limited"  // 429
-	ReasonNotFound     Reason = "not_found"     // 404
+	ReasonRateLimited    Reason = "rate_limited"    // 429
+	ReasonNotFound       Reason = "not_found"       // 404
 	ReasonQuotaExhausted Reason = "quota_exhausted" // 402
-	ReasonConsecutive  Reason = "consecutive"   // too many failures
-	ReasonDisabled     Reason = "disabled"      // manual disable switch
+	ReasonConsecutive    Reason = "consecutive"     // too many failures
+	ReasonDisabled       Reason = "disabled"        // manual disable switch
 )
 
 // Config for a single source's circuit breaker.
 type Config struct {
-	CooldownSec         int64   `json:"cooldown_sec"`           // base cooldown duration
-	SoftRateMax         int64   `json:"soft_rate_max"`          // max 429s before escalation
-	ConsecutiveFailures int     `json:"consecutive_failures"`   // threshold for circuit open
-	BackoffMultiplier   float64 `json:"backoff_multiplier"`     // exponential backoff factor
-	InitialBackoffSec   int64   `json:"initial_backoff_sec"`    // initial exponential backoff start
+	CooldownSec         int64   `json:"cooldown_sec"`         // base cooldown duration
+	SoftRateMax         int64   `json:"soft_rate_max"`        // max 429s before escalation
+	ConsecutiveFailures int     `json:"consecutive_failures"` // threshold for circuit open
+	BackoffMultiplier   float64 `json:"backoff_multiplier"`   // exponential backoff factor
+	InitialBackoffSec   int64   `json:"initial_backoff_sec"`  // initial exponential backoff start
 }
 
 // DefaultConfig returns sensible defaults matching Panel behavior.
@@ -50,16 +50,16 @@ func DefaultConfig() Config {
 
 // Breaker manages the circuit state for one source.
 type Breaker struct {
-	mu      sync.RWMutex
-	config  Config
-	state   State
-	reason  Reason
-	openedAt time.Time
-	failures  int
+	mu            sync.RWMutex
+	config        Config
+	state         State
+	reason        Reason
+	openedAt      time.Time
+	failures      int
 	rateLimitHits int // consecutive 429 count — sole backoff exponent (P2: not polluted by 404/5xx failures)
-	nextReset time.Time
-	noAutoRecover bool // set by trip(): stays open until Reset()
-	accountState map[string]*AccountState // optional per-account tracking
+	nextReset     time.Time
+	noAutoRecover bool                     // set by trip(): stays open until Reset()
+	accountState  map[string]*AccountState // optional per-account tracking
 }
 
 // AccountState tracks circuit state per account within a source.

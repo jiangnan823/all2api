@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,8 +53,8 @@ func main() {
 	// /api/* surface (including the raw config passthrough) is unauthenticated.
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		fmt.Fprintf(os.Stderr, "\n"+
-			"WARNING: api_key is not configured — running in OPEN MODE.\n" +
-			"         The panel and /api/* (including GET /api/config raw config) have NO\n" +
+			"WARNING: api_key is not configured — running in OPEN MODE.\n"+
+			"         The panel and /api/* (including GET /api/config raw config) have NO\n"+
 			"         authentication. Do NOT expose listen %q to an untrusted network.\n\n",
 			cfg.Listen)
 	}
@@ -70,7 +71,7 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","service":"all2api","version":"%s","uptime":"%s"}`, version, time.Since(start).String())
+		fmt.Fprintf(w, `{"status":"ok","service":"all2api","version":"%s","buildDate":"%s","uptime":"%s"}`, version, buildDate, time.Since(start).String())
 	})
 
 	// Router endpoint placeholder
@@ -98,9 +99,9 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:     addr,
-		Handler:  mux,
-		ReadTimeout: 5 * time.Second,
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
@@ -117,7 +118,7 @@ func main() {
 
 	select {
 	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Printf("Server error: %v\n", err)
 			os.Exit(1)
 		}

@@ -28,8 +28,8 @@ type fakeAdapter struct {
 	err  error
 }
 
-func (f *fakeAdapter) Name() string         { return f.name }
-func (f *fakeAdapter) AuthRequired() bool    { return true }
+func (f *fakeAdapter) Name() string       { return f.name }
+func (f *fakeAdapter) AuthRequired() bool { return true }
 func (f *fakeAdapter) ConvertRequest(*adapter.UnifiedRequest) (*adapter.PlatformRequest, error) {
 	return nil, nil
 }
@@ -43,7 +43,7 @@ func (f *fakeAdapter) GetTasks(context.Context) ([]*adapter.TaskState, error) {
 	return nil, nil
 }
 func (f *fakeAdapter) ExecuteTask(context.Context, string) error { return nil }
-func (f *fakeAdapter) Capabilities() adapter.CapSet               { return adapter.CapSet{} }
+func (f *fakeAdapter) Capabilities() adapter.CapSet              { return adapter.CapSet{} }
 func (f *fakeAdapter) GetTaskSchema(context.Context) ([]*adapter.TaskSchema, error) {
 	return nil, nil
 }
