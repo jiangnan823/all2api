@@ -1,6 +1,10 @@
+//go:build qoder || full
+
 package qoder
 
 import (
+	"context"
+
 	"all2api/internal/adapter"
 )
 
@@ -26,29 +30,30 @@ func (a *Adapter) ParseResponse(resp *adapter.PlatformResponse) (*adapter.Unifie
 	return &adapter.UnifiedResponse{}, nil
 }
 
-func (a *Adapter) HealthCheck(ctx interface{}) (*adapter.HealthStatus, error) {
+func (a *Adapter) HealthCheck(ctx context.Context) (*adapter.HealthStatus, error) {
 	return &adapter.HealthStatus{Reason: adapter.ReasonOK}, nil
 }
 
-func (a *Adapter) GetTasks(ctx interface{}) ([]*adapter.TaskState, error) {
+func (a *Adapter) GetTasks(ctx context.Context) ([]*adapter.TaskState, error) {
 	return nil, nil
 }
 
-func (a *Adapter) ExecuteTask(ctx interface{}, taskID string) error {
+func (a *Adapter) ExecuteTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
-func (a *Adapter) GetTaskSchema(ctx interface{}) ([]*adapter.TaskSchema, error) {
+func (a *Adapter) GetTaskSchema(ctx context.Context) ([]*adapter.TaskSchema, error) {
 	return []*adapter.TaskSchema{
-		{ID: "signin", Name: "签到", DisplayType: adapter.DisplayCalendar, CronSpec: "0 9 * * *", Description: "每日签到获取积分", MaxDailyRun: 1},
+		{ID: "qoder.signin", Source: "qoder", Name: "签到", Type: "signin", Display: adapter.DisplayCalendarStreak, CronSpec: "0 9 * * *", Description: "每日签到获取积分", MaxDailyRun: 1, Enabled: true},
 	}, nil
 }
 
 func (a *Adapter) CredentialStatus() (*adapter.CredentialInfo, error) {
-	return &adapter.CredentialInfo{Ok: false, ExpiresAt: 0, DaysLeft: 0}, nil
+	// TODO: read auth state
+	return &adapter.CredentialInfo{Ok: true, Supported: false}, nil
 }
 
-func (a *Adapter) ListModels(ctx interface{}) ([]*adapter.ModelInfo, error) {
+func (a *Adapter) ListModels(ctx context.Context) ([]*adapter.ModelInfo, error) {
 	// TODO: populate from Qoder's actual model list after spike
 	return []*adapter.ModelInfo{}, nil
 }

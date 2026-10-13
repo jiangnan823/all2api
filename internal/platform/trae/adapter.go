@@ -1,6 +1,10 @@
+//go:build trae || full
+
 package trae
 
 import (
+	"context"
+
 	"all2api/internal/adapter"
 )
 
@@ -28,29 +32,30 @@ func (a *Adapter) ParseResponse(resp *adapter.PlatformResponse) (*adapter.Unifie
 	return &adapter.UnifiedResponse{}, nil
 }
 
-func (a *Adapter) HealthCheck(ctx interface{}) (*adapter.HealthStatus, error) {
+func (a *Adapter) HealthCheck(ctx context.Context) (*adapter.HealthStatus, error) {
 	return &adapter.HealthStatus{Reason: adapter.ReasonOK}, nil
 }
 
-func (a *Adapter) GetTasks(ctx interface{}) ([]*adapter.TaskState, error) {
+func (a *Adapter) GetTasks(ctx context.Context) ([]*adapter.TaskState, error) {
 	return nil, nil
 }
 
-func (a *Adapter) ExecuteTask(ctx interface{}, taskID string) error {
+func (a *Adapter) ExecuteTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
-func (a *Adapter) GetTaskSchema(ctx interface{}) ([]*adapter.TaskSchema, error) {
+func (a *Adapter) GetTaskSchema(ctx context.Context) ([]*adapter.TaskSchema, error) {
 	return []*adapter.TaskSchema{
-		{ID: "signin", Name: "签到", DisplayType: adapter.DisplayGeneric, CronSpec: "", Description: "Trae 免费额度管理任务", MaxDailyRun: 1},
+		{ID: "trae.signin", Source: "trae", Name: "签到", Type: "signin", Display: adapter.DisplayStatusPlain, CronSpec: "", Description: "Trae 免费额度管理任务", MaxDailyRun: 1, Enabled: true},
 	}, nil
 }
 
 func (a *Adapter) CredentialStatus() (*adapter.CredentialInfo, error) {
-	return &adapter.CredentialInfo{Ok: false, ExpiresAt: 0, DaysLeft: 0}, nil
+	// TODO: read auth state
+	return &adapter.CredentialInfo{Ok: true, Supported: false}, nil
 }
 
-func (a *Adapter) ListModels(ctx interface{}) ([]*adapter.ModelInfo, error) {
+func (a *Adapter) ListModels(ctx context.Context) ([]*adapter.ModelInfo, error) {
 	// TODO: populate from Trae after spike confirms protocol stability
 	return []*adapter.ModelInfo{}, nil
 }
