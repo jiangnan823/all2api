@@ -1,0 +1,56 @@
+{
+  "_note": "all2api 配置样例。频率数值为产品建议默认值（PRD v0.2 §7.1 / PM 调研 §4 / UI §5.20），面板标'可调整'，非平台承诺；not_found_sec=300 为工程建议（PM O-2），非外部条款。指纹类开关默认 false（PM 调研 §4.1 / PRD §3.3 R6），开启需 DangerAction 二次确认。",
+  "listen": ":7863",
+  "api_key": "",
+  "auth_dir": "./auths",
+  "state_file": "./data/state.json",
+  "external_base_url": "",
+  "notice_version": "1",
+  "pool": {
+    "credit_floor": 100,
+    "max_retries": 3,
+    "cooldown_sec": 60
+  },
+  "schedule": {
+    "signin_cron": "0 9,21 * * *",
+    "task_cron": "0 10 * * *",
+    "token_keepalive_cron": "0 22 * * *"
+  },
+  "sources": {
+    "workbuddy": {
+      "enabled": true,
+      "credentials_dir": "",
+      "advanced": { "request_fingerprint_rewrite": false },
+      "throttle": {
+        "steady_rpm": 6, "burst_rpm": 20, "min_gap_ms": [100, 900],
+        "daily_cap": 600, "inflight": 2, "jitter_minutes": 15,
+        "backoff": { "base_429_sec": 600, "not_found_sec": 300, "exhaust_402_until": "next-04:00" }
+      }
+    },
+    "qoder": {
+      "enabled": true,
+      "credentials_dir": "",
+      "advanced": { "request_fingerprint_rewrite": false },
+      "throttle": {
+        "steady_rpm": 4, "burst_rpm": 12, "min_gap_ms": [200, 1200],
+        "daily_cap": 300, "inflight": 1, "jitter_minutes": 15, "halve_budget_after_429": true,
+        "backoff": { "base_429_sec": 600, "not_found_sec": 300, "exhaust_402_until": "next-04:00" }
+      }
+    },
+    "trae": {
+      "enabled": false,
+      "credentials_dir": "",
+      "advanced": { "request_fingerprint_rewrite": false },
+      "throttle": {
+        "steady_rpm": 2, "burst_rpm": 6, "min_gap_ms": [500, 2000],
+        "daily_cap": 100, "inflight": 1, "jitter_minutes": 15,
+        "backoff": { "base_429_sec": 600, "not_found_sec": 300, "exhaust_402_until": "next-04:00" }
+      }
+    }
+  },
+  "router": {
+    "model_map": {},
+    "responses_api": { "enabled": false }
+  },
+  "model_map": {}
+}
