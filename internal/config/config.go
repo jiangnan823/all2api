@@ -8,16 +8,17 @@ import (
 
 // Config is the root configuration loaded from config.json.
 type Config struct {
-	Listen      string                 `json:"listen"`
-	APIKey      string                 `json:"api_key"`
-	AuthDir     string                 `json:"auth_dir"`
-	StateFile   string                 `json:"state_file"`
-	Pool        PoolConfig             `json:"pool"`
-	Schedule    ScheduleConfig         `json:"schedule"`
-	Throttle    map[string]ThrottleConfig `json:"throttle"`
-	Sources     map[string]SourceConfig `json:"sources"`
-	Router      RouterConfig           `json:"router"`
-	ModelMap    map[string]string       `json:"model_map"` // model name → platform/model
+	Listen          string                 `json:"listen"`
+	APIKey          string                 `json:"api_key"`
+	AuthDir         string                 `json:"auth_dir"`
+	StateFile       string                 `json:"state_file"`
+	ExternalBaseURL string                 `json:"external_base_url"` // upstream proxy path; frontend reads via __ALL2API_BASE__
+	Pool            PoolConfig             `json:"pool"`
+	Schedule        ScheduleConfig         `json:"schedule"`
+	Throttle        map[string]ThrottleConfig `json:"throttle"`
+	Sources         map[string]SourceConfig `json:"sources"`
+	Router          RouterConfig           `json:"router"`
+	ModelMap        map[string]string       `json:"model_map"` // model name → platform/model
 }
 
 // PoolConfig pool-level settings adapted from Panel's design.
