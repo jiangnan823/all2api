@@ -13,9 +13,10 @@ import (
 	"all2api/internal/config"
 )
 
-// Register wires the M1 queue-③ routes onto mux.
+// Register wires the M1 queue-③/④ routes onto mux.
 func Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", withAPIKey(handleConfig))
+	mux.HandleFunc("/api/config/fields", withAPIKey(handleConfigFields))
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))
 }
 
