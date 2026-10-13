@@ -303,3 +303,38 @@ gitleaks / gosec / govulncheck 无二进制。Windows 原生无法等价验证 L
 不读 `cfg.Listen`；若部署改端口，容器 HEALTHCHECK 与 fpk status 会误判失败。裁定三.4 只免 `noctx` 这一条 lint，
 未授权改行为，故本轮登记不动。裁定一（调度器 ctx 未接线）维持 M2 前置条件登记。
 
+### 9.11 merged tip 收尾确认（main = `05a0d41`，R1 合流后）
+
+合流结构独立复核：`git rev-list --parents -n1 05a0d41` = `05a0d41c275e… d1db62b28aaa… b308646d08d6…`
+⇒ 确为双亲 merge commit（--no-ff），本地 `main` = `05a0d41`，工作树干净，**未 push、未触 Actions**。
+
+内容一致性：
+- `git diff d1db62b..05a0d41` = 恰 13 个 `.go` 文件，非 Go 路径数 **0** ⇒ 合流未夹带代码外变化。
+- `git diff b308646..05a0d41` = 仅 `.golangci.yml` + `docs/DEVOPS-M0-NOTES.md`，二者均来自我的 `d1db62b` ⇒ **merge commit 自身代码增量 = 0**。
+- 13 枚 `.go` blob 在 merged tip 与分支栈顶 **逐一同值**（main.go `3bdb79e8`、base.go `0c066666`、models.go `a546f047`、
+  registry.go `71b966db`、api.go `c2b2d980`、recover_test.go `c9979ad8`、circuit.go `78ec42e5`、config.go `8c7e624b`、
+  workbuddy adapter.go `c37fadce`、pool.go `03a3d05a`、schedule.go `e158f037`、stickiness.go `e402ed1d`、panel.go `d65388a6`）。
+- 冻结面扫描的口径修正：`9963226..05a0d41` 对冻结清单**有 2 个命中** = `.golangci.yml` 与 `docs/DEVOPS-M0-NOTES.md`，
+  二者都来自 devops 工件线（§9.10 + PM seq=692 追认），**代码线 `9963226..b308646` 对该清单仍为零命中**。
+  台账若写"merged tip 冻结面零命中"不准确，须按"代码线零命中 + 工件线两项已追认"表述。
+
+门禁复跑（同一便携工具链、`git archive` 导出 `r3src`、gofmt 用 `r3mirror` 的 LF blob 镜像）：
+
+| 门禁 | @b308646 | @05a0d41（merged） |
+| --- | --- | --- |
+| `go vet ./...` | exit=0 | **exit=0** |
+| `go build ./...` | exit=0 | **exit=0** |
+| 四目标交叉编译 | 4/4 | **4/4，产物字节数逐一相同**（6,529,208 / 6,160,568 / 6,718,464 / 6,291,426） |
+| 逐包矩阵 | 15/15 | **15/15** |
+| `go test ./...` | 0 FAIL | **0 FAIL**，`internal/api ok 0.056s`，`-v` **5/5 PASS** |
+| `gofmt -l` | 0/30 | **0/30** |
+| `golangci-lint run ./...` | 0 条 / exit=0 | **0 条 / exit=0**（用的是树内 `.golangci.yml`，证明豁免随 main 生效，不依赖本机额外配置） |
+
+运行时冒烟（merged 产物）：`/healthz` → 200
+`{"status":"ok","service":"all2api","version":"merged-05a0d41","buildDate":"2026-10-13T17:31:53Z","uptime":"1.63s"}`；
+`healthcheck` 子命令 exit=0；启动 banner `All2API gateway vmerged-05a0d41 (05a0d41)` ⇒ version / commit / buildDate
+三项在真实进程上同时可见，"运行版本 == 打标版本"的核对链路自此成立（M0 挂账的发布证据项补齐）。进程退出后 `:7863` 无残留监听。
+
+挂账不变：`-race`（无 CGO/gcc）、docker 镜像与 `docker stop ≤10s` 的 Linux SIGTERM 窗口、gitleaks / gosec / govulncheck。
+
+
