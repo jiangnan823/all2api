@@ -1,0 +1,12 @@
+{
+  "appCenter": {
+    "all2api": {
+      "name": "all2api",
+      "icon": "images/icon_64.png",
+      "type": "name",
+      "protocol": "http",
+      "remote_port": "7863",
+      "portal": ""
+    }
+  }
+}

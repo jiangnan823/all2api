@@ -1,0 +1,44 @@
+# Build context exclusions for the all2api image.
+# Keeping this tight matters: `COPY . .` is what makes the build cache leaky.
+
+.git
+.gitignore
+.github
+.idea
+.vscode
+.qoder
+.qoder-collab-runtime
+.qoder-sop-runtime
+
+# Runtime state must never be baked into an image — these hold credentials.
+auths/
+data/
+*.jwt
+*.token
+secrets/
+.env
+.env.*
+
+# Local build output
+dist/
+out/
+staging/
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+vendor/
+
+# Panel sources are compiled in the `web` stage; the Go stage only needs dist.
+web-panel/node_modules
+web-panel/.next
+web-panel/tmp
+
+# Docs / deploy assets not needed to build the binary
+deploy/
+docs/
+*.md
+LICENSE
+Makefile
+docker-compose*.yml

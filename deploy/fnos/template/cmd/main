@@ -1,0 +1,112 @@
+#!/bin/bash
+# fnOS app lifecycle script for all2api (packaged as cmd/main inside the .fpk)
+#
+# fnOS calls this with a verb: start | stop | status | restart
+# plus install/upgrade/uninstall callbacks (see the tail of this file).
+#
+# Env provided by fnOS app center (names follow community fpk repos; VERIFY on a
+# real box before shipping — see README.md step 2):
+#   TRIM_PKGVAR    persistent app data dir, e.g. /vol1/@appdata/all2api
+#   TRIM_PKGSRVDIR app install dir (read-only-ish, contains docker/)
+#   TRIM_PKGDSMDIR app etc/config dir
+
+set -euo pipefail
+
+APP_NAME="all2api"
+PORT="${SERVICE_PORT:-7863}"
+
+PKGVAR="${TRIM_PKGVAR:-/var/packages/${APP_NAME}/data}"
+PKGSRV="${TRIM_PKGSRVDIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+COMPOSE_FILE="${PKGSRV}/docker/docker-compose.yaml"
+IMAGE="${ALL2API_IMAGE:-ghcr.io/jiangnan823/all2api}"
+VERSION="${ALL2API_VERSION:-latest}"
+
+DATA_DIR="${PKGVAR}/data"
+AUTH_DIR="${PKGVAR}/auths"
+CONFIG_FILE="${PKGVAR}/config.json"
+
+log() { echo "[${APP_NAME}] $*" >&2; }
+
+compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose -f "$COMPOSE_FILE" "$@"
+  else
+    docker-compose -f "$COMPOSE_FILE" "$@"
+  fi
+}
+
+init_dirs() {
+  mkdir -p "$DATA_DIR" "$AUTH_DIR"
+  # 容器以 nonroot(65532) 运行，bind mount 属主不对会导致状态写入静默失败
+  chown -R 65532:65532 "$DATA_DIR" "$AUTH_DIR" 2>/dev/null || \
+    log "WARN: chown 65532 failed; container may fail to persist state"
+
+  if [ ! -f "$CONFIG_FILE" ]; then
+    if [ -f "${PKGSRV}/docker/config.example.json" ]; then
+      cp "${PKGSRV}/docker/config.example.json" "$CONFIG_FILE"
+      log "seeded default config at $CONFIG_FILE"
+    else
+      log "ERROR: no config.json and no example to seed from"
+      return 1
+    fi
+  fi
+}
+
+do_start() {
+  init_dirs || return 1
+  export ALL2API_IMAGE="$IMAGE" ALL2API_VERSION="$VERSION" \
+         ALL2API_PORT="$PORT" \
+         ALL2API_DATA_DIR="$DATA_DIR" ALL2API_AUTH_DIR="$AUTH_DIR" \
+         ALL2API_CONFIG="$CONFIG_FILE"
+  compose up -d
+  log "started on port $PORT"
+}
+
+do_stop() {
+  compose down --remove-orphans || true
+  log "stopped"
+}
+
+# status 必须幂等且只读：应用中心会周期性调用，误报会让"运行中"显示错误。
+do_status() {
+  local cid
+  cid=$(compose ps -q "$APP_NAME" 2>/dev/null | head -n1)
+  if [ -z "$cid" ]; then
+    echo "stoped"     # fnOS 期望的状态字，拼写以其解析为准（VERIFY）
+    exit 1
+  fi
+  local state
+  state=$(docker inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)
+  if [ "$state" != "running" ]; then
+    echo "stoped"
+    exit 1
+  fi
+  local healthy
+  healthy=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)
+  case "$healthy" in
+    healthy|none) echo "running"; exit 0 ;;
+    *)            echo "starting"; exit 0 ;;
+  esac
+}
+
+do_restart() { do_stop; do_start; }
+
+# 卸载只停容器，绝不动 auths/data —— 那是用户的账号凭证和签到历史。
+do_uninstall() {
+  compose down --remove-orphans || true
+  log "container removed; user data kept at $PKGVAR (delete manually if sure)"
+}
+
+case "${1:-status}" in
+  start)            do_start ;;
+  stop)             do_stop ;;
+  restart)          do_restart ;;
+  status)           do_status ;;
+  install_callback) do_start ;;
+  upgrade_callback) do_stop; do_start ;;
+  uninstall_init)   do_uninstall ;;
+  *)
+    echo "usage: $0 {start|stop|restart|status|install_callback|upgrade_callback|uninstall_init}" >&2
+    exit 2
+    ;;
+esac

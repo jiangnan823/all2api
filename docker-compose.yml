@@ -1,0 +1,70 @@
+# all2api — Docker Compose deployment (server / NAS long-running)
+# Owner: devops. Path in repo: docker-compose.yml
+#
+# Usage:
+#   mkdir -p auths data
+#   cp config.example.json config.json   # then edit api_key, pools, schedule
+#   # nonroot (uid 65532) must own the bind mounts, or state writes fail:
+#   sudo chown -R 65532:65532 auths data
+#   docker compose up -d
+#   curl -fsS localhost:7863/healthz
+#
+# Image: ghcr.io/jiangnan823/all2api (linux/amd64 + linux/arm64)
+# Local build instead of registry:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+
+services:
+  all2api:
+    image: ghcr.io/jiangnan823/all2api:latest
+    container_name: all2api
+    restart: unless-stopped
+    pull_policy: missing
+
+    ports:
+      - "7863:7863"
+
+    environment:
+      TZ: Asia/Shanghai
+      ALL2API_CONFIG: /app/config.json
+      GOMEMLIMIT: 250MiB
+      # Never put secrets here in git. Use a local .env (gitignored) or a mount.
+      # ALL2API_ADMIN_TOKEN: ${ALL2API_ADMIN_TOKEN:-}
+
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./auths:/app/auths
+      - ./data:/app/data
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+          cpus: "1.0"
+
+    healthcheck:
+      test: ["CMD", "/app/all2api", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    networks:
+      - all2api
+
+networks:
+  all2api:
+    driver: bridge

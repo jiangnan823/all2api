@@ -1,0 +1,375 @@
+name: ci
+
+# all2api — M0 CI gate
+# Owner: devops. Placed at repo root: .github/workflows/ci.yml
+#
+# If backend changes any of the conventions below, edit ONLY the env block at top;
+# every job reads from it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.24"
+  NODE_VERSION: "22"
+  BINARY: all2api
+  ENTRYPOINT: ./cmd/gateway
+  PANEL_DIR: web-panel
+  EMBED_DIR: internal/web/dist
+  HEALTH_PATH: /healthz
+  LISTEN_PORT: "7863"
+
+jobs:
+  # ---------------------------------------------------------------- panel -----
+  panel:
+    name: panel / build
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles(format('{0}/package-lock.json', env.PANEL_DIR)) != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PANEL_DIR }}/package-lock.json
+
+      - name: Install
+        working-directory: ${{ env.PANEL_DIR }}
+        run: npm ci
+
+      # typecheck/test are hard gates whenever the scripts exist.
+      - name: Typecheck + unit tests (if defined)
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          npm run --if-present typecheck
+          npm run --if-present test
+
+      # Bundling is optional by design in M1: web-panel/package.json carries only
+      # typecheck/test (fronted 把「构建、静态服务、/api/* 接线」列 M1). `--if-present`
+      # makes a missing build script a notice, not a red job, so the Go gate
+      # (三变体 build/vet) is never misattributed to a frontend gap. Once a real
+      # `build` script lands, this step runs it and any failure is blocking.
+      - name: Build panel (skipped while no build script is defined)
+        id: build
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          npm run --if-present build
+          if [ -n "$(find dist -type f 2>/dev/null | head -1)" ]; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::web-panel has no build output yet — panel bundling is an M1 item (fronted)"
+          fi
+
+      - name: Assert build output is non-empty
+        if: steps.build.outputs.built == 'true'
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          out=$(find dist -type f 2>/dev/null | wc -l)
+          echo "panel dist files: $out"
+          test "$out" -gt 0 || { echo "::error::web panel produced no files"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.build.outputs.built == 'true'
+        with:
+          name: panel-dist
+          path: ${{ env.PANEL_DIR }}/dist
+          retention-days: 7
+
+  # ---------------------------------------------------------------- lint ------
+  lint:
+    name: lint / vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt check
+        run: |
+          set -e
+          bad=$(gofmt -l $(find . -name '*.go' -not -path './vendor/*') 2>/dev/null)
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            echo "::error::run 'gofmt -w' on the files above"
+            exit 1
+          fi
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          # Must be built with a Go toolchain >= go.mod's version (currently 1.24).
+          # If backend raises the Go version, raise this in the same commit.
+          version: v1.64.8
+          args: --timeout=5m
+
+  # ---------------------------------------------------------------- test ------
+  test:
+    name: test / race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go:embed fails on a missing/empty dir. When the panel job is skipped
+      # (M0 skeleton state) we materialise the placeholder committed at
+      # internal/web/dist/.gitkeep so unit tests can still compile.
+      - name: Ensure embed dir exists
+        run: mkdir -p ${{ env.EMBED_DIR }} && touch ${{ env.EMBED_DIR }}/.gitkeep
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Unit tests with race detector
+        run: go test -race -count=1 -timeout 300s ./...
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          go test -count=1 -coverprofile=coverage.out -covermode=atomic ./... 2>/dev/null || true
+          if [ -s coverage.out ]; then
+            total=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')
+            echo "total coverage: ${total:-n/a}"
+            echo "total_coverage=${total:-n/a}" >> "$GITHUB_ENV"
+          fi
+
+  # ---------------------------------------------------------------- build -----
+  build:
+    name: build / ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            suffix: ""
+          - os: linux
+            arch: arm64
+            suffix: ""
+          - os: windows
+            arch: amd64
+            suffix: ".exe"
+          - os: darwin
+            arch: arm64
+            suffix: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # The Go gate is deliberately independent of the panel job: it compiles against
+      # the tracked internal/web/dist/.gitkeep placeholder so a frontend gap can never
+      # turn one of the three build variants red. Real panel assets are embedded on the
+      # release path (release.yml binaries + Dockerfile web stage) instead.
+      - name: Ensure embed dir is buildable
+        run: mkdir -p ${{ env.EMBED_DIR }} && touch ${{ env.EMBED_DIR }}/.gitkeep
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          COMMIT="${GITHUB_SHA:0:7}"
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${DATE}" \
+            -o "dist/${BINARY}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}" \
+            "${ENTRYPOINT}"
+
+      - name: Hash
+        run: |
+          set -e
+          cd dist
+          sha256sum "${BINARY}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}" \
+            > "${BINARY}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}.sha256"
+          ls -la
+          du -h "${BINARY}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}"
+
+      - name: Size budget guard (non-blocking warning)
+        run: |
+          f="dist/${BINARY}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}"
+          mb=$(du -m "$f" | cut -f1)
+          echo "binary size: ${mb}MB"
+          if [ "$mb" -gt 60 ]; then
+            echo "::warning::binary exceeds 60MB budget (${mb}MB). Check for accidental runtime deps (e.g. Python sidecar, unstripped panel assets)."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 14
+
+  # ---------------------------------------------------------------- image -----
+  image:
+    name: docker / multi-arch build
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          load: false
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=ci
+          cache-to: type=gha,scope=ci,mode=max
+          tags: all2api:ci
+
+  # ---------------------------------------------------------------- smoke -----
+  smoke:
+    name: smoke / healthz
+    runs-on: ubuntu-latest
+    needs: [image]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image for local run
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: all2api:smoke
+
+      - name: Create minimal runtime config
+        run: |
+          set -e
+          mkdir -p auths data
+          cat > config.json <<'EOF'
+          {
+            "listen": ":7863",
+            "api_key": "",
+            "auth_dir": "./auths",
+            "state_file": "./data/state.json"
+          }
+          EOF
+
+      - name: Start container
+        run: |
+          set -e
+          docker run -d --name smoke \
+            -p 7863:7863 \
+            -v "$PWD/config.json:/app/config.json:ro" \
+            -v "$PWD/auths:/app/auths" \
+            -v "$PWD/data:/app/data" \
+            -e TZ=Asia/Shanghai \
+            all2api:smoke
+          echo "container started; polling ${HEALTH_PATH}"
+
+      - name: Wait for healthy
+        run: |
+          set -e
+          ok=0
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' smoke 2>/dev/null || echo unknown)
+            http=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${LISTEN_PORT}${HEALTH_PATH}" || echo 000)
+            echo "attempt $i: health=$status http=$http"
+            if [ "$status" = "healthy" ] && [ "$http" = "200" ]; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "--- container logs ---"
+            docker logs smoke || true
+            echo "::error::/healthz never became healthy — M0 acceptance criterion not met"
+            exit 1
+          fi
+
+      - name: Assert healthz payload identifies the service
+        run: |
+          set -e
+          body=$(curl -fsS "http://127.0.0.1:${LISTEN_PORT}${HEALTH_PATH}")
+          echo "$body"
+          echo "$body" | grep -q '"service"' || {
+            echo "::error::healthz must include a \"service\" identity field for LB/host probing"
+            exit 1
+          }
+
+      - name: Assert graceful shutdown within stop grace period
+        run: |
+          set -e
+          start=$(date +%s)
+          docker stop --time 10 smoke
+          end=$(date +%s)
+          elapsed=$((end-start))
+          echo "graceful shutdown completed in ${elapsed}s"
+          if [ "$elapsed" -gt 10 ]; then
+            echo "::error::shutdown exceeded the 10s stop grace window — SIGTERM handling is not correct"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f smoke || true
+
+  # ------------------------------------------------------------ security ------
+  security:
+    name: security / scans
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: gosec
+        uses: securego/gosec@master
+        with:
+          args: -exit-code 1 -severity HIGH ./...
+
+      - name: Dependency vulnerability scan (OSV)
+        run: |
+          set -e
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || {
+            echo "::error::govulncheck found vulnerable dependencies"
+            exit 1
+          }

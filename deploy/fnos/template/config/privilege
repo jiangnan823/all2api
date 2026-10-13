@@ -1,0 +1,5 @@
+{
+  "run-as": "root",
+  "docker-compose": true,
+  "host-network": false
+}

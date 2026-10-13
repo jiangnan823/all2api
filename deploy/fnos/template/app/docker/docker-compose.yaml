@@ -1,0 +1,49 @@
+# all2api — fnOS app-center compose (packaged at app/docker/docker-compose.yaml)
+# Rendered by package-fpk.sh: {{DOCKER_IMAGE}} / {{IMAGE_TAG}} are replaced at build
+# time so the fpk pins an immutable release tag instead of :latest.
+#
+# Port note: fnOS may remap the app port. The app itself reads `listen` from
+# config.json, so we pass the port through env and let cmd/main decide.
+
+services:
+  all2api:
+    # {{IMAGE_REPO}} / {{IMAGE_TAG}} are substituted by package-fpk.sh so the fpk
+    # pins an immutable release tag instead of floating on :latest.
+    image: ${ALL2API_IMAGE:-{{IMAGE_REPO}}}:${ALL2API_VERSION:-{{IMAGE_TAG}}}
+    container_name: all2api
+    restart: unless-stopped
+
+    ports:
+      - "${ALL2API_PORT:-7863}:7863"
+
+    environment:
+      TZ: Asia/Shanghai
+      ALL2API_CONFIG: /app/config.json
+      GOMEMLIMIT: 250MiB
+
+    volumes:
+      - ${ALL2API_CONFIG_HOST:-./config.json}:/app/config.json:ro
+      - ${ALL2API_AUTH_DIR:-./auths}:/app/auths
+      - ${ALL2API_DATA_DIR:-./data}:/app/data
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
+    healthcheck:
+      test: ["CMD", "/app/all2api", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,62 @@
+# golangci-lint config for all2api
+# Repo path: .golangci.yml
+#
+# Rationale: gate on the correctness risks that actually bite a proxy gateway —
+# response-body leaks, missing context propagation, swallowed upstream errors,
+# slice-reuse bugs in the account pool — not style trivia.
+#
+# Version coupling (important): the golangci-lint binary must be built with a Go
+# toolchain >= the version declared in go.mod. If backend raises `go 1.24` to a
+# newer release, bump `version:` in .github/workflows/ci.yml at the same time or
+# the lint job will fail to parse the module.
+#
+# Only linters that genuinely exist are listed: an unknown name aborts the whole
+# run, which is the worst kind of false sense of security.
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - stylecheck
+    - unused
+    - ineffassign
+    - bodyclose
+    - noctx
+    - errorlint
+    - nilerr
+    - rowserrcheck
+    - sqlclosecheck
+    - durationcheck
+    - makezero
+    - copyloopvar
+    - unconvert
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    exclude-functions:
+      - (io.Closer).Close
+      - (*os.File).Close
+      - fmt.Fprintf
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  staticcheck:
+    checks: ["all"]
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003"]
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+  max-issues-per-linter: 0
+  max-same-issues: 0

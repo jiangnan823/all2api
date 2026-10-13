@@ -1,0 +1,8 @@
+{
+  "type": "docker-project",
+  "datadir": "all2api/data",
+  "volumes": [
+    "auths",
+    "data"
+  ]
+}

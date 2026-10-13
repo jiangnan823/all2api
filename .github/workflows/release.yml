@@ -1,0 +1,450 @@
+name: release
+
+# all2api — release pipeline (GHCR multi-arch image + binaries + SBOM + scan + GitHub Release)
+# Trigger: tag v*.*.*   Owner: devops
+#
+# Required repo secrets/permissions:
+#   - GITHUB_TOKEN (built-in) with packages: write, contents: write, id-token: write
+#   - No long-lived cloud credentials are used; GHCR auth is the workflow token.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.1.0) — dry-run only, no push"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.24"
+  IMAGE_NAME: ghcr.io/jiangnan823/all2api
+  BINARY: all2api
+  ENTRYPOINT: ./cmd/gateway
+  PANEL_DIR: web-panel
+  EMBED_DIR: internal/web/dist
+
+jobs:
+  # ------------------------------------------------------- prepare meta -------
+  meta:
+    name: release / metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
+      date: ${{ steps.ver.outputs.date }}
+    steps:
+      - id: ver
+        run: |
+          set -e
+          ref="${GITHUB_REF_NAME}"
+          if [ -z "$ref" ] || [ "$ref" = "" ]; then ref="dev"; fi
+          version="${ref#v}"
+          pre="false"
+          case "$version" in
+            *-*|*rc*|*beta*|*alpha*) pre="true" ;;
+          esac
+          echo "version=${version}"
+          echo "prerelease=${pre}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${pre}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------ panel --------
+  panel:
+    name: release / panel
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles(format('{0}/package-lock.json', env.PANEL_DIR)) != '' }}
+    outputs:
+      # Consumers must key off this, not off package-lock presence: web-panel has
+      # typecheck/test before it has a bundler (M1), so a lockfile does not imply
+      # a dist artifact.
+      dist: ${{ steps.build.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ env.PANEL_DIR }}/package-lock.json
+      - run: npm ci
+        working-directory: ${{ env.PANEL_DIR }}
+      - name: Typecheck + unit tests (hard when defined)
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          npm run --if-present typecheck
+          npm run --if-present test
+      - name: Build (skipped while no build script is defined)
+        id: build
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          npm run --if-present build
+          if [ -n "$(find dist -type f 2>/dev/null | head -1)" ]; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no panel bundle in this release — embedded panel is the placeholder"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.build.outputs.built == 'true'
+        with:
+          name: panel-dist
+          path: ${{ env.PANEL_DIR }}/dist
+          retention-days: 30
+
+  # ----------------------------------------------------------- binaries ------
+  binaries:
+    name: release / bin ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    needs: [meta, panel]
+    # panel is conditional (it only exists once web-panel has a lockfile); a skipped
+    # panel must not skip the release binaries.
+    if: >-
+      ${{ always() && needs.meta.result == 'success' &&
+          (needs.panel.result == 'success' || needs.panel.result == 'skipped') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            ext: tar.gz
+            suffix: ""
+          - os: linux
+            arch: arm64
+            ext: tar.gz
+            suffix: ""
+          - os: windows
+            arch: amd64
+            ext: zip
+            suffix: ".exe"
+          - os: darwin
+            arch: arm64
+            ext: tar.gz
+            suffix: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Restore panel dist
+        if: ${{ needs.panel.outputs.dist == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: panel-dist
+          path: ${{ env.EMBED_DIR }}
+
+      - name: Ensure embed dir is buildable (no panel bundle yet)
+        if: ${{ needs.panel.outputs.dist != 'true' }}
+        run: mkdir -p ${{ env.EMBED_DIR }} && touch ${{ env.EMBED_DIR }}/.gitkeep
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          set -e
+          name="${BINARY}-v${{ needs.meta.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir -p staging/"$name" dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${{ needs.meta.outputs.version }} -X main.commit=${GITHUB_SHA:0:7} -X main.buildDate=$(date -u +%FT%TZ)" \
+            -o staging/"$name"/"${BINARY}${matrix.suffix}" "${ENTRYPOINT}"
+          cp LICENSE README.md staging/"$name"/ 2>/dev/null || true
+          cat > staging/"$name"/VERSION <<EOF
+          version: ${{ needs.meta.outputs.version }}
+          commit: ${GITHUB_SHA}
+          target: ${matrix.os}/${matrix.arch}
+          built: $(date -u +%FT%TZ)
+          EOF
+          if [ "${{ matrix.ext }}" = "tar.gz" ]; then
+            tar -C staging -czf "dist/${name}.tar.gz" "$name"
+          else
+            (cd staging && zip -qr "../dist/${name}.zip" "$name")
+          fi
+
+      - name: Per-target hash
+        run: |
+          set -e
+          cd dist
+          sha256sum *.tar.gz *.zip 2>/dev/null | tee checksums-local.txt
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  # ------------------------------------------------------------- image -------
+  image:
+    name: release / ghcr multi-arch
+    runs-on: ubuntu-latest
+    needs: [meta]
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,scope=release,mode=max
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+
+      - name: Export digest
+        run: |
+          set -e
+          echo "digest=${{ steps.build.outputs.digest }}"
+          echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+        id: digest
+
+      - name: Record image reference for gate jobs
+        run: |
+          {
+            echo "image=${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          } >> "$GITHUB_ENV"
+
+  # --------------------------------------------------------- image scan ------
+  image-scan:
+    name: release / image vulnerability gate
+    runs-on: ubuntu-latest
+    needs: [meta, image]
+    steps:
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:v${{ needs.meta.outputs.version }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Trivy secret scan on filesystem context
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: "1"
+          security-checks: secret
+          severity: CRITICAL,HIGH
+
+  # ---------------------------------------------------------------- sbom -----
+  sbom:
+    name: release / SBOM
+    runs-on: ubuntu-latest
+    needs: [meta, binaries]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: artifact-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Generate source + binary SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: all2api-v${{ needs.meta.outputs.version }}-sbom.spdx.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: all2api-v${{ needs.meta.outputs.version }}-sbom.spdx.json
+
+  # ----------------------------------------------------------- checksums -----
+  aggregate:
+    name: release / unified checksums
+    runs-on: ubuntu-latest
+    needs: [meta, binaries]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: artifact-*
+          path: pkg
+          merge-multiple: true
+
+      - name: Build single checksum file
+        run: |
+          set -e
+          cd pkg
+          sha256sum * > ../SHA256SUMS.txt
+          cat ../SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: SHA256SUMS.txt
+
+  # -------------------------------------------------------------- cosign -----
+  sign:
+    name: release / cosign sign (keyless)
+    runs-on: ubuntu-latest
+    needs: [aggregate, image, meta]
+    if: github.repository_owner == 'jiangnan823'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: .
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          set -e
+          if [ -n "${IMAGE_DIGEST}" ]; then
+            cosign sign --yes "${IMAGE_NAME}@${IMAGE_DIGEST}"
+          else
+            echo "::warning::image digest unavailable; skipped image signature"
+          fi
+
+      - name: Sign checksum manifest
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          set -e
+          cosign sign-batch --yes SHA256SUMS.txt \
+            --output-signatures=SHA256SUMS.txt.sig \
+            --output-attachments=SHA256SUMS.txt.att.json
+          ls -la
+
+  # --------------------------------------------------------------- fnos fpk --
+  fnos-fpk:
+    name: release / fnOS fpk
+    runs-on: ubuntu-latest
+    needs: [meta, image]
+    # NON-BLOCKING until the field-name checklist in deploy/fnos/README.md is
+    # verified on a real fnOS box. Flip continue-on-error to false after that.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the fpk tree (fnpack binary is not on GH runners)
+        run: |
+          set -e
+          bash deploy/fnos/package-fpk.sh --emit-dir \
+            || { echo "staging failed (missing icons or unverified template)"; exit 1; }
+        env:
+          FPK_VERSION: ${{ needs.meta.outputs.version }}
+          FPK_IMAGE_TAG: v${{ needs.meta.outputs.version }}
+          FPK_IMAGE_REPO: ${{ env.IMAGE_NAME }}
+          FPK_PLATFORM: x86
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fnos-fpk-staged
+          path: deploy/fnos/build/
+          retention-days: 30
+
+  # ------------------------------------------------------------- publish -----
+  github-release:
+    name: release / publish
+    runs-on: ubuntu-latest
+    needs: [meta, binaries, aggregate, sbom, image-scan]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          path: out
+          merge-multiple: true
+
+      - name: Create / update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: all2api ${{ github.ref_name }}
+          prerelease: ${{ needs.meta.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            out/*.tar.gz
+            out/*.zip
+            out/SHA256SUMS.txt
+            out/*sbom*.json
+          body: |
+            ## all2api ${{ github.ref_name }}
+
+            ### Images
+            ```
+            docker run -d --name all2api -p 7863:7863 \
+              -e TZ=Asia/Shanghai \
+              -v ./auths:/app/auths -v ./data:/app/data \
+              -v ./config.json:/app/config.json:ro \
+              ghcr.io/jiangnan823/all2api:${{ github.ref_name }}
+            ```
+            Multi-arch: `linux/amd64`, `linux/arm64` (NAS / 飞牛OS 可用).
+
+            ### Binaries
+            | 平台 | 文件 |
+            |---|---|
+            | Linux x86_64 | `all2api-v${{ needs.meta.outputs.version }}-linux-amd64.tar.gz` |
+            | Linux arm64 | `all2api-v${{ needs.meta.outputs.version }}-linux-arm64.tar.gz` |
+            | Windows x86_64 | `all2api-v${{ needs.meta.outputs.version }}-windows-amd64.zip` (单文件 exe，免 Docker) |
+            | macOS Apple Silicon | `all2api-v${{ needs.meta.outputs.version }}-darwin-arm64.tar.gz` |
+
+            校验：`sha256sum -c SHA256SUMS.txt`
+
+            ### 验证状态
+            - CI 门禁：lint / race 单测 / 多架构编译 / healthz 冒烟 / 扫描 — 见 Actions 运行记录
+            - 残余风险：上游平台政策变动导致的源失效，见面板"源级降级开关"
