@@ -508,12 +508,24 @@ jobs:
             echo "::error::GET / did not reference a built asset bundle — the embedded panel is the placeholder, not B1's build output"
             exit 1
           }
-          css=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${LISTEN_PORT}/$(echo "${html}" | grep -Eo '/assets/[A-Za-z0-9._-]+\.css' | head -1)")
-          echo "asset css probe: http=${css}"
-          test "${css}" = "200" || {
-            echo "::error::index.html references an /assets/*.css that the server does not serve"
-            exit 1
-          }
+          # The grep match already carries the leading '/', so it is appended to the origin
+          # AS-IS. A stray extra '/' would request '//assets/...' which Go's ServeMux answers
+          # with 307 to the canonical path (net/http server.go, StatusTemporaryRedirect) —
+          # run 38540551451 failed exactly there while the seam itself was green.
+          asset_path() { echo "${html}" | grep -Eo "/assets/[A-Za-z0-9._-]+\.$1" | head -1; }
+          for kind in js css; do
+            path=$(asset_path "$kind")
+            [ -n "$path" ] || {
+              echo "::error::GET / referenced no /assets/*.$kind — the embedded panel is the placeholder, not B1's build output"
+              exit 1
+            }
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${LISTEN_PORT}${path}")
+            echo "asset $kind probe: path=${path} http=${code}"
+            test "${code}" = "200" || {
+              echo "::error::index.html references $path but the server does not serve it"
+              exit 1
+            }
+          done
           echo "panel seam verified: built bundle served from go:embed inside the production image"
 
       - name: Assert graceful shutdown within stop grace period
