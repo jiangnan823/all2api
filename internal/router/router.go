@@ -225,11 +225,32 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 	if i := strings.Index(req.Model, "/"); i > 0 {
 		req.Model = req.Model[i+1:]
 	}
+	// Platform circuit breaker gate (§9.21-e.2): the per-source breaker owns
+	// open/half-open recovery semantics (circuit.Allow) — when it refuses, the
+	// whole platform is cooling down (429 backoff, 404 short cooldown, 402
+	// hard cooldown or consecutive-failure trip), so probing Select would only
+	// burn accounts for a guaranteed-failing send. Checked per attempt, not
+	// once at entry: a breaker that trips mid-request must stop the retry loop
+	// instead of letting one caller hammer a just-broken platform. No breaker
+	// entry (platform outside the configured sources map) means no flow
+	// control exists for it: pass through and let the pool be the only guard.
+	gate := func() bool {
+		br, hasBr := rt.host.Breaker(platform)
+		return !hasBr || br.Allow()
+	}
 
 	var lastErr error
 	for {
 		if err := r.Context().Err(); err != nil {
 			return // client went away — nothing left to report or bill
+		}
+		if !gate() {
+			writeError(w, http.StatusServiceUnavailable, apiError{
+				Message: "Platform '" + platform + "' is circuit-broken; requests are suspended while it cools down.",
+				Type:    errTypeServer,
+				Code:    "platform_breaker_open",
+			})
+			return
 		}
 		acct, err := rt.host.Pool.Select(r.Context(), platform)
 		if err != nil {
@@ -259,12 +280,19 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			if !committed {
 				// Outright stream-start failure: same retry path as SendChat.
 				lastErr = streamErr
+				rt.recordSendOutcome(platform, acct.ID, 0, streamErr)
 				rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(streamErr), 0)
 				continue
 			}
 			if streamErr == nil {
+				rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
 				rt.host.Pool.UpdateHealth(platform, acct.ID, "success", 0)
 			} else {
+				// Mid-stream failure: the classification of the upstream error
+				// (429 vs 5xx vs timeout) still feeds the breaker — Record is
+				// keyed on the upstream status, not on the wire status that
+				// stays committed at 200.
+				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
 				rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(streamErr), 0)
 			}
 			return
@@ -272,35 +300,98 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 
 		resp, err := sender.SendChat(r.Context(), acct, req)
 		if err == nil {
+			rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
 			rt.host.Pool.UpdateHealth(platform, acct.ID, "success", 0)
 			writeJSON(w, http.StatusOK, resp)
 			return
 		}
 		lastErr = err
+		rt.recordSendOutcome(platform, acct.ID, upstreamStatus(err), err)
 		rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(err), 0)
 	}
 }
 
-// route resolves the requested model onto a registered adapter: a
-// "platform/model" prefix addresses the platform by name; a bare model name
-// auto-routes to the first adapter carrying CapChatCompletion (registry
-// registration order — deterministic per binary).
+// recordSendOutcome feeds one send result into the platform's circuit breaker.
+// The breaker is authoritative for open/half-open thresholds (429 exponential
+// backoff, 404 short cooldown, 402 hard cooldown, 5xx/0 consecutive-failure
+// trip, 2xx–3xx success closes a half-open probe) — the router translates, it
+// never re-derives thresholds. statusCode 0 is reserved for "no upstream
+// exchange happened" (transport error); a cancelled client context reports
+// nothing at all, since the upstream outcome was never observed.
+func (rt *Router) recordSendOutcome(platform string, accountID string, statusCode int, err error) {
+	if err != nil && errors.Is(err, context.Canceled) {
+		return
+	}
+	br, ok := rt.host.Breaker(platform)
+	if !ok {
+		return
+	}
+	br.Record(statusCode, accountID)
+}
+
+// upstreamStatus extracts the upstream HTTP status from a send error for
+// breaker bookkeeping: classified UpstreamError keeps its status; anything
+// else is an opaque transport failure, which circuit.Record treats as
+// statusCode 0 (the same bucket as a connection error).
+func upstreamStatus(err error) int {
+	var ue *adapter.UpstreamError
+	if errors.As(err, &ue) {
+		return ue.Status
+	}
+	return 0
+}
+
+// route resolves the requested model onto a registered adapter that is also
+// enabled in the live config (sources.<id>.enabled, hot-read per request):
+// a "platform/model" prefix addresses the platform by name — a platform whose
+// source stanza says enabled:false answers model_not_found, the same envelope
+// a removed adapter would produce, so one-click source removal is
+// indistinguishable from "this model never existed" for prefix-addressing
+// clients (503 would invite retries against an address that stays gone); a
+// bare model name auto-routes to the first *enabled* adapter carrying
+// CapChatCompletion (registry registration order — deterministic per binary),
+// skipping disabled platforms so traffic fails over to any other enabled
+// platform that can serve the request. A platform with no sources.<id>
+// stanza at all is never treated as disabled: only the explicit
+// enabled:false switch (the 一键摘源 path) removes a source from /v1.
 func (rt *Router) route(model string) (adapter.Adapter, string, bool) {
+	disabled := rt.disabledPlatforms()
 	var platform string
 	if i := strings.Index(model, "/"); i > 0 {
 		platform = model[:i]
-	} else {
-		names := rt.lookup.ByCap(adapter.CapChatCompletion)
-		if len(names) == 0 {
+		if disabled[platform] {
 			return nil, "", false
 		}
-		platform = names[0]
+	} else {
+		for _, name := range rt.lookup.ByCap(adapter.CapChatCompletion) {
+			if !disabled[name] {
+				platform = name
+				break
+			}
+		}
+		if platform == "" {
+			return nil, "", false
+		}
 	}
 	a := rt.lookup.Get(platform)
 	if a == nil {
 		return nil, "", false
 	}
 	return a, platform, true
+}
+
+// disabledPlatforms snapshots the live config's per-source enabled flags,
+// keeping only the explicitly disabled ids: an absent stanza means the
+// platform is not under source management yet and stays routable.
+func (rt *Router) disabledPlatforms() map[string]bool {
+	cfg := config.Shared.Get()
+	out := make(map[string]bool, len(cfg.Sources))
+	for id, src := range cfg.Sources {
+		if !src.Enabled {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // relayStream forwards SendChatStream chunks to the client as
