@@ -146,7 +146,7 @@ func defaults() Config {
 		Schedule: ScheduleConfig{
 			SigninCron:     "0 9,21 * * *",
 			TaskCron:       "0 10 * * *",
-			TokenKeepalive: "0 22 * * *",
+			TokenKeepalive: "0 22 * * *", // #nosec G101 -- 值为 cron 表达式，键名属契约冻结面不可改名
 		},
 		Pool: PoolConfig{
 			CreditFloor: 100,

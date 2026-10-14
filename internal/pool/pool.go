@@ -70,7 +70,7 @@ func NewWeightedRandomSelector(creditFloor int64, maxRetries int, cooldownSec in
 		cooldownSec: cooldownSec,
 		leases:      make(map[string]string),
 		leaseTTL:    30 * time.Second,
-		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404 -- scheduling pseudo-RNG, no security semantics; lease tokens are internal anti-thundering dedup keys, never exposed
 	}
 }
 
