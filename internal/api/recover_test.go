@@ -77,7 +77,7 @@ func postRecover(t *testing.T, h *host.Host, path string) *httptest.ResponseReco
 	t.Helper()
 	mux := http.NewServeMux()
 	Register(mux, h)
-	req := httptest.NewRequest(http.MethodPost, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	return rec
@@ -193,7 +193,7 @@ func TestRecoverRequiresAPIKeyWhenConfigured(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux, h)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/accounts/tauth:a1/recover", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/accounts/tauth:a1/recover", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -220,7 +220,7 @@ func TestHalveBudgetFieldDefSourceFilter(t *testing.T) {
 
 	mux := http.NewServeMux()
 	Register(mux, nil) // recover route irrelevant here; nil host must not panic
-	req := httptest.NewRequest(http.MethodGet, "/api/config/fields", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/fields", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
