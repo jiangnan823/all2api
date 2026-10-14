@@ -1,0 +1,2957 @@
+{
+  "sha": "b262660b3cd3d048a9cbbbe907363aa7d426986f",
+  "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/b262660b3cd3d048a9cbbbe907363aa7d426986f",
+  "tree": [
+    {
+      "path": ".dockerignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d4e3f294ede9440b51ecf7ddb47450771f4477c",
+      "size": 335,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3d4e3f294ede9440b51ecf7ddb47450771f4477c"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6e596fcdca05361a6f012e7a8ed6ccd07bc6bbcc",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/6e596fcdca05361a6f012e7a8ed6ccd07bc6bbcc"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a6688a1d6ccabd6342f4edeecb6b4d33ad9fac65",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/a6688a1d6ccabd6342f4edeecb6b4d33ad9fac65"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d2c8cb2eb3d266d8ea32a0b604ed1af2332d6173",
+      "size": 7287,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d2c8cb2eb3d266d8ea32a0b604ed1af2332d6173"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/client_integration.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5fd1630ed0943340aacd6a7e6a5704f38378958",
+      "size": 6571,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e5fd1630ed0943340aacd6a7e6a5704f38378958"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f8987aea5a754e635677f3af1703ac076be20b68",
+      "size": 764,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f8987aea5a754e635677f3af1703ac076be20b68"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "36dd72adc033fea861c06cf3cd224a41ffe365eb",
+      "size": 3300,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/36dd72adc033fea861c06cf3cd224a41ffe365eb"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/other.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1b1c3d64ec907fe44e957515ed6c06a107cce818",
+      "size": 1901,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1b1c3d64ec907fe44e957515ed6c06a107cce818"
+    },
+    {
+      "path": ".github/actions",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9d5008ac18ebf4b60e98fa07c8b6e0ad6ad76c99",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/9d5008ac18ebf4b60e98fa07c8b6e0ad6ad76c99"
+    },
+    {
+      "path": ".github/actions/ai-governance",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "bd530a1bf4b2271b3029625dc9cecb200fcb89ca",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/bd530a1bf4b2271b3029625dc9cecb200fcb89ca"
+    },
+    {
+      "path": ".github/actions/ai-governance/.eslintrc.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bbd30e00a7fb9aabf177fdfa060f2c9e640d9cc6",
+      "size": 439,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/bbd30e00a7fb9aabf177fdfa060f2c9e640d9cc6"
+    },
+    {
+      "path": ".github/actions/ai-governance/.gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "981a5a6a1b378c76a67563b5a0cb0f11bdfce1a1",
+      "size": 780,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/981a5a6a1b378c76a67563b5a0cb0f11bdfce1a1"
+    },
+    {
+      "path": ".github/actions/ai-governance/LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7706637f0940bcc13e62007bf5fd33a3daa39759",
+      "size": 1075,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7706637f0940bcc13e62007bf5fd33a3daa39759"
+    },
+    {
+      "path": ".github/actions/ai-governance/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7dde2812e9cc52606c5ee524e79a05bd9ec6b381",
+      "size": 17102,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7dde2812e9cc52606c5ee524e79a05bd9ec6b381"
+    },
+    {
+      "path": ".github/actions/ai-governance/action.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ce85027eafac4756378acbc6249022792e7a9324",
+      "size": 8303,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ce85027eafac4756378acbc6249022792e7a9324"
+    },
+    {
+      "path": ".github/actions/ai-governance/config.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e4fc48a01d1217f070997cc53a79ed709edaa1c",
+      "size": 27576,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0e4fc48a01d1217f070997cc53a79ed709edaa1c"
+    },
+    {
+      "path": ".github/actions/ai-governance/locales",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3c39fe3a83c6e5d4de8a2d1da79953286f8c7dfb",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/3c39fe3a83c6e5d4de8a2d1da79953286f8c7dfb"
+    },
+    {
+      "path": ".github/actions/ai-governance/locales/en.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c924d0c3ca2985517fd99c6fae59142353d60cb9",
+      "size": 4818,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c924d0c3ca2985517fd99c6fae59142353d60cb9"
+    },
+    {
+      "path": ".github/actions/ai-governance/locales/zh-CN.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7b0429212bd22337648e08d69b84c73e259f95e2",
+      "size": 4814,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7b0429212bd22337648e08d69b84c73e259f95e2"
+    },
+    {
+      "path": ".github/actions/ai-governance/package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f9d9518fe3571d0b86c7ebff4a4213ef879a4f4c",
+      "size": 189678,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f9d9518fe3571d0b86c7ebff4a4213ef879a4f4c"
+    },
+    {
+      "path": ".github/actions/ai-governance/package.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a9e89dea611bfe41aa05a6b1d7f92e90e90664e4",
+      "size": 939,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a9e89dea611bfe41aa05a6b1d7f92e90e90664e4"
+    },
+    {
+      "path": ".github/actions/ai-governance/src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "33cc93c23b2c4bd97a975cc1bb68e0a8dca227cf",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/33cc93c23b2c4bd97a975cc1bb68e0a8dca227cf"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/handlers",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0aa8799a5fc944ba670f311742df957c505fa3ce",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/0aa8799a5fc944ba670f311742df957c505fa3ce"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/handlers/issueHandler.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "12174ac468e82a5d35898bd27d85152799cb599f",
+      "size": 9644,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/12174ac468e82a5d35898bd27d85152799cb599f"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/handlers/issueProcessor.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "85a00efac8f1e06af0694ebe6b23e84dd6ea39dc",
+      "size": 2432,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/85a00efac8f1e06af0694ebe6b23e84dd6ea39dc"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/handlers/prHandler.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28bf436f1d4cdedbe9259ea1c20edab5bc391737",
+      "size": 12242,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/28bf436f1d4cdedbe9259ea1c20edab5bc391737"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f2a39cc6723d2f511ca19b37d64d5957a849ba8e",
+      "size": 6742,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f2a39cc6723d2f511ca19b37d64d5957a849ba8e"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8eeb085ee29a74651b7d91cdfd48a26239abe8bf",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/8eeb085ee29a74651b7d91cdfd48a26239abe8bf"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/ai.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e24b10e163ee8c45b8d577dab6dbb96083b946d6",
+      "size": 9212,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e24b10e163ee8c45b8d577dab6dbb96083b946d6"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/autoApprove.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "723fd40db93aee1806d1d5e649ce494f7233965a",
+      "size": 3205,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/723fd40db93aee1806d1d5e649ce494f7233965a"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/classificationService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4f921d1cf53bb75eb0986b43ac2984f1b8063030",
+      "size": 4211,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4f921d1cf53bb75eb0986b43ac2984f1b8063030"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/github.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "42a970e93a405467fc9e71cf06dc80c54fbcbabd",
+      "size": 17850,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/42a970e93a405467fc9e71cf06dc80c54fbcbabd"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/historyContextService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b135a73e0eb9866907eaecf438067095d169df5f",
+      "size": 6741,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b135a73e0eb9866907eaecf438067095d169df5f"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/issueActionService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bc412587d5deaff3e58a256bdeba63ab6315996d",
+      "size": 4213,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/bc412587d5deaff3e58a256bdeba63ab6315996d"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/issueAnalyzer.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "615662ec36735d1f9a6888db6efbe20dea695440",
+      "size": 8962,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/615662ec36735d1f9a6888db6efbe20dea695440"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/issueGovernanceService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "91105ae6506632d3b8e8f515e54a29a80c5e362e",
+      "size": 28070,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/91105ae6506632d3b8e8f515e54a29a80c5e362e"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/issueWorkflowService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68d501adbe305120a61f1522f8e177eee5812e15",
+      "size": 9364,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/68d501adbe305120a61f1522f8e177eee5812e15"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/mergeAppraisal.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0f5172e6f34004be15fb23be6632fed9c1ab8378",
+      "size": 4551,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0f5172e6f34004be15fb23be6632fed9c1ab8378"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/prActionService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3ec34884040d267c343f84c8976e2a393a326351",
+      "size": 3234,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3ec34884040d267c343f84c8976e2a393a326351"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/prGovernanceService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75a8dc15496e8c3e9d2d043bf272e3f76f9eec73",
+      "size": 15195,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/75a8dc15496e8c3e9d2d043bf272e3f76f9eec73"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/prReviewService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8e7a6dd56f1e651f9d82a2a004708729a5efa442",
+      "size": 26008,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8e7a6dd56f1e651f9d82a2a004708729a5efa442"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/prWorkflowService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7baf3722fcd51eadad06c45a5b33d3d42de3e117",
+      "size": 1797,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7baf3722fcd51eadad06c45a5b33d3d42de3e117"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/screeningService.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "040b6102a56940e1064b5e4332c8b97e06721dcc",
+      "size": 3916,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/040b6102a56940e1064b5e4332c8b97e06721dcc"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/services/templateDetector.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "230b2a5f18a830cfe684ca11465b120ff55cd991",
+      "size": 9675,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/230b2a5f18a830cfe684ca11465b120ff55cd991"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6c5ec65a9c282b2b64cd8fe15554877a49b9d4e0",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/6c5ec65a9c282b2b64cd8fe15554877a49b9d4e0"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils/config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c489f0e95fcf4518b35d6e42dcf784f01367b230",
+      "size": 13108,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c489f0e95fcf4518b35d6e42dcf784f01367b230"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils/constants.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "36ce47df62f9deb871c798fe9d5d53581be0c3b6",
+      "size": 3317,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/36ce47df62f9deb871c798fe9d5d53581be0c3b6"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils/dispatch.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75358917d5e0cf07310af8121896b62e7282836a",
+      "size": 4602,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/75358917d5e0cf07310af8121896b62e7282836a"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils/errors.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "14180f1fb5f21b1818620aa822236f9141553ddc",
+      "size": 950,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/14180f1fb5f21b1818620aa822236f9141553ddc"
+    },
+    {
+      "path": ".github/actions/ai-governance/src/utils/helpers.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d2f6a364f338ccda63254a8924da466be7136d7",
+      "size": 1811,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/9d2f6a364f338ccda63254a8924da466be7136d7"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "69abcf0b34847621b1bc296c539e8eae69c14207",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/69abcf0b34847621b1bc296c539e8eae69c14207"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/actionServiceGuard.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "113404622ab66127b42e0eeacdd22d4a0cc24f70",
+      "size": 1940,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/113404622ab66127b42e0eeacdd22d4a0cc24f70"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/ai.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f34c22b5f2ef9b24e591811397ed8460578c3a4e",
+      "size": 9688,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f34c22b5f2ef9b24e591811397ed8460578c3a4e"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/autoApprove.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7f3ba0bdf730c4cd1736e5dd27f37c4dcbc9d1cd",
+      "size": 2680,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7f3ba0bdf730c4cd1736e5dd27f37c4dcbc9d1cd"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/config.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6936ffc57decdecf63f66689cb26a6868922ea9",
+      "size": 7503,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b6936ffc57decdecf63f66689cb26a6868922ea9"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/dispatch.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2239577dc7daa45ceb958acc73ecd0f6a7509276",
+      "size": 4150,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2239577dc7daa45ceb958acc73ecd0f6a7509276"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/githubOps.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4bf327cbe3ddbc617d45d5635363c8a05405b473",
+      "size": 3012,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4bf327cbe3ddbc617d45d5635363c8a05405b473"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/governanceService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "af89bfa9398d34c901cca4984b778b2f7920b071",
+      "size": 24789,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/af89bfa9398d34c901cca4984b778b2f7920b071"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/historyContextService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e52e1b7a87c40d8c95e2991c70b4275d5d6455df",
+      "size": 10036,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e52e1b7a87c40d8c95e2991c70b4275d5d6455df"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/issueAnalyzer.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f8c206316c776709ea9d57def422791fcaceeddf",
+      "size": 4722,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f8c206316c776709ea9d57def422791fcaceeddf"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/issueHandlerRouting.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f04bc05610519d1f0647c90ad3c6c7f4fe21e3d1",
+      "size": 5730,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f04bc05610519d1f0647c90ad3c6c7f4fe21e3d1"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/issueWorkflowService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e894ba9fb6948752cbbc3750f253546ba9995547",
+      "size": 3645,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e894ba9fb6948752cbbc3750f253546ba9995547"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/localeConsistency.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f51baae0fc668625f1e9e95f07d8a1bc4dd8b810",
+      "size": 6136,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f51baae0fc668625f1e9e95f07d8a1bc4dd8b810"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/mergeAppraisal.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2bec825e46d66593a069546ddb03979216c33692",
+      "size": 3459,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2bec825e46d66593a069546ddb03979216c33692"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/prGovernanceService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c02ffe840a36fcce95ecbc7bc6bf6d23aacd167",
+      "size": 15634,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2c02ffe840a36fcce95ecbc7bc6bf6d23aacd167"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/prHandler.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e4c71a1c4b810df4285b3c167d755fd764355c13",
+      "size": 10384,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e4c71a1c4b810df4285b3c167d755fd764355c13"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/prHandlerClose.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "314ebe2bb3cd59256709a17b64f80946c75b2caa",
+      "size": 4832,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/314ebe2bb3cd59256709a17b64f80946c75b2caa"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/prReviewService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2de9460531f0a46ed4df10faa0eacc5a268595d5",
+      "size": 24152,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2de9460531f0a46ed4df10faa0eacc5a268595d5"
+    },
+    {
+      "path": ".github/actions/ai-governance/tests/screeningService.test.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c639319d95542ff21b72d2545e2bd7233649737c",
+      "size": 6269,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c639319d95542ff21b72d2545e2bd7233649737c"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e3c1db32530b0e7b9c31cd8aeb6e1e86ddd52e33",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/e3c1db32530b0e7b9c31cd8aeb6e1e86ddd52e33"
+    },
+    {
+      "path": ".github/workflows/ai-governance.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b28c708a55ca3622a0521cfafaea69213f766525",
+      "size": 7214,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b28c708a55ca3622a0521cfafaea69213f766525"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0210d5a01b2a5421ddf6c95bdba7d4fae6a6f4f5",
+      "size": 2533,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0210d5a01b2a5421ddf6c95bdba7d4fae6a6f4f5"
+    },
+    {
+      "path": ".github/workflows/pr-automerge.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e8731fb0c182f81c92185ff18f3eaaeacc5e7ad5",
+      "size": 5020,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e8731fb0c182f81c92185ff18f3eaaeacc5e7ad5"
+    },
+    {
+      "path": ".github/workflows/pr-ci-notify.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb8c08405e83a62eedd298898dacac20c9af7381",
+      "size": 5868,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fb8c08405e83a62eedd298898dacac20c9af7381"
+    },
+    {
+      "path": ".github/workflows/pr-ci.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fd2c8a686cb64657bfaa2272ac38e3249a566fb0",
+      "size": 4520,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fd2c8a686cb64657bfaa2272ac38e3249a566fb0"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d961b9d6b6448a5cec79076b9c2b9eedf6714cd7",
+      "size": 849,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d961b9d6b6448a5cec79076b9c2b9eedf6714cd7"
+    },
+    {
+      "path": "Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "422ac5ea11429e662fdecd9d3681d42e1353863f",
+      "size": 2635,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/422ac5ea11429e662fdecd9d3681d42e1353863f"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6e5fca166ce996b34a07bc5d246ad0b763d4b6ab",
+      "size": 1067,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6e5fca166ce996b34a07bc5d246ad0b763d4b6ab"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "acbe6ba41eff818bd6841620259e8ab4bc838ca3",
+      "size": 41548,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/acbe6ba41eff818bd6841620259e8ab4bc838ca3"
+    },
+    {
+      "path": "acct.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "f9dabc9bf2d34f71d770fc6b8e33e084688113df",
+      "size": 933,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f9dabc9bf2d34f71d770fc6b8e33e084688113df"
+    },
+    {
+      "path": "checkin.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "74d0356cd1bfdbe6c2678537136affcc8f9792e4",
+      "size": 4929,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/74d0356cd1bfdbe6c2678537136affcc8f9792e4"
+    },
+    {
+      "path": "cmd",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "cfe522163d7b0f3721d72ac913a987636afcdb37",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/cfe522163d7b0f3721d72ac913a987636afcdb37"
+    },
+    {
+      "path": "cmd/acct",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9e158b0aa923b2fc768d0dcbccf4eaaefc141c95",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/9e158b0aa923b2fc768d0dcbccf4eaaefc141c95"
+    },
+    {
+      "path": "cmd/acct/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76d78fe9c28c11259c9069bdff537facb2418218",
+      "size": 13233,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/76d78fe9c28c11259c9069bdff537facb2418218"
+    },
+    {
+      "path": "cmd/acct/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb128cea5a3e9a418a0e9f6d48bc16789b4a8e5d",
+      "size": 4744,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fb128cea5a3e9a418a0e9f6d48bc16789b4a8e5d"
+    },
+    {
+      "path": "cmd/activity",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b80381804e84f6cbde1d06973bb8131d3928a766",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/b80381804e84f6cbde1d06973bb8131d3928a766"
+    },
+    {
+      "path": "cmd/activity/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ac5572e17a5bd13d8593b4c95ca797000cbb5883",
+      "size": 4564,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ac5572e17a5bd13d8593b4c95ca797000cbb5883"
+    },
+    {
+      "path": "cmd/activity/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "efbed48c2a2e229f48ef3463db2527a391fe6bff",
+      "size": 1241,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/efbed48c2a2e229f48ef3463db2527a391fe6bff"
+    },
+    {
+      "path": "cmd/credit",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8e29181355602e96837b23a4a829f67deb2fd62d",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/8e29181355602e96837b23a4a829f67deb2fd62d"
+    },
+    {
+      "path": "cmd/credit/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70a7f92d0628f4de084c805f7ae59047a15fee4d",
+      "size": 4322,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/70a7f92d0628f4de084c805f7ae59047a15fee4d"
+    },
+    {
+      "path": "cmd/credit/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d1f82678c0676485233c1e7672f8353a5372b8b5",
+      "size": 7426,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d1f82678c0676485233c1e7672f8353a5372b8b5"
+    },
+    {
+      "path": "cmd/login",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "00fe8d39767e6c3d0caf7683fd79a07272f633b6",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/00fe8d39767e6c3d0caf7683fd79a07272f633b6"
+    },
+    {
+      "path": "cmd/login/dojson_read_error_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f83bc0f9ddd82e9bf4f9c993ae21236fadc7b36d",
+      "size": 2508,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f83bc0f9ddd82e9bf4f9c993ae21236fadc7b36d"
+    },
+    {
+      "path": "cmd/login/endpoint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c431e7090f7c7aff633758a361fcad315a4f445e",
+      "size": 1845,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c431e7090f7c7aff633758a361fcad315a4f445e"
+    },
+    {
+      "path": "cmd/login/flow_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f882bbb401cbe999e8d59da96a7657a2c3d75bc6",
+      "size": 8508,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f882bbb401cbe999e8d59da96a7657a2c3d75bc6"
+    },
+    {
+      "path": "cmd/login/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "560ccd8c37f5f656a1e8990074420f689fbaf9db",
+      "size": 12842,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/560ccd8c37f5f656a1e8990074420f689fbaf9db"
+    },
+    {
+      "path": "cmd/login/realm_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3f8eb9e9afca7d7ab160f5549c32fedd306b1f4e",
+      "size": 6041,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3f8eb9e9afca7d7ab160f5549c32fedd306b1f4e"
+    },
+    {
+      "path": "cmd/server",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6eaf7a13084e41998e07ff033196c37a38fb26a9",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/6eaf7a13084e41998e07ff033196c37a38fb26a9"
+    },
+    {
+      "path": "cmd/server/admin_audit_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d0b59ac7d7f6470b4483c99fc988efb654ea6fe3",
+      "size": 6226,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d0b59ac7d7f6470b4483c99fc988efb654ea6fe3"
+    },
+    {
+      "path": "cmd/server/admin_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "345219c618d2594dac6651933d6206cc2d0de322",
+      "size": 3117,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/345219c618d2594dac6651933d6206cc2d0de322"
+    },
+    {
+      "path": "cmd/server/alerting_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c9367fa9db2353d2b3f62377cd41d2f3f7b5a7d6",
+      "size": 9413,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c9367fa9db2353d2b3f62377cd41d2f3f7b5a7d6"
+    },
+    {
+      "path": "cmd/server/apikeys_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "253f73716b0da7773310f0bd67ddf97b10033806",
+      "size": 6099,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/253f73716b0da7773310f0bd67ddf97b10033806"
+    },
+    {
+      "path": "cmd/server/budget_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6cf8e893633bda98c2771d8da26983af658ad066",
+      "size": 4352,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6cf8e893633bda98c2771d8da26983af658ad066"
+    },
+    {
+      "path": "cmd/server/checkin_report_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4ace503d92195a2baf101b4a52482b450d8c94f1",
+      "size": 2955,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4ace503d92195a2baf101b4a52482b450d8c94f1"
+    },
+    {
+      "path": "cmd/server/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5e8901ed39f714b9b55b401f486940e3a919f7b5",
+      "size": 37366,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5e8901ed39f714b9b55b401f486940e3a919f7b5"
+    },
+    {
+      "path": "cmd/server/config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "33758bc73f66629cf594220463953f5b67741386",
+      "size": 26887,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/33758bc73f66629cf594220463953f5b67741386"
+    },
+    {
+      "path": "cmd/server/cost_explore_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ffaa97d21d73e55d9fc62477f4cfc8d32355a2f9",
+      "size": 2357,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ffaa97d21d73e55d9fc62477f4cfc8d32355a2f9"
+    },
+    {
+      "path": "cmd/server/global_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e381989adc0822d1678ba9c820afd462618d39de",
+      "size": 2166,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e381989adc0822d1678ba9c820afd462618d39de"
+    },
+    {
+      "path": "cmd/server/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1da95c7def5bdd021c163d37945b12257c2b67f2",
+      "size": 21152,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1da95c7def5bdd021c163d37945b12257c2b67f2"
+    },
+    {
+      "path": "cmd/server/metrics_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e4e90f71dd6ed8c0d1c6eb92edffd179ab00ee5",
+      "size": 3460,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0e4e90f71dd6ed8c0d1c6eb92edffd179ab00ee5"
+    },
+    {
+      "path": "cmd/server/schedule_jitter_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0baa56428d6be0f9c3a285e94905ceaa47cb4ec7",
+      "size": 1795,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0baa56428d6be0f9c3a285e94905ceaa47cb4ec7"
+    },
+    {
+      "path": "cmd/server/schedule_ledger_config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "83c9c0ba083d00fec4b49f0c3ac58196129894c0",
+      "size": 7384,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/83c9c0ba083d00fec4b49f0c3ac58196129894c0"
+    },
+    {
+      "path": "cmd/server/wiring.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c1d2e608bea3bf6d703cb8410f2dbd5f4ecf005e",
+      "size": 1804,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c1d2e608bea3bf6d703cb8410f2dbd5f4ecf005e"
+    },
+    {
+      "path": "cmd/server/wiring_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3714f57f6be5e8749b786abdc757378096484656",
+      "size": 4293,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3714f57f6be5e8749b786abdc757378096484656"
+    },
+    {
+      "path": "cmd/signin",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4b4390d8420059a5b2fc32af37dad69f81fd49fe",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/4b4390d8420059a5b2fc32af37dad69f81fd49fe"
+    },
+    {
+      "path": "cmd/signin/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d145354df3757801eef394d17d9098acc20bfe2b",
+      "size": 7926,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d145354df3757801eef394d17d9098acc20bfe2b"
+    },
+    {
+      "path": "cmd/signin/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ae2fd3f95dd42172e077d9b9c1a6a8954682e504",
+      "size": 6653,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ae2fd3f95dd42172e077d9b9c1a6a8954682e504"
+    },
+    {
+      "path": "cmd/stats",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ab1cb61c93b602a957231d210c496d60f2a64063",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/ab1cb61c93b602a957231d210c496d60f2a64063"
+    },
+    {
+      "path": "cmd/stats/fill_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5bb26a2a1dab0962b24b3914ee288890ae531bdb",
+      "size": 16423,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5bb26a2a1dab0962b24b3914ee288890ae531bdb"
+    },
+    {
+      "path": "cmd/stats/layout_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f6e129aa7b4caf5a1c102ebee6f84a77a84eb3b8",
+      "size": 10468,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f6e129aa7b4caf5a1c102ebee6f84a77a84eb3b8"
+    },
+    {
+      "path": "cmd/stats/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d56fbdd478a86fea57f87ea861e56d961cb758e5",
+      "size": 48476,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d56fbdd478a86fea57f87ea861e56d961cb758e5"
+    },
+    {
+      "path": "cmd/stats/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3877ebe8d078b55eec811b266eb94e01975c1ef1",
+      "size": 32215,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3877ebe8d078b55eec811b266eb94e01975c1ef1"
+    },
+    {
+      "path": "cmd/stats/resize_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0acaa0fcccabefc9a98fc808dee6ca423f671992",
+      "size": 9100,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0acaa0fcccabefc9a98fc808dee6ca423f671992"
+    },
+    {
+      "path": "cmd/stats/screen_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53d9b583ab20fafa84a0d06d3e9a25672134b07a",
+      "size": 11832,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/53d9b583ab20fafa84a0d06d3e9a25672134b07a"
+    },
+    {
+      "path": "cmd/stats/term_ansi_nosize.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0f26fa513a0b15722d564723709159ca8dda56ad",
+      "size": 725,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0f26fa513a0b15722d564723709159ca8dda56ad"
+    },
+    {
+      "path": "cmd/stats/term_other.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a540b30bcca48fdf9b28421193149cebecb2fd9f",
+      "size": 813,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a540b30bcca48fdf9b28421193149cebecb2fd9f"
+    },
+    {
+      "path": "cmd/stats/term_unix.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "31c8f5111c5111f0e06d507681229b7c5c41b6c1",
+      "size": 1488,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/31c8f5111c5111f0e06d507681229b7c5c41b6c1"
+    },
+    {
+      "path": "cmd/stats/term_windows.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e43daa1a6bc9c7ca7613ce2be6fd9419d5da28d6",
+      "size": 3755,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e43daa1a6bc9c7ca7613ce2be6fd9419d5da28d6"
+    },
+    {
+      "path": "cmd/trial",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "680f547ea2f14ec0d7e86a24657caeae2a5607ab",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/680f547ea2f14ec0d7e86a24657caeae2a5607ab"
+    },
+    {
+      "path": "cmd/trial/main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fe9776da5ae37098838360e5dcb7e46eb01dd90b",
+      "size": 3637,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fe9776da5ae37098838360e5dcb7e46eb01dd90b"
+    },
+    {
+      "path": "cmd/trial/main_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94c9530b9a9faa2da12427fc7e585320bfaf071f",
+      "size": 1916,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/94c9530b9a9faa2da12427fc7e585320bfaf071f"
+    },
+    {
+      "path": "config.example.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "997822f495868b8e9b73e62a21ceff2b7628a007",
+      "size": 2332,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/997822f495868b8e9b73e62a21ceff2b7628a007"
+    },
+    {
+      "path": "credit.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "3ec2e62895ee589cb1c72ff5fcb09946c83b461b",
+      "size": 970,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3ec2e62895ee589cb1c72ff5fcb09946c83b461b"
+    },
+    {
+      "path": "dev.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "d7953ed16a14b66d188aea49def3e4a27aa055a0",
+      "size": 2511,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d7953ed16a14b66d188aea49def3e4a27aa055a0"
+    },
+    {
+      "path": "docker-compose.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "399bddb19bb2e262b266c4c422e887573dda067f",
+      "size": 1638,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/399bddb19bb2e262b266c4c422e887573dda067f"
+    },
+    {
+      "path": "go.mod",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d19adf5c5047f317ca786ae53632cddc6d8558a3",
+      "size": 261,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d19adf5c5047f317ca786ae53632cddc6d8558a3"
+    },
+    {
+      "path": "go.sum",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e25b1f4d0a93b43bc545c9a191b301712574e90d",
+      "size": 1941,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e25b1f4d0a93b43bc545c9a191b301712574e90d"
+    },
+    {
+      "path": "internal",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "beec987d04f724c93fc2069954da1837b578f982",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/beec987d04f724c93fc2069954da1837b578f982"
+    },
+    {
+      "path": "internal/alert",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2636b5a3c9f3aa9d0efbe5846e10c6bd9ac78a05",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/2636b5a3c9f3aa9d0efbe5846e10c6bd9ac78a05"
+    },
+    {
+      "path": "internal/alert/alert.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "afd74890cd1c2a0b974117bd09c521a8f0c8b680",
+      "size": 13718,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/afd74890cd1c2a0b974117bd09c521a8f0c8b680"
+    },
+    {
+      "path": "internal/alert/alert_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2a2a55a79b95c49e14ad3f1e1590132c7212fca4",
+      "size": 16436,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2a2a55a79b95c49e14ad3f1e1590132c7212fca4"
+    },
+    {
+      "path": "internal/auth",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0223e934a52c60ee83a22080b697372bfe913073",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/0223e934a52c60ee83a22080b697372bfe913073"
+    },
+    {
+      "path": "internal/auth/auth.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1157f7809f045a5c676bcd65df7763480fbc42a4",
+      "size": 20131,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1157f7809f045a5c676bcd65df7763480fbc42a4"
+    },
+    {
+      "path": "internal/auth/auth_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8042eda13c036ad8287e080c6a1e989f99ab8389",
+      "size": 11478,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8042eda13c036ad8287e080c6a1e989f99ab8389"
+    },
+    {
+      "path": "internal/auth/groups_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "040f146cb994cfb91a1c60078fdcc961d78bb7eb",
+      "size": 5287,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/040f146cb994cfb91a1c60078fdcc961d78bb7eb"
+    },
+    {
+      "path": "internal/auth/realm_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e01146fd904917145279ec7f42e9b069b85f6542",
+      "size": 8561,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e01146fd904917145279ec7f42e9b069b85f6542"
+    },
+    {
+      "path": "internal/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5aee4940edd54209a260f33094a95d5516cbfd31",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/5aee4940edd54209a260f33094a95d5516cbfd31"
+    },
+    {
+      "path": "internal/config/schedule.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7710906fadd86399a111f09218c8b4accd03a148",
+      "size": 12412,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7710906fadd86399a111f09218c8b4accd03a148"
+    },
+    {
+      "path": "internal/config/schedule_jitter_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5d2b1d7e2ca9b52c2dd004cc993905eb7bbdfedb",
+      "size": 3075,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5d2b1d7e2ca9b52c2dd004cc993905eb7bbdfedb"
+    },
+    {
+      "path": "internal/config/schedule_retry_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab7b3d6393ca6845ebc0e40c0ed8f17ad133dd0a",
+      "size": 5293,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ab7b3d6393ca6845ebc0e40c0ed8f17ad133dd0a"
+    },
+    {
+      "path": "internal/config/schedule_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53b41172aebe0eea6f04d8acab93ed10cef82f59",
+      "size": 4158,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/53b41172aebe0eea6f04d8acab93ed10cef82f59"
+    },
+    {
+      "path": "internal/logfmt",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0a2d17b3f6c74a172b1333d61f0d7b425bb0f4cb",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/0a2d17b3f6c74a172b1333d61f0d7b425bb0f4cb"
+    },
+    {
+      "path": "internal/logfmt/label_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "77d2eb73f5565ce2d5ef7752e34416670459a072",
+      "size": 3093,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/77d2eb73f5565ce2d5ef7752e34416670459a072"
+    },
+    {
+      "path": "internal/logfmt/logfmt.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d4387903a045938e07003c09f049b66f1259a9ff",
+      "size": 4800,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d4387903a045938e07003c09f049b66f1259a9ff"
+    },
+    {
+      "path": "internal/logfmt/logfmt_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e603b151f194bfa2dd3b0cfc278a7983fc9f97bd",
+      "size": 591,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e603b151f194bfa2dd3b0cfc278a7983fc9f97bd"
+    },
+    {
+      "path": "internal/logfmt/truncate_contract_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7563f72269a34633724e4c3cadd779effc6d899f",
+      "size": 3184,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7563f72269a34633724e4c3cadd779effc6d899f"
+    },
+    {
+      "path": "internal/logfmt/truncate_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "49e160878e378fc628f69206e1003d57652b0d82",
+      "size": 2148,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/49e160878e378fc628f69206e1003d57652b0d82"
+    },
+    {
+      "path": "internal/pool",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a33293458419d7c196367f262af5cfc34e9dac0d",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/a33293458419d7c196367f262af5cfc34e9dac0d"
+    },
+    {
+      "path": "internal/pool/bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d14c274924217beb9e1a5b2022c60b5c7be1c62e",
+      "size": 2305,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d14c274924217beb9e1a5b2022c60b5c7be1c62e"
+    },
+    {
+      "path": "internal/pool/close_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5ecbf4c5c734e2dfac82a9ccd4e32bc6f277557",
+      "size": 1208,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c5ecbf4c5c734e2dfac82a9ccd4e32bc6f277557"
+    },
+    {
+      "path": "internal/pool/cooldown.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d363d8921c1d19ba1fcb5954b7797d1fb0904715",
+      "size": 13181,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d363d8921c1d19ba1fcb5954b7797d1fb0904715"
+    },
+    {
+      "path": "internal/pool/coolremaining_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c4bd08def9e4c449b809fcf3f1989edb1c45f078",
+      "size": 2888,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c4bd08def9e4c449b809fcf3f1989edb1c45f078"
+    },
+    {
+      "path": "internal/pool/cost_explore_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4e030ae88fa4e469a671b4c3a2437280d9f6ebfa",
+      "size": 15921,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4e030ae88fa4e469a671b4c3a2437280d9f6ebfa"
+    },
+    {
+      "path": "internal/pool/cost_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "46c619a30d182d00d707f299a6f90c7a1d92c5ec",
+      "size": 9265,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/46c619a30d182d00d707f299a6f90c7a1d92c5ec"
+    },
+    {
+      "path": "internal/pool/counts_realm_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a22b6d3ee3aa2ba30cfad805cec1e8b3bc767181",
+      "size": 3964,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a22b6d3ee3aa2ba30cfad805cec1e8b3bc767181"
+    },
+    {
+      "path": "internal/pool/degrade.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "22257b4a29e1d16c09939da12b436783f1e720ff",
+      "size": 2756,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/22257b4a29e1d16c09939da12b436783f1e720ff"
+    },
+    {
+      "path": "internal/pool/degrade_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "66d0819ccf32516eb680d465d8ef7783f0e1b42b",
+      "size": 13829,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/66d0819ccf32516eb680d465d8ef7783f0e1b42b"
+    },
+    {
+      "path": "internal/pool/entry.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d335618d7e6bb8c6eb3dde1e47bc7ef74161be92",
+      "size": 35628,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d335618d7e6bb8c6eb3dde1e47bc7ef74161be92"
+    },
+    {
+      "path": "internal/pool/expiring_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "61521dac086fb0f98b40b150f56faeb9ccbb9e4a",
+      "size": 2267,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/61521dac086fb0f98b40b150f56faeb9ccbb9e4a"
+    },
+    {
+      "path": "internal/pool/groups_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2826153963e0df56ddd613444483cefb4702c0a6",
+      "size": 6353,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2826153963e0df56ddd613444483cefb4702c0a6"
+    },
+    {
+      "path": "internal/pool/inflight_global_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7bc657891ae0003bef28ddc817c638b6f6c3722c",
+      "size": 3968,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7bc657891ae0003bef28ddc817c638b6f6c3722c"
+    },
+    {
+      "path": "internal/pool/manualdisable_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7a9651ef97d503c8f83fdc8edca2f35af149b146",
+      "size": 9038,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7a9651ef97d503c8f83fdc8edca2f35af149b146"
+    },
+    {
+      "path": "internal/pool/modelcooldown_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5fb8dbd8c5ea999d169918bf39cb2bc34272ce92",
+      "size": 29600,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5fb8dbd8c5ea999d169918bf39cb2bc34272ce92"
+    },
+    {
+      "path": "internal/pool/modelcost_persist_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "04a580a11604562596c5a98dfd6fa6cb83df67b7",
+      "size": 10497,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/04a580a11604562596c5a98dfd6fa6cb83df67b7"
+    },
+    {
+      "path": "internal/pool/p1p2p3_persist_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "039aed1ed39a32a0944e4e1419e97cc795fcd989",
+      "size": 9153,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/039aed1ed39a32a0944e4e1419e97cc795fcd989"
+    },
+    {
+      "path": "internal/pool/persist.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "84ca3e79ba5d69fa44af05c1b2e0149f860c41b9",
+      "size": 17567,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/84ca3e79ba5d69fa44af05c1b2e0149f860c41b9"
+    },
+    {
+      "path": "internal/pool/persist_other.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c164fd078e1d8c64a48bbd8c9c2953d2f54554c5",
+      "size": 471,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c164fd078e1d8c64a48bbd8c9c2953d2f54554c5"
+    },
+    {
+      "path": "internal/pool/persist_unix.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbf1042c80096f126976299591686376a0effee9",
+      "size": 679,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/dbf1042c80096f126976299591686376a0effee9"
+    },
+    {
+      "path": "internal/pool/pick.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6ef44cd5aadea5bbf5dcd18a093c64eaf32eaf87",
+      "size": 20972,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6ef44cd5aadea5bbf5dcd18a093c64eaf32eaf87"
+    },
+    {
+      "path": "internal/pool/pool.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6e191e2eb42379f3d2bdd0a2fb30742b1775318",
+      "size": 11283,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b6e191e2eb42379f3d2bdd0a2fb30742b1775318"
+    },
+    {
+      "path": "internal/pool/pool_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6fa17c3a320d1e6014797c15c3dd09ca8d131304",
+      "size": 69452,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6fa17c3a320d1e6014797c15c3dd09ca8d131304"
+    },
+    {
+      "path": "internal/pool/race_stress_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8479e5796c2e43db8e7b002a125a0709619e3d1c",
+      "size": 3799,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8479e5796c2e43db8e7b002a125a0709619e3d1c"
+    },
+    {
+      "path": "internal/pool/realm.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6bfb523943e3a4aba49f3446fc81e6e1756cfce2",
+      "size": 2300,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6bfb523943e3a4aba49f3446fc81e6e1756cfce2"
+    },
+    {
+      "path": "internal/pool/realm_health_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "33528d57fe258d172eb19a2aa6e87644de7e7a1c",
+      "size": 9030,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/33528d57fe258d172eb19a2aa6e87644de7e7a1c"
+    },
+    {
+      "path": "internal/pool/realm_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c85e9c5043ec9f77f7f16ee6965e9ae2e1040c9d",
+      "size": 3954,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c85e9c5043ec9f77f7f16ee6965e9ae2e1040c9d"
+    },
+    {
+      "path": "internal/pool/refreshledger_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "283da7f8de3f7306d688ab09e42582a08f739b27",
+      "size": 9538,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/283da7f8de3f7306d688ab09e42582a08f739b27"
+    },
+    {
+      "path": "internal/pool/sessiondead_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4046314f056549833e251b9b0011226736860cd2",
+      "size": 7920,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4046314f056549833e251b9b0011226736860cd2"
+    },
+    {
+      "path": "internal/pool/state.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f341f42a36de29f95bd9df97363e95b60006e386",
+      "size": 33529,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f341f42a36de29f95bd9df97363e95b60006e386"
+    },
+    {
+      "path": "internal/pool/transition.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "09bc4201412483a82afa255aff55093ab3671f77",
+      "size": 5471,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/09bc4201412483a82afa255aff55093ab3671f77"
+    },
+    {
+      "path": "internal/pool/transition_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ec62b5257328c0dcfe21fb5f4e58d221b6b4e969",
+      "size": 6992,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ec62b5257328c0dcfe21fb5f4e58d221b6b4e969"
+    },
+    {
+      "path": "internal/pool/watch.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d4892aa1ddbf3142478290ec3452fafe0338b9c9",
+      "size": 4991,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d4892aa1ddbf3142478290ec3452fafe0338b9c9"
+    },
+    {
+      "path": "internal/pool/watch_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4587cdad01c85a2f121092be1294cba0d0c23ba6",
+      "size": 5584,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4587cdad01c85a2f121092be1294cba0d0c23ba6"
+    },
+    {
+      "path": "internal/pool/weight_optimization_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "efa5b28cef4e7836cc177156127755c5cc9aa2b6",
+      "size": 16146,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/efa5b28cef4e7836cc177156127755c5cc9aa2b6"
+    },
+    {
+      "path": "internal/prompt",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4118f184567d968a514fd391f06e1204c3a67c79",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/4118f184567d968a514fd391f06e1204c3a67c79"
+    },
+    {
+      "path": "internal/prompt/defaultprompt.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70af703d372d552ba3837e1254f73a0044a53e3e",
+      "size": 15175,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/70af703d372d552ba3837e1254f73a0044a53e3e"
+    },
+    {
+      "path": "internal/prompt/prompt.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ba0e06549108e05b86fb245fe8f13003922d4e1",
+      "size": 5917,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1ba0e06549108e05b86fb245fe8f13003922d4e1"
+    },
+    {
+      "path": "internal/prompt/prompt_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1134ef285a41c47719d632746b8d4105c40c3f9c",
+      "size": 15012,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1134ef285a41c47719d632746b8d4105c40c3f9c"
+    },
+    {
+      "path": "internal/redisstore",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0c073645543299372e46611f8d9cc6effafcd067",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/0c073645543299372e46611f8d9cc6effafcd067"
+    },
+    {
+      "path": "internal/redisstore/close_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0bf5b39c72f1d960d17326f3c80026b17cbea9c1",
+      "size": 4522,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0bf5b39c72f1d960d17326f3c80026b17cbea9c1"
+    },
+    {
+      "path": "internal/redisstore/redisstore.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b43faf2e6c0ccabb0a4a1b04ce880a8b363fc379",
+      "size": 10446,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b43faf2e6c0ccabb0a4a1b04ce880a8b363fc379"
+    },
+    {
+      "path": "internal/redisstore/redisstore_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "19d67570b26d279da5d5400236591d3f010a77a0",
+      "size": 1909,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/19d67570b26d279da5d5400236591d3f010a77a0"
+    },
+    {
+      "path": "internal/scheduler",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "26d8264b65a0a8aef480d210832d703aba101422",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/26d8264b65a0a8aef480d210832d703aba101422"
+    },
+    {
+      "path": "internal/scheduler/activity_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5392a5de14211fe651d1cd2861ac695ab2cc230",
+      "size": 22578,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e5392a5de14211fe651d1cd2861ac695ab2cc230"
+    },
+    {
+      "path": "internal/scheduler/checkin_activity.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d56c6a18d0afc9af5e30cb749e7cb5abc8418350",
+      "size": 2163,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d56c6a18d0afc9af5e30cb749e7cb5abc8418350"
+    },
+    {
+      "path": "internal/scheduler/checkin_activity_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5122726870e974f813aec066f64f74e055f1537",
+      "size": 2767,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c5122726870e974f813aec066f64f74e055f1537"
+    },
+    {
+      "path": "internal/scheduler/gating_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5d82f61c1abf3147fe86da2574d9a40a6b1fdd23",
+      "size": 8477,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5d82f61c1abf3147fe86da2574d9a40a6b1fdd23"
+    },
+    {
+      "path": "internal/scheduler/growth_bonus_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2446ca4e787450923319f6807c807d99306425c1",
+      "size": 10091,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2446ca4e787450923319f6807c807d99306425c1"
+    },
+    {
+      "path": "internal/scheduler/jitter_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "be1131afb29408a78c88bdfd1a4679d33799f4a3",
+      "size": 9424,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/be1131afb29408a78c88bdfd1a4679d33799f4a3"
+    },
+    {
+      "path": "internal/scheduler/ledger.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9b9e083524c7aabf28364ecb58321df8d2ac10d1",
+      "size": 5201,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/9b9e083524c7aabf28364ecb58321df8d2ac10d1"
+    },
+    {
+      "path": "internal/scheduler/ledger_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0c6d8517e04c8757eddc5a24230e15b8f5b5c99f",
+      "size": 17625,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0c6d8517e04c8757eddc5a24230e15b8f5b5c99f"
+    },
+    {
+      "path": "internal/scheduler/parallel_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f7be32d1cdd449ea391529bc486121ba1bf90c9",
+      "size": 9188,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/9f7be32d1cdd449ea391529bc486121ba1bf90c9"
+    },
+    {
+      "path": "internal/scheduler/refresh_race_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4a46a08d801d410a5dd5125cf0c32e87773574e0",
+      "size": 4028,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4a46a08d801d410a5dd5125cf0c32e87773574e0"
+    },
+    {
+      "path": "internal/scheduler/reward_conc_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5c22a69ab4cf370b730530e8569fb9ddd0951e2",
+      "size": 1887,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c5c22a69ab4cf370b730530e8569fb9ddd0951e2"
+    },
+    {
+      "path": "internal/scheduler/reward_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a84b7c287a62294e2d8c634d055bc4e634baea62",
+      "size": 13239,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a84b7c287a62294e2d8c634d055bc4e634baea62"
+    },
+    {
+      "path": "internal/scheduler/scheduler.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1245e790b7ab073801e6b2f4308488f58bcc631c",
+      "size": 42234,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1245e790b7ab073801e6b2f4308488f58bcc631c"
+    },
+    {
+      "path": "internal/scheduler/scheduler_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "547016c80229b491de3ca63e21d1892fb1716d58",
+      "size": 25788,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/547016c80229b491de3ca63e21d1892fb1716d58"
+    },
+    {
+      "path": "internal/scheduler/school.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7219d4644932f5510e3761db9fd82ae3a9121175",
+      "size": 5619,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7219d4644932f5510e3761db9fd82ae3a9121175"
+    },
+    {
+      "path": "internal/scheduler/school_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "96f8fe8713e0455ad74a132741e33b8758731f38",
+      "size": 6501,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/96f8fe8713e0455ad74a132741e33b8758731f38"
+    },
+    {
+      "path": "internal/scheduler/travel.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4b41511068874b3eac9b7ce453cd8dba95917251",
+      "size": 9522,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4b41511068874b3eac9b7ce453cd8dba95917251"
+    },
+    {
+      "path": "internal/scheduler/travel_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3abc7074811167e8a3d111b5de5d8b0fa00c7555",
+      "size": 16530,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3abc7074811167e8a3d111b5de5d8b0fa00c7555"
+    },
+    {
+      "path": "internal/scheduler/wakeup_grace_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0d275ad052b1ce98ae2e9bf4c86e3cf6403a88bc",
+      "size": 4350,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0d275ad052b1ce98ae2e9bf4c86e3cf6403a88bc"
+    },
+    {
+      "path": "internal/server",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ef802bc226aa362b91b44f7e6797c55221bfa318",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/ef802bc226aa362b91b44f7e6797c55221bfa318"
+    },
+    {
+      "path": "internal/server/admin.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7668313a093d90e43a8870d87a15e5103ebf3363",
+      "size": 12316,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7668313a093d90e43a8870d87a15e5103ebf3363"
+    },
+    {
+      "path": "internal/server/admin_audit.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "daf4fb6296be835abef95453bbebabfc30272638",
+      "size": 10051,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/daf4fb6296be835abef95453bbebabfc30272638"
+    },
+    {
+      "path": "internal/server/admin_audit_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8696634bed422cfd46955466fca0802296d4a4b4",
+      "size": 15055,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8696634bed422cfd46955466fca0802296d4a4b4"
+    },
+    {
+      "path": "internal/server/admin_refresh_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a76d7484e47595b42e0ed94d325eec48e5d2938b",
+      "size": 9591,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a76d7484e47595b42e0ed94d325eec48e5d2938b"
+    },
+    {
+      "path": "internal/server/admin_tasks.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "967347c471ae95ca327e6e575b0f412ee9f61505",
+      "size": 4500,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/967347c471ae95ca327e6e575b0f412ee9f61505"
+    },
+    {
+      "path": "internal/server/admin_tasks_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79a9878ded3e06fd2e72ea8ebb86a854c0282293",
+      "size": 10100,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/79a9878ded3e06fd2e72ea8ebb86a854c0282293"
+    },
+    {
+      "path": "internal/server/admin_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8f305d407d2abb7089e50c5e94b549b683f51c24",
+      "size": 9781,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8f305d407d2abb7089e50c5e94b549b683f51c24"
+    },
+    {
+      "path": "internal/server/authkeys_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e1645d7e3eb8adefeb642a0582b824d3ca337907",
+      "size": 6204,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e1645d7e3eb8adefeb642a0582b824d3ca337907"
+    },
+    {
+      "path": "internal/server/backoff.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "016878305f0f9e594f141634cee08c0daecba44a",
+      "size": 2705,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/016878305f0f9e594f141634cee08c0daecba44a"
+    },
+    {
+      "path": "internal/server/backoff_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7f22e2ba0591856097b9ce307da0ee873710d2b1",
+      "size": 3142,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7f22e2ba0591856097b9ce307da0ee873710d2b1"
+    },
+    {
+      "path": "internal/server/budget.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c552c9488b114976662cf3078ad54d6afd66f803",
+      "size": 4943,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c552c9488b114976662cf3078ad54d6afd66f803"
+    },
+    {
+      "path": "internal/server/budget_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2bbb985e584edffd2da5d69a0a09bcf916deee64",
+      "size": 11861,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2bbb985e584edffd2da5d69a0a09bcf916deee64"
+    },
+    {
+      "path": "internal/server/checkin.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cd54c1ecd60ceb2875239af073531b750539a666",
+      "size": 2878,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/cd54c1ecd60ceb2875239af073531b750539a666"
+    },
+    {
+      "path": "internal/server/checkin_history.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fc11a65ca0334142c0e58efcc5546f45754937df",
+      "size": 10555,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fc11a65ca0334142c0e58efcc5546f45754937df"
+    },
+    {
+      "path": "internal/server/checkin_history_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "63f7a85109392307e1b6a1b8163d207f915f4bb6",
+      "size": 9223,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/63f7a85109392307e1b6a1b8163d207f915f4bb6"
+    },
+    {
+      "path": "internal/server/checkin_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "521d765bb083609b5a9f2a9924f3a5287a7496a9",
+      "size": 6500,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/521d765bb083609b5a9f2a9924f3a5287a7496a9"
+    },
+    {
+      "path": "internal/server/consecutive_degrade_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5ab4d9e78bda328a5a3e1fd0811744ffffe103e",
+      "size": 10485,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b5ab4d9e78bda328a5a3e1fd0811744ffffe103e"
+    },
+    {
+      "path": "internal/server/degrade.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1b45b4090f9a8c3af1398b81dc4bca9ad4d32e7b",
+      "size": 1939,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1b45b4090f9a8c3af1398b81dc4bca9ad4d32e7b"
+    },
+    {
+      "path": "internal/server/degrade_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1939f4e0acac094e7aa500a38798910af2ddc58a",
+      "size": 2435,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1939f4e0acac094e7aa500a38798910af2ddc58a"
+    },
+    {
+      "path": "internal/server/global_e2e_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "de08419c64f4712c97cad44edb580b0814891e6c",
+      "size": 15235,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/de08419c64f4712c97cad44edb580b0814891e6c"
+    },
+    {
+      "path": "internal/server/handler.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6beac9cae40566a733eb3f7c2e4a95ce90c6b689",
+      "size": 78994,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6beac9cae40566a733eb3f7c2e4a95ce90c6b689"
+    },
+    {
+      "path": "internal/server/handler_context_length_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "276017bb44ed7e875353acea846dacbe1b766669",
+      "size": 8843,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/276017bb44ed7e875353acea846dacbe1b766669"
+    },
+    {
+      "path": "internal/server/handler_cost_explore_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f42f9cbb4424e4ccfe73c98e70f4909760a17262",
+      "size": 1790,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f42f9cbb4424e4ccfe73c98e70f4909760a17262"
+    },
+    {
+      "path": "internal/server/handler_cost_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb2a41b44f998cccdeb2e45977d713847544a8aa",
+      "size": 11708,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/bb2a41b44f998cccdeb2e45977d713847544a8aa"
+    },
+    {
+      "path": "internal/server/handler_effort_models_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "69ad9e69df5d8d659ae81613fd749e0163c790f4",
+      "size": 6243,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/69ad9e69df5d8d659ae81613fd749e0163c790f4"
+    },
+    {
+      "path": "internal/server/handler_global_models_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e9d1acd8ac8768fcb2709547b2906ee3eb51b3d",
+      "size": 8968,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3e9d1acd8ac8768fcb2709547b2906ee3eb51b3d"
+    },
+    {
+      "path": "internal/server/handler_global_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0b32cf775ef6506712b6cf06233f153350cebc0c",
+      "size": 7203,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0b32cf775ef6506712b6cf06233f153350cebc0c"
+    },
+    {
+      "path": "internal/server/handler_hint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6783973d9e1f2a3e404d64c199bc6e81a5f90ffb",
+      "size": 17558,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6783973d9e1f2a3e404d64c199bc6e81a5f90ffb"
+    },
+    {
+      "path": "internal/server/handler_ids_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c20e50f19a7316c7a8153c7c00a15fa49410b4c4",
+      "size": 19011,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c20e50f19a7316c7a8153c7c00a15fa49410b4c4"
+    },
+    {
+      "path": "internal/server/handler_listing_compat_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d02d8b4ba560f8f7e11b3271a04b797bba4549f5",
+      "size": 2808,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d02d8b4ba560f8f7e11b3271a04b797bba4549f5"
+    },
+    {
+      "path": "internal/server/handler_models_full_fields_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6fbe087ad31d5430f3b38b1bff57bbc937c8975b",
+      "size": 9346,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6fbe087ad31d5430f3b38b1bff57bbc937c8975b"
+    },
+    {
+      "path": "internal/server/handler_models_name_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "98f82e6c9fac3282b21fe823ad1511828558c6e4",
+      "size": 2587,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/98f82e6c9fac3282b21fe823ad1511828558c6e4"
+    },
+    {
+      "path": "internal/server/handler_prompt_too_long_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67560a109224af4ef0ab867895c696b6e33ce559",
+      "size": 7252,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/67560a109224af4ef0ab867895c696b6e33ce559"
+    },
+    {
+      "path": "internal/server/handler_stream_empty_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2fe68ef60df978793a661b628dadd0532ce83a07",
+      "size": 1350,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2fe68ef60df978793a661b628dadd0532ce83a07"
+    },
+    {
+      "path": "internal/server/handler_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0b187d920573ae657354d88938b1ceb279d1e364",
+      "size": 113057,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0b187d920573ae657354d88938b1ceb279d1e364"
+    },
+    {
+      "path": "internal/server/logging.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4317446b55e85c48ddbb424a775959cc7c3f5c01",
+      "size": 10983,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4317446b55e85c48ddbb424a775959cc7c3f5c01"
+    },
+    {
+      "path": "internal/server/logging_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2e7349dbcb874d11361c6081048d7c6b5f1c81f",
+      "size": 14785,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e2e7349dbcb874d11361c6081048d7c6b5f1c81f"
+    },
+    {
+      "path": "internal/server/metrics.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e0d26f933ec60baa5694f2f141d616cff459b0a8",
+      "size": 11908,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e0d26f933ec60baa5694f2f141d616cff459b0a8"
+    },
+    {
+      "path": "internal/server/metrics_cred_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a2e7dace3f7c0143b39a7bbc4fdd2d65b19dcad4",
+      "size": 8555,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a2e7dace3f7c0143b39a7bbc4fdd2d65b19dcad4"
+    },
+    {
+      "path": "internal/server/metrics_credits_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4d05e108f9ff24a2ae348208d21e378bea5af479",
+      "size": 6115,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4d05e108f9ff24a2ae348208d21e378bea5af479"
+    },
+    {
+      "path": "internal/server/metrics_prom.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e029d4fbe4ae6c627493476b060667c53edd950d",
+      "size": 19003,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e029d4fbe4ae6c627493476b060667c53edd950d"
+    },
+    {
+      "path": "internal/server/metrics_prom_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2d81f18810c68b1fffe251c732f11f47d7a6534b",
+      "size": 17730,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2d81f18810c68b1fffe251c732f11f47d7a6534b"
+    },
+    {
+      "path": "internal/server/metrics_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "571ced1f0d6b677266f37806367f22dcb12b6a63",
+      "size": 5334,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/571ced1f0d6b677266f37806367f22dcb12b6a63"
+    },
+    {
+      "path": "internal/server/resolve_model.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d523103d745715b5a57218f9f0b0e84e10715f40",
+      "size": 863,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d523103d745715b5a57218f9f0b0e84e10715f40"
+    },
+    {
+      "path": "internal/server/resolve_model_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "48677eed1299c6784ba217e1ac0df76c0fef61e0",
+      "size": 1468,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/48677eed1299c6784ba217e1ac0df76c0fef61e0"
+    },
+    {
+      "path": "internal/server/stability_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b78006709aee3486a125a81f5dbc6a6cd1648d08",
+      "size": 3483,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b78006709aee3486a125a81f5dbc6a6cd1648d08"
+    },
+    {
+      "path": "internal/server/task_ledger.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c11a5d00c4633ba4ad26117c8a09d7e100f595f",
+      "size": 2588,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3c11a5d00c4633ba4ad26117c8a09d7e100f595f"
+    },
+    {
+      "path": "internal/server/task_ledger_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f85f150c877184b81387c206e90418f7cd8a0c55",
+      "size": 11062,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f85f150c877184b81387c206e90418f7cd8a0c55"
+    },
+    {
+      "path": "internal/server/waf_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6c14c8e2a6ed86a72beae45b1180b34abe3c21d1",
+      "size": 14590,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6c14c8e2a6ed86a72beae45b1180b34abe3c21d1"
+    },
+    {
+      "path": "internal/server/wafip.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76f436cd840b17c53944d5fe58f3eaebe91c7523",
+      "size": 4288,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/76f436cd840b17c53944d5fe58f3eaebe91c7523"
+    },
+    {
+      "path": "internal/server/wafip_conc_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e9301a2692c52bf48dd2606e1a002ba7ef98d3e5",
+      "size": 2531,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e9301a2692c52bf48dd2606e1a002ba7ef98d3e5"
+    },
+    {
+      "path": "internal/server/wafip_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "59b315de7c2fe96025223c31b3bcbb3c4bf435f9",
+      "size": 10508,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/59b315de7c2fe96025223c31b3bcbb3c4bf435f9"
+    },
+    {
+      "path": "internal/session",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5ef35e50f52ebe76e8992f5fc784ebd899112d92",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/5ef35e50f52ebe76e8992f5fc784ebd899112d92"
+    },
+    {
+      "path": "internal/session/export_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0265b3bbd59ee14444a1161246684e13ffa51cce",
+      "size": 490,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0265b3bbd59ee14444a1161246684e13ffa51cce"
+    },
+    {
+      "path": "internal/session/ids.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "08a32cc91364b56c7d83e8490da992cd6ec1df62",
+      "size": 8937,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/08a32cc91364b56c7d83e8490da992cd6ec1df62"
+    },
+    {
+      "path": "internal/session/ids_signature_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8d73263006d78259501de1dfd483654582e759a4",
+      "size": 5897,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8d73263006d78259501de1dfd483654582e759a4"
+    },
+    {
+      "path": "internal/session/ids_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5fb900677f083c2860d8f6ae196c460344a126ee",
+      "size": 6316,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5fb900677f083c2860d8f6ae196c460344a126ee"
+    },
+    {
+      "path": "internal/session/session.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2e238fb0eb07676e450bdb410ff59a42ae06a89f",
+      "size": 15657,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2e238fb0eb07676e450bdb410ff59a42ae06a89f"
+    },
+    {
+      "path": "internal/session/session_model_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1230c4e66c97daef49d860ca0bfd73e0772c4db0",
+      "size": 3123,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1230c4e66c97daef49d860ca0bfd73e0772c4db0"
+    },
+    {
+      "path": "internal/session/session_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b4253b715c5258f34d5d95e3e8cd2895951203ea",
+      "size": 21258,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b4253b715c5258f34d5d95e3e8cd2895951203ea"
+    },
+    {
+      "path": "internal/taskledger",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "69fc6e5f72f36a99d27fa72a135a3d3f1712263c",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/69fc6e5f72f36a99d27fa72a135a3d3f1712263c"
+    },
+    {
+      "path": "internal/taskledger/ledger.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "08f10347e409015fb18dc639900fcb10af58711d",
+      "size": 12820,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/08f10347e409015fb18dc639900fcb10af58711d"
+    },
+    {
+      "path": "internal/taskledger/ledger_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0f10e11a7f855fd7a413e82590685d03c8c27297",
+      "size": 14286,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0f10e11a7f855fd7a413e82590685d03c8c27297"
+    },
+    {
+      "path": "internal/upstream",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6e23c34ccf105caac59535af1a5e2a8d8fb43443",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/6e23c34ccf105caac59535af1a5e2a8d8fb43443"
+    },
+    {
+      "path": "internal/upstream/attribution_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d434832af89d6da76f2ea7a49af05151752d93f3",
+      "size": 9091,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d434832af89d6da76f2ea7a49af05151752d93f3"
+    },
+    {
+      "path": "internal/upstream/backfill_reasoning_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4fed910e39a1b8ea0facad59756704d839caa04d",
+      "size": 7262,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4fed910e39a1b8ea0facad59756704d839caa04d"
+    },
+    {
+      "path": "internal/upstream/backfill_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "27683c0696c755be43728dbddc8b076509133bb2",
+      "size": 10869,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/27683c0696c755be43728dbddc8b076509133bb2"
+    },
+    {
+      "path": "internal/upstream/cache_key.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8fb4ea6749e3a2fa3e5ca154f34bea8a4c94da14",
+      "size": 3370,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8fb4ea6749e3a2fa3e5ca154f34bea8a4c94da14"
+    },
+    {
+      "path": "internal/upstream/cache_key_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8548ab8f1df8a02f6437f83d2d0ad9718e83391e",
+      "size": 5394,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8548ab8f1df8a02f6437f83d2d0ad9718e83391e"
+    },
+    {
+      "path": "internal/upstream/checkin_activity.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "128515ca244e221760d737603a8581afc4667728",
+      "size": 4074,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/128515ca244e221760d737603a8581afc4667728"
+    },
+    {
+      "path": "internal/upstream/checkin_activity_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2e352b068e2591100624ca0bdbdd21723daffeff",
+      "size": 4087,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2e352b068e2591100624ca0bdbdd21723daffeff"
+    },
+    {
+      "path": "internal/upstream/client.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1142fa2536fd11f785d39f4f3ef33971d7a20ffd",
+      "size": 79608,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1142fa2536fd11f785d39f4f3ef33971d7a20ffd"
+    },
+    {
+      "path": "internal/upstream/client_english_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "136a57017d180f07b7f074340dd5d135e4ec5bfe",
+      "size": 1406,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/136a57017d180f07b7f074340dd5d135e4ec5bfe"
+    },
+    {
+      "path": "internal/upstream/client_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7681b73bf35918a19dd1e80dc49de0973e37210b",
+      "size": 44179,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7681b73bf35918a19dd1e80dc49de0973e37210b"
+    },
+    {
+      "path": "internal/upstream/context_catalog.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b3bfc88c939ea1870388612f4d9c0e91461cfcae",
+      "size": 6850,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b3bfc88c939ea1870388612f4d9c0e91461cfcae"
+    },
+    {
+      "path": "internal/upstream/context_catalog_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a4610a81a6d469012120952ad1841ce5332c2744",
+      "size": 3999,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/a4610a81a6d469012120952ad1841ce5332c2744"
+    },
+    {
+      "path": "internal/upstream/ctx_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8c899bfbd6c2f4b691e20b8166c76e8d9cc7f75f",
+      "size": 2708,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/8c899bfbd6c2f4b691e20b8166c76e8d9cc7f75f"
+    },
+    {
+      "path": "internal/upstream/device_token.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "47cdf9c1f18de2efef1d4959f92c4d843a00d383",
+      "size": 3020,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/47cdf9c1f18de2efef1d4959f92c4d843a00d383"
+    },
+    {
+      "path": "internal/upstream/device_token_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00dc35e9e20be7a51779ffacddd73e7307cc2ffc",
+      "size": 5597,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/00dc35e9e20be7a51779ffacddd73e7307cc2ffc"
+    },
+    {
+      "path": "internal/upstream/effort_catalog.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b814fe176f9a7e10b4eb960701af6eff1bd4f2bc",
+      "size": 7875,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b814fe176f9a7e10b4eb960701af6eff1bd4f2bc"
+    },
+    {
+      "path": "internal/upstream/effort_catalog_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5b6b4aa6a7631f87e960ba11323e27dccd209a3",
+      "size": 3483,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e5b6b4aa6a7631f87e960ba11323e27dccd209a3"
+    },
+    {
+      "path": "internal/upstream/expiring_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d689c81ae380cbbbe9658be99dc3e0a76e500b94",
+      "size": 7309,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d689c81ae380cbbbe9658be99dc3e0a76e500b94"
+    },
+    {
+      "path": "internal/upstream/global_e2e_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "024b66198d69c7bd89998c2da7b0a1bd5b6a033e",
+      "size": 26284,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/024b66198d69c7bd89998c2da7b0a1bd5b6a033e"
+    },
+    {
+      "path": "internal/upstream/global_effort_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6ea1c0c454ddea2f03524d1d7eb5fafa49c91519",
+      "size": 6258,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6ea1c0c454ddea2f03524d1d7eb5fafa49c91519"
+    },
+    {
+      "path": "internal/upstream/global_models.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "764438a1baa0afe63a560b3b4228bf565b0c9af0",
+      "size": 16726,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/764438a1baa0afe63a560b3b4228bf565b0c9af0"
+    },
+    {
+      "path": "internal/upstream/global_models_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f1ac473475bf71c8ef4ad87443a23ee58e87cdcb",
+      "size": 9125,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f1ac473475bf71c8ef4ad87443a23ee58e87cdcb"
+    },
+    {
+      "path": "internal/upstream/growth_bonus.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2b64da6d9e759ea6a2d854b98b5badaa9093c6c",
+      "size": 6351,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e2b64da6d9e759ea6a2d854b98b5badaa9093c6c"
+    },
+    {
+      "path": "internal/upstream/growth_bonus_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "27a4df97e79f86e663c82871bd5105896503c09a",
+      "size": 8773,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/27a4df97e79f86e663c82871bd5105896503c09a"
+    },
+    {
+      "path": "internal/upstream/growth_reward.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5df12b6bb6e910926a54296780da67c16e94f8a1",
+      "size": 8999,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5df12b6bb6e910926a54296780da67c16e94f8a1"
+    },
+    {
+      "path": "internal/upstream/growth_reward_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c20c51f93f1e4a4eac12cc2c1ed9e09cce6988e",
+      "size": 10584,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4c20c51f93f1e4a4eac12cc2c1ed9e09cce6988e"
+    },
+    {
+      "path": "internal/upstream/headers.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1fee48b2e6dbb5033e0e23e80234206d70ad94ab",
+      "size": 20822,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1fee48b2e6dbb5033e0e23e80234206d70ad94ab"
+    },
+    {
+      "path": "internal/upstream/headers_global_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70c402e079f2df1f5c1888d8a07e84364c81024f",
+      "size": 6756,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/70c402e079f2df1f5c1888d8a07e84364c81024f"
+    },
+    {
+      "path": "internal/upstream/headers_ids_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28c46015ba68ec4cb6508e81e6db734a20331efb",
+      "size": 5547,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/28c46015ba68ec4cb6508e81e6db734a20331efb"
+    },
+    {
+      "path": "internal/upstream/headers_p0_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4707792d28e94ccdb9b853b158a9e2e6303acb98",
+      "size": 3879,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4707792d28e94ccdb9b853b158a9e2e6303acb98"
+    },
+    {
+      "path": "internal/upstream/hint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "55bfa248032f30b95501d7aa7b4a1c290bebb4ab",
+      "size": 7570,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/55bfa248032f30b95501d7aa7b4a1c290bebb4ab"
+    },
+    {
+      "path": "internal/upstream/hint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e4e76fb114d3b1104bdeb5e873d52222c351f7ee",
+      "size": 13981,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e4e76fb114d3b1104bdeb5e873d52222c351f7ee"
+    },
+    {
+      "path": "internal/upstream/idle.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ae3283b48b9da31237d6b1bd8ac4e5e7916de43e",
+      "size": 2090,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/ae3283b48b9da31237d6b1bd8ac4e5e7916de43e"
+    },
+    {
+      "path": "internal/upstream/idle_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3aab5f6223dd78d8b3badb3851451a1501680ed",
+      "size": 3260,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e3aab5f6223dd78d8b3badb3851451a1501680ed"
+    },
+    {
+      "path": "internal/upstream/leak_smoke_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d3753b8fa435782c0db3b4e5d2baf6cf91d0140",
+      "size": 2558,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3d3753b8fa435782c0db3b4e5d2baf6cf91d0140"
+    },
+    {
+      "path": "internal/upstream/machine_session_id_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2b0df95e8ba22570f74e763bd524aa98ce63cd6",
+      "size": 4240,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e2b0df95e8ba22570f74e763bd524aa98ce63cd6"
+    },
+    {
+      "path": "internal/upstream/model.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68e8c3b54b4d9cbb1d92b81fe8341afb50d1a652",
+      "size": 2857,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/68e8c3b54b4d9cbb1d92b81fe8341afb50d1a652"
+    },
+    {
+      "path": "internal/upstream/model_catalog.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fc117002f42136ab2c468f66c798462eda596955",
+      "size": 12258,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/fc117002f42136ab2c468f66c798462eda596955"
+    },
+    {
+      "path": "internal/upstream/models_fields_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cffbd0b895391dfd0ce69d4694a01cf545d79f61",
+      "size": 6581,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/cffbd0b895391dfd0ce69d4694a01cf545d79f61"
+    },
+    {
+      "path": "internal/upstream/models_full_fields_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d5a20a220d7c21c1a17a42c6984f128aedc88d51",
+      "size": 8275,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/d5a20a220d7c21c1a17a42c6984f128aedc88d51"
+    },
+    {
+      "path": "internal/upstream/models_path_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b8d4523bebb7d49234666b7adfb7617ddd9193e1",
+      "size": 6688,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b8d4523bebb7d49234666b7adfb7617ddd9193e1"
+    },
+    {
+      "path": "internal/upstream/modelsdev.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a9aeff2e8eab007c7635cb7c264a05a3e76a69d",
+      "size": 15483,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/6a9aeff2e8eab007c7635cb7c264a05a3e76a69d"
+    },
+    {
+      "path": "internal/upstream/modelsdev_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "35461760f9f7740c775b46f2d26992806e942108",
+      "size": 29626,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/35461760f9f7740c775b46f2d26992806e942108"
+    },
+    {
+      "path": "internal/upstream/p0_read_error_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f28ba32b53faffed2b65745afe2cd04a7ce3e9bf",
+      "size": 9614,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f28ba32b53faffed2b65745afe2cd04a7ce3e9bf"
+    },
+    {
+      "path": "internal/upstream/payload.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3dfd15d45bc66550981fcfb35f38061f7c7fee99",
+      "size": 13764,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3dfd15d45bc66550981fcfb35f38061f7c7fee99"
+    },
+    {
+      "path": "internal/upstream/payload_max_completion_tokens_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "385154b2f27f9f5e0f23e560dc2ca6f5abae5687",
+      "size": 4146,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/385154b2f27f9f5e0f23e560dc2ca6f5abae5687"
+    },
+    {
+      "path": "internal/upstream/payload_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f0c198634d6b9a37e9fa0e6f79ff7866d54cdcfd",
+      "size": 10198,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f0c198634d6b9a37e9fa0e6f79ff7866d54cdcfd"
+    },
+    {
+      "path": "internal/upstream/realm_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5875126fade63301153dad795cd14ecad869736d",
+      "size": 13570,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5875126fade63301153dad795cd14ecad869736d"
+    },
+    {
+      "path": "internal/upstream/report.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bf320edbf5a39f5a836220b0168aecd2edec9d89",
+      "size": 5962,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/bf320edbf5a39f5a836220b0168aecd2edec9d89"
+    },
+    {
+      "path": "internal/upstream/report_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0baa5bdb9496eb78f466acec03d9c12f222fdfc5",
+      "size": 2358,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/0baa5bdb9496eb78f466acec03d9c12f222fdfc5"
+    },
+    {
+      "path": "internal/upstream/sanitize.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4577630687da9cbdad0817906f1d2714a73ba501",
+      "size": 8664,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4577630687da9cbdad0817906f1d2714a73ba501"
+    },
+    {
+      "path": "internal/upstream/sanitize_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e4c97d768bed5c3b968c025c15d518f2c6c59cdd",
+      "size": 19387,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e4c97d768bed5c3b968c025c15d518f2c6c59cdd"
+    },
+    {
+      "path": "internal/upstream/sse.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "49410a02b10bc84d36ecc07d9e2e858c259f1640",
+      "size": 23507,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/49410a02b10bc84d36ecc07d9e2e858c259f1640"
+    },
+    {
+      "path": "internal/upstream/sse_latch_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "60096e52a5fe8e9efe71b40c0d82db32039719fc",
+      "size": 8260,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/60096e52a5fe8e9efe71b40c0d82db32039719fc"
+    },
+    {
+      "path": "internal/upstream/sse_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68f8699075f84ab842387eef29ef3fc00c93999b",
+      "size": 43470,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/68f8699075f84ab842387eef29ef3fc00c93999b"
+    },
+    {
+      "path": "internal/upstream/stability_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b601c21bb343fa79d71559a32e42fcffa149e30c",
+      "size": 4547,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/b601c21bb343fa79d71559a32e42fcffa149e30c"
+    },
+    {
+      "path": "internal/upstream/streak_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb8e40dc660495e287317face12846a384b56d9e",
+      "size": 2544,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/bb8e40dc660495e287317face12846a384b56d9e"
+    },
+    {
+      "path": "internal/upstream/thinking.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d154943138cb09515047c973d31e3c41d5b3c80",
+      "size": 9857,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3d154943138cb09515047c973d31e3c41d5b3c80"
+    },
+    {
+      "path": "internal/upstream/thinking_default_effort_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7792e754c2196161ca9722bf03af4d52e7c659b5",
+      "size": 2411,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7792e754c2196161ca9722bf03af4d52e7c659b5"
+    },
+    {
+      "path": "internal/upstream/thinking_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2157df3addc166da2727921745b7331e9e91321",
+      "size": 11802,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e2157df3addc166da2727921745b7331e9e91321"
+    },
+    {
+      "path": "internal/upstream/tool_pairing.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c2da912cb55536fc6750000c0cf01310a4daf6fc",
+      "size": 7539,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c2da912cb55536fc6750000c0cf01310a4daf6fc"
+    },
+    {
+      "path": "internal/upstream/tool_pairing_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e5c97f5817c1ad8babdeef745bfe1f8dd90fdf5",
+      "size": 21561,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/1e5c97f5817c1ad8babdeef745bfe1f8dd90fdf5"
+    },
+    {
+      "path": "internal/upstream/transport.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "846c85a00e26c27604e826ec368b0c07f6c93196",
+      "size": 6319,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/846c85a00e26c27604e826ec368b0c07f6c93196"
+    },
+    {
+      "path": "internal/upstream/transport_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "12d04ed25a0e6e8948843db003ee3026625c130f",
+      "size": 9533,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/12d04ed25a0e6e8948843db003ee3026625c130f"
+    },
+    {
+      "path": "internal/upstream/travel.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "389a9fb182029813f43897834279b9cc35794229",
+      "size": 5591,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/389a9fb182029813f43897834279b9cc35794229"
+    },
+    {
+      "path": "internal/upstream/travel_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "62381fd107837541652d2d2dcb54d44d3ce66266",
+      "size": 7378,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/62381fd107837541652d2d2dcb54d44d3ce66266"
+    },
+    {
+      "path": "internal/upstream/trial.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5f0ce8691b436e9fc332612586fa19b1f1a9cf95",
+      "size": 1797,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/5f0ce8691b436e9fc332612586fa19b1f1a9cf95"
+    },
+    {
+      "path": "internal/upstream/trial_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c027227160b87f7fae43ce1a9fa1318e6bf7d2c4",
+      "size": 5337,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c027227160b87f7fae43ce1a9fa1318e6bf7d2c4"
+    },
+    {
+      "path": "internal/upstream/truncation.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "26268d4751eee27091e9988c7fcf416905702210",
+      "size": 1873,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/26268d4751eee27091e9988c7fcf416905702210"
+    },
+    {
+      "path": "internal/upstream/truncation_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "50c5895accdefd5a48cd9a6d7ee1a7f17509cc1d",
+      "size": 4508,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/50c5895accdefd5a48cd9a6d7ee1a7f17509cc1d"
+    },
+    {
+      "path": "internal/upstream/useragent_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7122bd52ec4c6d283dbf553a7d474718808d35ee",
+      "size": 12484,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7122bd52ec4c6d283dbf553a7d474718808d35ee"
+    },
+    {
+      "path": "internal/upstream/v3_merge_e2e_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "38108e3291950e06b4549d7fcbdeea5dba7b211e",
+      "size": 3618,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/38108e3291950e06b4549d7fcbdeea5dba7b211e"
+    },
+    {
+      "path": "internal/upstream/v3_merge_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7fe0877651b3dc826c8df6257c028a929aa12a90",
+      "size": 10500,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/7fe0877651b3dc826c8df6257c028a929aa12a90"
+    },
+    {
+      "path": "login.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "82a3438659a6f670afe575d1e045d218e98b6d0a",
+      "size": 16954,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/82a3438659a6f670afe575d1e045d218e98b6d0a"
+    },
+    {
+      "path": "scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0502389c8ada7df15204b1a62ca4bb8f46dab78e",
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/trees/0502389c8ada7df15204b1a62ca4bb8f46dab78e"
+    },
+    {
+      "path": "scripts/global_region.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e7504074a9e3f5917e4c5cb1b4e0babdc5ed5ad1",
+      "size": 11024,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/e7504074a9e3f5917e4c5cb1b4e0babdc5ed5ad1"
+    },
+    {
+      "path": "scripts/school_open_day_2026.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f6b6fde2f4e7461a393c00a98d43b49c7830988a",
+      "size": 39867,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/f6b6fde2f4e7461a393c00a98d43b49c7830988a"
+    },
+    {
+      "path": "scripts/school_open_day_cron.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "db4d2ade351518c0cba9210ed7cebb9987e712d4",
+      "size": 3162,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/db4d2ade351518c0cba9210ed7cebb9987e712d4"
+    },
+    {
+      "path": "scripts/task_common.py",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "98f0d03d73ee258735a3b12ac21c2c9abb5e5ad9",
+      "size": 13140,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/98f0d03d73ee258735a3b12ac21c2c9abb5e5ad9"
+    },
+    {
+      "path": "scripts/task_runner.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c6945f90ea324afa6d6a8735a7670d7b797e41c",
+      "size": 86207,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3c6945f90ea324afa6d6a8735a7670d7b797e41c"
+    },
+    {
+      "path": "scripts/test_login_sh.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "27769e2c8961de2e625181f17ff656ab92ee0a84",
+      "size": 8992,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/27769e2c8961de2e625181f17ff656ab92ee0a84"
+    },
+    {
+      "path": "scripts/test_wrapper_freshness.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "4596d5dccb61bda0fb9b7c56efbad205ccd87ce6",
+      "size": 9794,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4596d5dccb61bda0fb9b7c56efbad205ccd87ce6"
+    },
+    {
+      "path": "signin.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "c88d54bf25a912385c083ea80720a63615e9d648",
+      "size": 860,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c88d54bf25a912385c083ea80720a63615e9d648"
+    },
+    {
+      "path": "start-workbuddy2api.cmd",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3fca412a44ffbc8b95556e4a37e8e144970a6db4",
+      "size": 1397,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/3fca412a44ffbc8b95556e4a37e8e144970a6db4"
+    },
+    {
+      "path": "status-workbuddy2api.cmd",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4891daeaecd2ec7bd0522dfa2e128d15d7d04157",
+      "size": 842,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/4891daeaecd2ec7bd0522dfa2e128d15d7d04157"
+    },
+    {
+      "path": "stop-workbuddy2api.cmd",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2b0af2fc5361c751160f255fb45ffb1e6e52b6cd",
+      "size": 812,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/2b0af2fc5361c751160f255fb45ffb1e6e52b6cd"
+    },
+    {
+      "path": "trial.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "c723b8f49adfa0bfb4c128e487b71165d877a1c8",
+      "size": 1603,
+      "url": "https://api.github.com/repos/HanawaBanana/workbuddy2api/git/blobs/c723b8f49adfa0bfb4c128e487b71165d877a1c8"
+    }
+  ],
+  "truncated": false
+}
