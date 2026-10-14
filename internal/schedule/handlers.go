@@ -32,7 +32,7 @@ const (
 	DefaultSigninCron         = "0 9,21 * * *"
 	DefaultActiveCheckCron    = "0 10 * * *"
 	DefaultCatTravelCron      = "0 9,21 * * *"
-	DefaultTokenKeepaliveCron = "0 22 * * *"
+	DefaultTokenKeepaliveCron = "0 22 * * *" // #nosec G101 -- 值为 cron 表达式，键名属契约冻结面不可改名（同 config.go TokenKeepalive 先例）
 )
 
 // DefaultFailureCooldown mirrors the config pool.cooldown_sec default (60s).
