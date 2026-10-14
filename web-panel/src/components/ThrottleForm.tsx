@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { FieldError, ThrottleBudget } from '../types/api-contract';
 import { THROTTLE, reasonCopy, sourceDisplayName } from '../i18n/zh';
-import { editableThrottleFields, throttlePath, validateThrottleBudget } from '../lib/throttle';
+import { budgetDiff, editableThrottleFields, throttlePath, validateThrottleBudget } from '../lib/throttle';
 
 /**
  * 按源节流表单（UI UE v0.2.4 §5.20；G1 单位硬门）。
@@ -15,21 +15,6 @@ export interface ThrottleFormProps {
 
 function clone(b: ThrottleBudget): ThrottleBudget {
   return { ...b, minGapMs: [b.minGapMs[0], b.minGapMs[1]], backoff: { ...b.backoff } };
-}
-
-function diff(a: ThrottleBudget, b: ThrottleBudget): Partial<ThrottleBudget> {
-  const patch: Partial<ThrottleBudget> = {};
-  if (a.steadyRpm !== b.steadyRpm) patch.steadyRpm = b.steadyRpm;
-  if (a.burstRpm !== b.burstRpm) patch.burstRpm = b.burstRpm;
-  if (a.minGapMs[0] !== b.minGapMs[0] || a.minGapMs[1] !== b.minGapMs[1]) patch.minGapMs = [b.minGapMs[0], b.minGapMs[1]];
-  if (a.dailyCap !== b.dailyCap) patch.dailyCap = b.dailyCap;
-  if (a.inflight !== b.inflight) patch.inflight = b.inflight;
-  if (a.backoff.base429Sec !== b.backoff.base429Sec || a.backoff.notFoundSec !== b.backoff.notFoundSec) {
-    patch.backoff = { ...b.backoff };
-  }
-  if (a.jitterMinutes !== b.jitterMinutes) patch.jitterMinutes = b.jitterMinutes;
-  if (a.halveBudgetAfter429 !== b.halveBudgetAfter429) patch.halveBudgetAfter429 = b.halveBudgetAfter429;
-  return patch;
 }
 
 type Slot = 'steady_rpm' | 'burst_rpm' | 'daily_cap' | 'inflight' | 'jitter_minutes'
@@ -65,7 +50,7 @@ export function ThrottleForm({ source, budget, onSave }: ThrottleFormProps) {
     const found = validateThrottleBudget(source, draft);
     setErrors(found);
     if (found.length > 0) return;
-    const patch = diff(budget, draft);
+    const patch = budgetDiff(budget, draft);
     if (Object.keys(patch).length > 0) onSave(patch);
   }
 

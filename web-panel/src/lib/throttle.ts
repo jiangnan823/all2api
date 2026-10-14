@@ -122,6 +122,26 @@ export function validateThrottleBudget(source: string, budget: ThrottleBudget): 
   return out;
 }
 
+/**
+ * camelCase 预算差量（服务端基线 a → 草稿 b）。ThrottleForm 的「保存并热生效」与
+ * 设置屏保存流的 ConfigPatch 装配共用同一实现——diff 只此一份，不养第二份漂移副本。
+ * exhaust_402_until 是只读锚点，永不进入差量。
+ */
+export function budgetDiff(a: ThrottleBudget, b: ThrottleBudget): Partial<ThrottleBudget> {
+  const patch: Partial<ThrottleBudget> = {};
+  if (a.steadyRpm !== b.steadyRpm) patch.steadyRpm = b.steadyRpm;
+  if (a.burstRpm !== b.burstRpm) patch.burstRpm = b.burstRpm;
+  if (a.minGapMs[0] !== b.minGapMs[0] || a.minGapMs[1] !== b.minGapMs[1]) patch.minGapMs = [b.minGapMs[0], b.minGapMs[1]];
+  if (a.dailyCap !== b.dailyCap) patch.dailyCap = b.dailyCap;
+  if (a.inflight !== b.inflight) patch.inflight = b.inflight;
+  if (a.backoff.base429Sec !== b.backoff.base429Sec || a.backoff.notFoundSec !== b.backoff.notFoundSec) {
+    patch.backoff = { ...b.backoff };
+  }
+  if (a.jitterMinutes !== b.jitterMinutes) patch.jitterMinutes = b.jitterMinutes;
+  if (a.halveBudgetAfter429 !== b.halveBudgetAfter429) patch.halveBudgetAfter429 = b.halveBudgetAfter429;
+  return patch;
+}
+
 /** camelCase 表单值 → snake_case 写回 path；未出现在 patch 里的键不写，exhaust_402_until 永不出现在此。 */
 export function throttlePatchToConfigPatch(source: string, patch: Partial<ThrottleBudget>): ConfigPatch {
   const out: ConfigPatch = [];

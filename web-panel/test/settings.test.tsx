@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { SettingsScreen } from '../src/app/SettingsScreen';
+import { setApiKeyProvider } from '../src/lib/panelApi';
 import { setDeliveredThrottleFields } from '../src/lib/throttle';
 import { ADVANCED, DANGER, SETTINGS, THROTTLE, settingsLine, sourceDisplayName } from '../src/i18n/zh';
 
@@ -34,6 +35,10 @@ function budgetWire(
 const CONFIG_WIRE = {
   raw: {
     listen: '127.0.0.1:8317',
+    external_base_url: '',
+    pool: { credit_floor: 100, max_retries: 3, cooldown_sec: 60 },
+    router: { model_map: {}, responses_api: { enabled: false } },
+    schedule: { signin_cron: '0 9,21 * * *', task_cron: '0 10 * * *', token_keepalive_cron: '0 22 * * *' },
     sources: {
       qoder: { enabled: true },
       trae: { enabled: true },
@@ -93,10 +98,30 @@ function dangerGroup(source: string) {
   };
 }
 
-/** 通用组（gateway/pooling…）不属于按源设置面：在场但应被屏幕忽略。 */
+/** 通用组（gateway/routing/pooling/schedule）：M2 第二批起按交付元数据渲染，值取 raw 透传。 */
 const FIELDS_WIRE = [
-  { group: 'gateway', fields: [{ key: 'listen', label: 'config.field.listen.label', type: 'string', effect: 'restart_required' }] },
-  { group: 'pooling', fields: [fnum('pool.credit_floor', 'config.field.credit_floor.label', 'credit', 0, 1000000)] },
+  {
+    group: 'gateway',
+    fields: [
+      { key: 'listen', label: 'config.field.listen.label', type: 'string', effect: 'restart_required' },
+      { key: 'external_base_url', label: 'config.field.external_base_url.label', type: 'string', description: 'config.field.external_base_url.desc', effect: 'next_request' },
+    ],
+  },
+  { group: 'routing', fields: [{ key: 'router.responses_api.enabled', label: 'config.field.responses_api.label', type: 'boolean', effect: 'next_request' }] },
+  {
+    group: 'pooling',
+    fields: [
+      fnum('pool.credit_floor', 'config.field.credit_floor.label', 'credit', 0, 1000000),
+      fnum('pool.max_retries', 'config.field.max_retries.label', 'count', 0, 10),
+    ],
+  },
+  {
+    group: 'schedule',
+    fields: [
+      { key: 'schedule.signin_cron', label: 'config.field.signin_cron.label', type: 'cron', effect: 'next_request' },
+      { key: 'schedule.task_cron', label: 'config.field.task_cron.label', type: 'cron', effect: 'next_request' },
+    ],
+  },
   throttleGroup('qoder', { jitter: true, halve: true }),
   dangerGroup('qoder'),
   throttleGroup('trae', { jitter: false, halve: false }),
@@ -104,6 +129,27 @@ const FIELDS_WIRE = [
   throttleGroup('workbuddy', { jitter: true, halve: false }),
   dangerGroup('workbuddy'),
 ];
+
+/** 保存流成功回包：applied = 服务端回读（steady_rpm 已是 5），ok=true。 */
+const SAVE_OK_WIRE = {
+  ok: true,
+  applied: {
+    ...CONFIG_WIRE,
+    throttle: {
+      ...CONFIG_WIRE.throttle,
+      qoder: { ...CONFIG_WIRE.throttle.qoder, steady_rpm: 5 },
+    },
+  },
+};
+
+/** POST /api/config 的调用项（url, init）；测试里找保存请求用。 */
+type PostCall = [string, RequestInit];
+
+function postCallsOf(fn: ReturnType<typeof installFetch>): PostCall[] {
+  return fn.mock.calls
+    .filter((c) => String(c[0]) === '/api/config' && (c[1] as RequestInit | undefined)?.method === 'POST')
+    .map((c) => [String(c[0]), c[1] as RequestInit]);
+}
 
 const TIME_WIRE = { now: 1760420400, local: '2026-10-14 12:00:00', timezone: 'UTC' };
 
@@ -119,9 +165,13 @@ const OK_ROUTES: Routes = {
 };
 
 function installFetch(routes: Routes) {
-  const fn = vi.fn(async (input: unknown) => {
-    const url = typeof input === 'string' ? input : String(input);
-    const route = routes[url] ?? { status: 404, body: { error: 'not found' } };
+  // 占位 ...args：vi.fn 的调用签名需与 fetch 一致（url, init），否则 mock.calls 元组退化为 []
+  const fn = vi.fn(async (...args: unknown[]) => {
+    const url = typeof args[0] === 'string' ? args[0] : String(args[0]);
+    const method = (args[1] as RequestInit | undefined)?.method ?? 'GET';
+    // GET 与 POST 共用 '/api/config' 端点：'POST /api/config' 键分流 POST，其余按 GET 落 '/api/config'
+    const route = (method !== 'GET' ? routes[`POST ${url}`] : undefined) ?? routes[url]
+      ?? { status: 404, body: { error: 'not found' } };
     if (route.reject) throw new TypeError('fetch failed');
     const status = route.status ?? 200;
     return { ok: status < 400, status, json: async () => route.body };
@@ -130,10 +180,11 @@ function installFetch(routes: Routes) {
   return fn;
 }
 
-async function renderReady(routes: Routes = OK_ROUTES) {
-  installFetch(routes);
+async function renderReady(routes: Routes = OK_ROUTES): Promise<ReturnType<typeof installFetch> | undefined> {
+  const fn = installFetch(routes);
   render(<SettingsScreen />);
   await screen.findByText(`${THROTTLE.TITLE} · ${sourceDisplayName('qoder')}`);
+  return fn;
 }
 
 const steadyInput = () => screen.getByLabelText('稳态请求') as HTMLInputElement;
@@ -143,6 +194,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   setDeliveredThrottleFields(null); // 交付注册表是模块态，测试间必须清空（lib/throttle.ts 数据源缝）
+  setApiKeyProvider(() => '');      // X-API-Key provider 同为模块态，清空回开放模式
 });
 
 describe('设置屏 — 加载 / 错误 / 重试', () => {
@@ -198,11 +250,63 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     expect(inflightRow?.textContent).toContain(THROTTLE.UNIT_INFLIGHT);
   });
 
-  it('通用组（gateway/pooling）不进按源屏，原始文案 key 不外漏', async () => {
+  it('通用组按交付元数据渲染：值取 raw 透传（嵌套 path + 顶层键），原始文案 key 不外漏', async () => {
     await renderReady();
     const text = document.body.textContent ?? '';
+    // 原始文案 key 一律经 zh.ts 换算，不外漏
     expect(text).not.toContain('config.field.listen.label');
     expect(text).not.toContain('config.field.credit_floor.label');
+    // 四组标题在文档中逐一可见
+    for (const t of ['网关', '路由', '池化', '定时任务']) {
+      expect(text).toContain(t);
+    }
+    // 值来自 raw：顶层字符串 listen、嵌套数值 pool.credit_floor、布尔 router.responses_api.enabled、cron 串
+    expect((document.querySelector('input[name="listen"]') as HTMLInputElement).value).toBe('127.0.0.1:8317');
+    expect((document.querySelector('input[name="pool.credit_floor"]') as HTMLInputElement).value).toBe('100');
+    expect((document.querySelector('input[name="pool.max_retries"]') as HTMLInputElement).value).toBe('3');
+    expect((document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement).checked).toBe(false);
+    expect((document.querySelector('input[name="schedule.signin_cron"]') as HTMLInputElement).value).toBe('0 9,21 * * *');
+    // effect=restart_required 的生效标注
+    expect(text).toContain(SETTINGS.GENERIC_EFFECT_RESTART);
+  });
+
+  it('通用组进 dirty 跟踪：改字段点亮 dirty 汇总（含组内装饰点），与按源改动合并计数', async () => {
+    await renderReady();
+    const listen = document.querySelector('input[name="listen"]') as HTMLInputElement;
+    fireEvent.change(listen, { target: { value: '0.0.0.0:7863' } });
+    expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 1 }))).toBeTruthy();
+    expect(document.querySelector('fieldset[data-group="gateway"] .settings-screen__dirty-dot')).not.toBeNull();
+    // 再改一个按源字段 → 合并计数 2
+    fireEvent.change(steadyInput(), { target: { value: '5' } });
+    fireEvent.click(throttleSave());
+    expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 2 }))).toBeTruthy();
+    // 放弃本地改动同时复位通用组
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.DISCARD }));
+    expect(screen.getByText(SETTINGS.SYNCED_NOTE)).toBeTruthy();
+    expect((document.querySelector('input[name="listen"]') as HTMLInputElement).value).toBe('127.0.0.1:8317');
+  });
+
+  it('通用组保存流：PATCH 按冻结 path 携带改动值（number 发数值、boolean 发布尔、cron 发字符串）', async () => {
+    const fn = await renderReady({
+      ...OK_ROUTES,
+      'POST /api/config': { body: SAVE_OK_WIRE },
+    });
+    fireEvent.change(document.querySelector('input[name="pool.credit_floor"]') as HTMLInputElement, {
+      target: { value: '150' },
+    });
+    fireEvent.click(document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement);
+    fireEvent.change(document.querySelector('input[name="schedule.signin_cron"]') as HTMLInputElement, {
+      target: { value: '0 8,20 * * *' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_OK_NOTE);
+    const posts = postCallsOf(fn!);
+    // PATCH 顺序跟随组交付序（routing 组先于 pooling），逐项断言冻结 path 与原生类型
+    expect(JSON.parse(posts[0][1].body as string)).toEqual([
+      { key: 'router.responses_api.enabled', value: true },
+      { key: 'pool.credit_floor', value: 150 },
+      { key: 'schedule.signin_cron', value: '0 8,20 * * *' },
+    ]);
   });
 
   it('交付边界参与校验：steady=100/burst=150（≤后端上限 120/300，旧前端表会拒）进草稿并点亮 dirty', async () => {
@@ -232,13 +336,12 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
   });
 });
 
-describe('设置屏 — dirty 跟踪与只读边界', () => {
-  it('保存按钮常置灰 + 诚实文案；放弃本地改动回到服务端基线', async () => {
+describe('设置屏 — dirty 跟踪与保存流', () => {
+  it('初始同步态：保存/放弃置灰 + 基线文案；改动后激活，放弃回到服务端基线', async () => {
     await renderReady();
     const save = screen.getByRole('button', { name: SETTINGS.SAVE }) as HTMLButtonElement;
     const discard = screen.getByRole('button', { name: SETTINGS.DISCARD }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    expect(screen.getByText(SETTINGS.SAVE_DISABLED_NOTE)).toBeTruthy();
     expect(screen.getByText(SETTINGS.SYNCED_NOTE)).toBeTruthy();
     expect(discard.disabled).toBe(true);
     fireEvent.change(steadyInput(), { target: { value: '5' } });
@@ -250,6 +353,89 @@ describe('设置屏 — dirty 跟踪与只读边界', () => {
     // 放弃后表单内部草稿也一并重挂：输入框回到服务端值
     expect(steadyInput().value).toBe('4');
   });
+
+  it('保存流主路径：PATCH 只发改动字段（含 enabled 布尔），成功按服务端回读重建基线', async () => {
+    // POST /api/config（保存）与 GET /api/config（读取）在路由表按方法分流
+    const fn = await renderReady({
+      ...OK_ROUTES,
+      'POST /api/config': { body: SAVE_OK_WIRE },
+    });
+    fireEvent.change(steadyInput(), { target: { value: '5' } });
+    fireEvent.click(throttleSave());
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_OK_NOTE);
+    const posts = postCallsOf(fn!);
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0][1].body as string)).toEqual([
+      { key: 'sources.qoder.throttle.steady_rpm', value: 5 },
+    ]);
+    // 服务端回读为准：基线更新为 5，dirty 清空
+    expect(document.querySelector('.settings-screen__dirty-dot')).toBeNull();
+    expect(steadyInput().value).toBe('5');
+  });
+
+  it('保存流按需携带 enabled 布尔键：停源改动进同一 PATCH（path 冻结）', async () => {
+    const fn = await renderReady({
+      ...OK_ROUTES,
+      'POST /api/config': { body: SAVE_OK_WIRE },
+    });
+    const cb = screen.getByRole('checkbox', { name: new RegExp(SETTINGS.SOURCE_ENABLED_LABEL) }) as HTMLInputElement;
+    fireEvent.click(cb);
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_OK_NOTE);
+    const posts = postCallsOf(fn!);
+    expect(JSON.parse(posts[0][1].body as string)).toEqual([
+      { key: 'sources.qoder.enabled', value: false },
+    ]);
+  });
+
+  it('保存流字段级拒绝：ok=false + field_errors 逐条红字，草稿保留可再保存', async () => {
+    await renderReady({
+      ...OK_ROUTES,
+      'POST /api/config': {
+        body: { ok: false, field_errors: [{ key: 'sources.qoder.throttle.steady_rpm', message: '越界', code: 'range' }] },
+      },
+    });
+    fireEvent.change(steadyInput(), { target: { value: '5' } });
+    fireEvent.click(throttleSave());
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_REJECTED_TITLE);
+    const alert = screen.getAllByRole('alert').find((a) => a.textContent?.includes(SETTINGS.SAVE_REJECTED_TITLE))!;
+    expect(alert.textContent).toContain('sources.qoder.throttle.steady_rpm');
+    expect(alert.textContent).toContain('越界');
+    // 草稿保留：dirty 仍在，可修正后再保存
+    expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 1 }))).toBeTruthy();
+  });
+
+  it('保存流 401 → 如实展示 HTTP 401；404（后端端点未部署）同样不假成功', async () => {
+    await renderReady({ ...OK_ROUTES, 'POST /api/config': { status: 401, body: { error: 'unauthorized' } } });
+    fireEvent.change(steadyInput(), { target: { value: '5' } });
+    fireEvent.click(throttleSave());
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    expect(await screen.findByText(settingsLine(SETTINGS.SAVE_FAILED, { detail: 'HTTP 401' }))).toBeTruthy();
+
+    installFetch({ ...OK_ROUTES, 'POST /api/config': { status: 404, body: { error: 'not found' } } });
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    expect(await screen.findByText(settingsLine(SETTINGS.SAVE_FAILED, { detail: 'HTTP 404' }))).toBeTruthy();
+    // 失败后 dirty 保留（改动不丢）
+    expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 1 }))).toBeTruthy();
+  });
+
+  it('保存流网络错误 → 如实展示；成功态被新一轮改动覆盖回 dirty 文案', async () => {
+    await renderReady({ ...OK_ROUTES, 'POST /api/config': { reject: true } });
+    fireEvent.change(steadyInput(), { target: { value: '5' } });
+    fireEvent.click(throttleSave());
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    expect(await screen.findByText(settingsLine(SETTINGS.SAVE_FAILED, { detail: 'network error' }))).toBeTruthy();
+
+    installFetch({ ...OK_ROUTES, 'POST /api/config': { body: SAVE_OK_WIRE } });
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_OK_NOTE);
+    // 新一轮改动把汇总行拉回 dirty 文案（成功态被覆盖）
+    fireEvent.change(steadyInput(), { target: { value: '6' } });
+    fireEvent.click(throttleSave());
+    expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 1 }))).toBeTruthy();
+  });
 });
 
 describe('设置屏 — 高级区（指纹开关 / 来源启用）', () => {
@@ -260,7 +446,9 @@ describe('设置屏 — 高级区（指纹开关 / 来源启用）', () => {
     fireEvent.click(sw);
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toContain('仅影响 Qoder 这一个来源');
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: ADVANCED.CONFIRM_WORD } });
+    // 页面上另有 X-API-Key 输入框（同样 role=textbox），确认输入按 name 属性在弹窗内精确查找
+    const confirmInput = dialog.querySelector('input[name="danger-confirm-word"]') as HTMLInputElement;
+    fireEvent.change(confirmInput, { target: { value: ADVANCED.CONFIRM_WORD } });
     fireEvent.click(screen.getByRole('button', { name: DANGER.CONFIRM }));
     expect(screen.getByRole('switch', { name: `${ADVANCED.COLUMN} · ${sourceDisplayName('qoder')}` }).getAttribute('aria-checked')).toBe('true');
     expect(document.querySelector('.settings-screen__dirty-dot')).not.toBeNull();
@@ -274,6 +462,45 @@ describe('设置屏 — 高级区（指纹开关 / 来源启用）', () => {
     fireEvent.click(cb);
     expect(screen.getByText(SETTINGS.SOURCE_ENABLED_OFF)).toBeTruthy();
     expect(document.querySelector('.settings-screen__dirty-dot')).not.toBeNull();
+  });
+});
+
+describe('设置屏 — X-API-Key 来源（内存态，M1 红线）', () => {
+  /** 保存流是天然的带证请求：粘贴 key → 改节流值 → 保存 → 检查 POST /api/config 的请求头。 */
+  async function saveWithKey(fn: ReturnType<typeof installFetch> | undefined, steady: string) {
+    fireEvent.change(steadyInput(), { target: { value: steady } });
+    fireEvent.click(throttleSave());
+    const before = fn!.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
+    await screen.findByText(SETTINGS.SAVE_OK_NOTE);
+    return fn!.mock.calls.slice(before).filter((c) => String(c[0]) === '/api/config' && (c[1] as RequestInit).method === 'POST');
+  }
+
+  it('粘贴 key 后保存请求带头（trim 生效）；清空回到开放模式不带头', async () => {
+    const fn = await renderReady({ ...OK_ROUTES, 'POST /api/config': { body: SAVE_OK_WIRE } });
+    const input = screen.getByLabelText(SETTINGS.APIKEY_TITLE) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: '  sk-gateway-1  ' } });
+    const withKey = await saveWithKey(fn, '5');
+    expect(withKey).toHaveLength(1);
+    expect(((withKey[0][1] as RequestInit).headers as Record<string, string>)['X-API-Key']).toBe('sk-gateway-1');
+
+    // 保存成功后基线已是 5，第二轮改成 6 再触发一次保存
+    fireEvent.change(input, { target: { value: '   ' } });
+    const cleared = await saveWithKey(fn, '6');
+    expect(cleared).toHaveLength(1);
+    expect(((cleared[0][1] as RequestInit).headers as Record<string, string>)['X-API-Key']).toBeUndefined();
+  });
+
+  it('输入框不落任何 storage（M1 红线）：内存态在重渲染后仍保持，storage API 全程未被触碰', async () => {
+    await renderReady();
+    const input = screen.getByLabelText(SETTINGS.APIKEY_TITLE) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'sk-memory-only' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Trae' }));
+    await screen.findByText(`${THROTTLE.TITLE} · ${sourceDisplayName('trae')}`);
+    fireEvent.click(screen.getByRole('radio', { name: 'Qoder' }));
+    await screen.findByText(`${THROTTLE.TITLE} · ${sourceDisplayName('qoder')}`);
+    expect((screen.getByLabelText(SETTINGS.APIKEY_TITLE) as HTMLInputElement).value).toBe('sk-memory-only');
   });
 });
 

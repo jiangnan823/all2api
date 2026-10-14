@@ -1,7 +1,10 @@
 import type {
   ConfigGroup,
+  ConfigPatch,
+  ConfigSaveResponse,
   FieldDef,
   FieldEffect,
+  FieldError,
   PanelConfig,
   ServerTimeResponse,
   SourceAdvanced,
@@ -9,10 +12,11 @@ import type {
 } from '../types/api-contract';
 
 /**
- * 面板 API 客户端（M2 B2 接线批）。端点：GET /api/config、/api/config/fields、/api/time。
+ * 面板 API 客户端（M2 接线批）。端点：GET /api/config、/api/config/fields、/api/time，
+ * POST /api/config（保存流，契约 v0.5.1 ConfigPatch / ConfigSaveResponse）。
  * wire key 全蛇形（契约 v0.5.1 §1 / 后端 internal/api），本文件负责蛇形 JSON → 契约 camelCase
  * 类型的唯一换算点；组件与模型层不再见到任何原始蛇形键。
- * 如实边界：后端没有配置保存端点，本文件因此也只有 GET——不发明写回。
+ * 如实边界：保存端点后端并行开发中——404/501 等运行期错误原样上抛，不硬编码假成功。
  */
 
 export class ApiError extends Error {
@@ -28,7 +32,7 @@ export class ApiError extends Error {
 /**
  * X-API-Key 透传钩子：后端配置了 api_key 时 /api/* 要求该头（或 Bearer）；
  * 未配置时网关即开放模式。面板侧约定同一语义——provider 返回空串/空白即不带头。
- * 默认不注入（开放模式）；后续接入批提供真实的 key 来源（URL 注入或输入口）时替换 provider 即可。
+ * key 只存内存态（设置屏接线后注入此 provider），面板不落任何 storage（M1 安全红线）。
  */
 let apiKeyProvider: () => string = () => '';
 
@@ -36,27 +40,36 @@ export function setApiKeyProvider(provider: () => string): void {
   apiKeyProvider = provider;
 }
 
-export async function apiGet<T>(path: string, parse: (body: unknown) => T): Promise<T> {
+function authHeaders(): Record<string, string> {
   const key = apiKeyProvider().trim();
-  const headers: Record<string, string> = {};
-  if (key !== '') headers['X-API-Key'] = key;
+  return key === '' ? {} : { 'X-API-Key': key };
+}
 
+async function apiFetch<T>(path: string, method: string, body: string | undefined, parse: (body: unknown) => T): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { method: 'GET', headers });
+    res = await fetch(path, {
+      method,
+      headers: { ...authHeaders(), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body !== undefined ? { body } : {}),
+    });
   } catch {
     throw new ApiError('network error');
   }
   if (!res.ok) {
     throw new ApiError(`HTTP ${res.status}`, res.status);
   }
-  let body: unknown;
+  let parsed: unknown;
   try {
-    body = await res.json();
+    parsed = await res.json();
   } catch {
     throw new ApiError('response is not JSON', res.status);
   }
-  return parse(body);
+  return parse(parsed);
+}
+
+export function apiGet<T>(path: string, parse: (body: unknown) => T): Promise<T> {
+  return apiFetch(path, 'GET', undefined, parse);
 }
 
 // ---------- 蛇形 wire → 契约类型的防御式解析（形状不对即抛 ApiError，不静默兜底） ----------
@@ -213,7 +226,7 @@ export function parseServerTime(body: unknown): ServerTimeResponse {
   };
 }
 
-// ---------- 三个端点的具名入口（设置屏只 import 这三个） ----------
+// ---------- 四个端点的具名入口（面板各屏只 import 这四个） ----------
 
 export function fetchPanelConfig(): Promise<PanelConfig> {
   return apiGet('/api/config', parsePanelConfig);
@@ -225,4 +238,38 @@ export function fetchConfigGroups(): Promise<ConfigGroup[]> {
 
 export function fetchServerTime(): Promise<ServerTimeResponse> {
   return apiGet('/api/time', parseServerTime);
+}
+
+/** ConfigSaveResponse 的防御式解析：ok 必须是 boolean（服务端裁决位，缺失即形状异常）。 */
+function parseConfigSaveResponse(body: unknown): ConfigSaveResponse {
+  const o = asObject(body, 'save');
+  if (typeof o['ok'] !== 'boolean') {
+    throw new ApiError('config: save.ok 非 boolean');
+  }
+  const fieldErrors = Array.isArray(o['field_errors'])
+    ? (o['field_errors'] as unknown[]).map((e, i) => {
+        const fe = asObject(e, `save.field_errors[${i}]`);
+        // code 为机器可读稳定标识（range / consent_missing / consent_stale），未知值保留原样透传
+        const code = optString(fe['code']);
+        return {
+          key: reqString(fe['key'], `save.field_errors[${i}].key`),
+          message: reqString(fe['message'], `save.field_errors[${i}].message`),
+          ...(code === undefined ? {} : { code: code as FieldError['code'] }),
+        };
+      })
+    : undefined;
+  return {
+    ok: o['ok'],
+    applied: o['applied'] === undefined ? undefined : parsePanelConfig(o['applied']),
+    fieldErrors,
+  };
+}
+
+/**
+ * POST /api/config → ConfigSaveResponse（保存流）。
+ * 契约语义：200 即请求被受理，成功/拒绝由 body.ok 与 fieldErrors 表达（逐字段红字通道）；
+ * 401 = key 不符（ApiError.status），404/501 = 后端端点未部署（并行开发中，如实上抛展示）。
+ */
+export function savePanelConfig(patch: ConfigPatch): Promise<ConfigSaveResponse> {
+  return apiFetch('/api/config', 'POST', JSON.stringify(patch), parseConfigSaveResponse);
 }
