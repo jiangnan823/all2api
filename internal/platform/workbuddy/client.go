@@ -8,6 +8,11 @@
 //   - Auth: Authorization: Bearer <accessToken> plus the X-User-Id /
 //     X-Enterprise-Id / X-Domain account headers (X-No-* placeholders when
 //     absent). The refresh token never travels on the chat path.
+//   - Refresh: on an auth-expired reply (401 / session-death envelope) or a
+//     pre-send expiry, the sender POSTs /v2/plugin/auth/token/refresh with
+//     X-Refresh-Token + X-Auth-Refresh-Source: plugin (no Authorization),
+//     hands the rotated pair to ClientOptions.Refresher and replays the send
+//     once (refresh.go: single-flight per account, 5-min quiet window).
 //   - Request rewrites the upstream enforces (400 code=11101/11-128 else):
 //     tool_choice must be a string, image_url must be an object, role
 //     "developer" must be renamed "system".
@@ -42,6 +47,11 @@ import (
 
 // wireChatPath is the chat completions path both realms share (report §2).
 const wireChatPath = "/v2/chat/completions"
+
+// wireRefreshPath is the token refresh endpoint (report §3). It lives on the
+// same realm base as chat; its auth is the X-Refresh-Token header (plus
+// X-Auth-Refresh-Source: plugin) — never an Authorization bearer.
+const wireRefreshPath = "/v2/plugin/auth/token/refresh"
 
 // Production chat bases (report §2). CN: copilot.tencent.com with the
 // www.codebuddy.cn brand; global: www.workbuddy.ai. Both are bypassed in
@@ -87,6 +97,14 @@ func (f CredentialSourceFunc) CredentialFor(ctx context.Context, acct *pool.Acco
 	return f(ctx, acct)
 }
 
+// CredentialSink receives the credential pair the sender rotated through the
+// refresh endpoint (refresh.go). Implemented integrator-side over the
+// credential store: by the time AcceptRefreshed returns, CredentialFor must
+// serve the new tokens, because the failed send replays immediately after.
+type CredentialSink interface {
+	AcceptRefreshed(ctx context.Context, acct *pool.Account, cred *Credential) error
+}
+
 // CredentialState is the optional health/status hook the adapter surfaces
 // (panel credential aging, health checks). Production wiring implements it
 // over the credential store; absent it the adapter reports the neutral
@@ -109,6 +127,10 @@ type ClientOptions struct {
 	Credentials CredentialSource
 	// State optionally exposes health/credential status to the adapter.
 	State CredentialState
+	// Refresher receives tokens rotated by the 401/expiry refresh flow
+	// (refresh.go). Production wiring sets it to the credential store; nil
+	// disables refresh-and-replay — auth failures surface as-is.
+	Refresher CredentialSink
 	// Now overrides the clock for credential-expiry checks (tests).
 	Now func() time.Time
 }
@@ -119,6 +141,13 @@ type senderImpl struct {
 	mu   sync.Mutex
 	opts ClientOptions
 	http *http.Client
+
+	// refreshGate serializes token rotation (refresh.go): one in-flight
+	// refresh per account (single-flight) plus the last-success clock behind
+	// the quiet window. Maps initialize lazily under refreshMu.
+	refreshMu   sync.Mutex
+	refreshBusy map[string]*refreshFlight
+	refreshOKAt map[string]time.Time
 }
 
 // NewSender builds a sender with production defaults (used by init()).
@@ -259,17 +288,15 @@ func setAccountHeaders(req *http.Request, cred *Credential) {
 
 // SendChat performs one non-streaming chat completion. The upstream only
 // speaks SSE, so the request always goes out with stream:true and the frames
-// are aggregated into a single ChatResponse.
+// are aggregated into a single ChatResponse. Auth-expired replies (401 /
+// session death) and pre-send expiry route through one token refresh + one
+// replay (refresh.go).
 func (s *senderImpl) SendChat(ctx context.Context, acct *pool.Account, req adapter.ChatRequest) (*adapter.ChatResponse, error) {
-	cred, err := s.credentialFor(ctx, acct)
-	if err != nil {
-		return nil, err
-	}
 	body, err := buildUpstreamBody(req)
 	if err != nil {
 		return nil, &adapter.UpstreamError{Status: http.StatusBadRequest, Reason: adapter.ReasonNotFound, Message: "workbuddy: build request body: " + err.Error()}
 	}
-	rc, sendErr := s.postStream(ctx, cred, body)
+	rc, sendErr := s.postWithRotation(ctx, acct, body)
 	if sendErr != nil {
 		return nil, sendErr
 	}
@@ -285,15 +312,11 @@ func (s *senderImpl) SendChat(ctx context.Context, acct *pool.Account, req adapt
 // contract: chunks close on healthy completion; errCh carries at most one
 // error and is NOT closed on a healthy stream; both stop when ctx is done.
 func (s *senderImpl) SendChatStream(ctx context.Context, acct *pool.Account, req adapter.ChatRequest) (<-chan adapter.StreamChunk, <-chan error, error) {
-	cred, err := s.credentialFor(ctx, acct)
-	if err != nil {
-		return nil, nil, err
-	}
 	body, err := buildUpstreamBody(req)
 	if err != nil {
 		return nil, nil, &adapter.UpstreamError{Status: http.StatusBadRequest, Reason: adapter.ReasonNotFound, Message: "workbuddy: build request body: " + err.Error()}
 	}
-	rc, sendErr := s.postStream(ctx, cred, body)
+	rc, sendErr := s.postWithRotation(ctx, acct, body)
 	if sendErr != nil {
 		return nil, nil, sendErr
 	}

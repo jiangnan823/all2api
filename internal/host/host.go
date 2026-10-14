@@ -14,7 +14,11 @@ import (
 
 // Host owns the per-source breakers and the shared account pool.
 type Host struct {
-	Pool     *pool.WeightedRandomSelector
+	Pool *pool.WeightedRandomSelector
+	// Creds is the in-memory credential store loaded from config.AuthDir
+	// (M3 credential plane). nil until main wires it. The type's credential
+	// fields are unexported — no token material can escape through this field.
+	Creds    *CredentialStore
 	mu       sync.RWMutex
 	breakers map[string]*circuit.Breaker
 }

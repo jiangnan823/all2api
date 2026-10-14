@@ -81,6 +81,26 @@ func main() {
 	// recover endpoint acts on this host — see internal/api/recover.go.
 	gwHost := host.New(cfg)
 
+	// M3 credential plane: load workbuddy auth files into the in-memory
+	// credential store (pool accounts registered; secrets stay out of the
+	// pool and out of every log/state surface), then wire the store into the
+	// workbuddy sender as credential source + refresh sink. A missing or
+	// empty auth dir is not fatal — the gateway starts with zero workbuddy
+	// credentials and sends answer auth_expired per account.
+	creds := host.NewCredentialStore(gwHost.Pool)
+	loadedCreds, credErr := creds.LoadAuthDir(cfg.AuthDir)
+	if credErr != nil {
+		fmt.Printf("credentials: load auth dir %s: %v\n", cfg.AuthDir, credErr)
+	}
+	if _, statErr := os.Stat(cfg.AuthDir); os.IsNotExist(statErr) {
+		fmt.Printf("credentials: auth dir %s not present; starting with 0 workbuddy credential(s)\n", cfg.AuthDir)
+	}
+	fmt.Printf("Loaded %d workbuddy credential(s) from %s\n", loadedCreds, cfg.AuthDir)
+	if creds.WireWorkbuddySender() == 1 {
+		fmt.Printf("WorkBuddy credential source + refresh sink wired\n")
+	}
+	gwHost.Creds = creds
+
 	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
 	// Upstream sends resolve per request from adapters implementing
 	// adapter.Sender; with no implementer registered every /v1 call answers
