@@ -19,6 +19,7 @@ import (
 	// Assembly layer for build-tag-based platform registration.
 	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
 	_ "all2api/internal/platforms"
+	"all2api/internal/router"
 	"all2api/internal/web"
 )
 
@@ -74,16 +75,16 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","service":"all2api","version":"%s","buildDate":"%s","uptime":"%s"}`, version, buildDate, time.Since(start).String())
 	})
 
-	// Router endpoint placeholder
-	mux.HandleFunc("/v1/chat/completions", chatCompletionsHandler)
-
-	// Responses API (feature flag: disabled in MVP, enabled in M1)
-	mux.HandleFunc("/v1/responses", responsesHandler)
-
 	// Runtime control plane: per-source circuit breakers (fed by the frozen
 	// sources.<id>.throttle.backoff.* keys) + the shared account pool. The
 	// recover endpoint acts on this host — see internal/api/recover.go.
 	gwHost := host.New(cfg)
+
+	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
+	// Upstream sends resolve per request from adapters implementing
+	// adapter.Sender; with no implementer registered every /v1 call answers
+	// 503 "no upstream sender" instead of failing at assembly time.
+	router.Register(mux, gwHost, adapter.Default)
 
 	// Panel API surface (G3 consent gate + config delivery + recover wiring).
 	api.Register(mux, gwHost)
@@ -94,9 +95,14 @@ func main() {
 
 	fmt.Printf("All2API gateway v%s (%s) listening on %s\n", version, commit, addr)
 	fmt.Printf("Registered adapters:\n")
+	senders := 0
 	for _, a := range adapter.Default.GetAll() {
 		fmt.Printf("  - %s (capabilities: 0x%x)\n", a.Name(), a.Capabilities().Value)
+		if _, ok := a.(adapter.Sender); ok {
+			senders++
+		}
 	}
+	fmt.Printf("Upstream senders registered: %d\n", senders)
 
 	server := &http.Server{
 		Addr:         addr,
@@ -136,26 +142,6 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Shutdown complete.")
-}
-
-// chatCompletionsHandler / responsesHandler — restored scaffold stubs (lost
-// in the c49601c main.go rewrite, which left the mux references dangling and
-// broke the build). The /v1 router layer is M2 scope: adapters expose no
-// upstream-send capability yet, so these endpoints honestly report 501
-// instead of faking a proxy.
-func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: router layer implementation
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	fmt.Fprint(w, `{"error":"chat completions not yet implemented"}`)
-}
-
-func responsesHandler(w http.ResponseWriter, r *http.Request) {
-	// Feature flag controlled by config.router.responses_api.enabled;
-	// even with the flag on the upstream layer is not implemented yet.
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	fmt.Fprint(w, `{"error":"responses API not yet implemented"}`)
 }
 
 // resolveConfigPath implements: -config <path> flag → ALL2API_CONFIG env →
