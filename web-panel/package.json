@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "all2api 自托管面板前端。M0 仅落冻结契约消费件（ConsentGate / ThrottleForm / AdvancedToggle）；构建、静态服务与 /api/* 接线列 M1。",
+  "description": "all2api 自托管面板前端。M0 落冻结契约消费件（ConsentGate / ThrottleForm / AdvancedToggle）；M2 B1 起落构建管道（build → internal/web/dist，由网关 go:embed 提供）。",
   "scripts": {
+    "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -23,6 +24,7 @@
     "jest-axe": "^11.0.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.9.3",
+    "vite": "^7.3.7",
     "vitest": "^3.2.4"
   }
 }
