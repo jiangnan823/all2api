@@ -373,7 +373,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Every scan runs with continue-on-error and reports through ONE aggregate
+      # gate step. Reason (measured on run 38494575451): the first gosec step failed
+      # and GitHub marked the following "Dependency vulnerability scan (OSV)" step as
+      # skipped, so a single scan failure destroyed the evidence for the other two.
+      # Scans must produce findings independently, then the job decides.
       - name: Secret scan (gitleaks)
+        id: gitleaks
+        continue-on-error: true
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -382,16 +389,52 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      # Version is pinned, not @master: @master silently changes the rule set and the
+      # CLI surface under us (that is how the removed `-exit-code` flag reached us).
+      # Raise deliberately, and re-run the gosec gate locally at the same version
+      # before bumping — flags differ between releases.
       - name: gosec
-        uses: securego/gosec@master
+        id: gosec
+        continue-on-error: true
+        uses: securego/gosec@v2.29.0
         with:
-          args: -exit-code 1 -severity HIGH ./...
+          # `-exit-code 1` was the original spelling and it is WRONG on current gosec:
+          # the flag no longer exists, so the binary aborts during argument parsing
+          # (`flag provided but not defined: -exit-code`, exit=2) without analysing a
+          # single file. gosec already exits non-zero when it reports issues at or
+          # above `-severity`, which is the behaviour we want here.
+          #
+          # HIGH stays the blocking threshold on purpose: it is the same bar this job
+          # had before, only now it is actually evaluated. Lower severities are
+          # reported by gosec but are not gates — they belong in review, not CI.
+          args: "-severity high -fmt=text ./..."
 
       - name: Dependency vulnerability scan (OSV)
+        id: osv
+        continue-on-error: true
         run: |
           set -e
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./... || {
-            echo "::error::govulncheck found vulnerable dependencies"
+          govulncheck ./...
+
+      # Fails the job if ANY scan failed, and names them so the red is attributable
+      # to a specific line (secret / static / dependency) at a glance.
+      - name: Aggregate scan verdict
+        if: always()
+        run: |
+          set -e
+          failed=""
+          for s in gitleaks gosec osv; do
+            case "$s" in
+              gitleaks) r="${{ steps.gitleaks.outcome }}" ;;
+              gosec)    r="${{ steps.gosec.outcome }}" ;;
+              osv)      r="${{ steps.osv.outcome }}" ;;
+            esac
+            echo "scan $s => $r"
+            [ "$r" = "failure" ] && failed="$failed $s"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::security scan(s) failed:${failed}"
             exit 1
-          }
+          fi
+          echo "all security scans passed"

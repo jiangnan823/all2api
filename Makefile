@@ -83,8 +83,15 @@ docker-smoke: docker ## run the container and assert /healthz (M0 acceptance)
 	echo "SMOKE FAILED"; exit 1
 
 scan: ## local security scan before pushing (mirrors the CI security job)
-	gosec -severity HIGH ./...
+	gosec -severity high ./...
 	govulncheck ./...
+
+workflows: ## lint the Actions workflows offline (needs actionlint)
+	@actionlint .github/workflows/*.yml || { \
+		echo "actionlint missing — go install github.com/rhysd/actionlint/cmd/actionlint@latest"; \
+		echo "it catches the class of error GitHub rejects at push time (e.g. hashFiles in a job-level if)"; \
+		exit 1; \
+	}
 
 fpk: ## package the fnOS .fpk app (see deploy/fnos/README.md for prerequisites)
 	bash deploy/fnos/package-fpk.sh

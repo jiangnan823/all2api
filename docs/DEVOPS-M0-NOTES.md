@@ -337,4 +337,61 @@ gitleaks / gosec / govulncheck 无二进制。Windows 原生无法等价验证 L
 
 挂账不变：`-race`（无 CGO/gcc）、docker 镜像与 `docker stop ≤10s` 的 Linux SIGTERM 窗口、gitleaks / gosec / govulncheck。
 
+### 9.12 云端首跑全绿核验（主人 push `14bdaa3`，run 38494575451）
+
+**远端事实**：`git ls-remote origin refs/heads/main` = `14bdaa331660f99a014fa52a8e4be621d39b2c65` = 本地 `main`
+⇒ 领先的那 9 枚全部上仓，M1 工件线首次完整进远端。远端只有 `main` 一个分支，无多余 ref。
+
+**run 事实**（只读 REST，未重跑、未取消、未改 Settings）：`ci` / push / `main` / head `14bdaa331`，
+id `38494575451`，`created 01:13:56Z → updated 01:20:11Z`，`run_duration_ms = 375000`（6 分 15 秒），
+**`conclusion = failure`**，但 **`billable.UBUNTU.total_ms = 0`（10 个 job 全部 duration_ms=0）** ⇒ 公共仓库 0 计额再次实测成立。
+`release.yml` 未被触发（tag-only，符合设计）。
+
+**逐 job（10 个）**：
+
+| job | 结论 | 关键步 |
+| --- | --- | --- |
+| panel / build | ✅ | `Detect panel project` → `present=true`，install/typecheck/build 三步真跑；产物非空断言与 artifact 上传 = `skipped`（面板尚无 bundle，M1 内 fronted 项，口径不变） |
+| lint / vet | ✅ | `go vet` / `gofmt check` / `golangci-lint` 三步全 success ⇒ §9.11 本地判定在 Linux 上复现，noctx 豁免随树生效 |
+| **test / race** | ✅ | **`Unit tests with race detector` success** ⇒ 本项目**首次 Linux 面 `-race` 证据**，§9.9/§9.11 的 `-race` 挂账正式收掉 |
+| build ×4 | ✅ | linux/amd64、linux/arm64、windows/amd64、darwin/arm64 全绿 + Hash + 60MB 体积护栏通过 |
+| docker / multi-arch | ✅ | qemu + buildx，`linux/amd64,linux/arm64` 双架构真构建（provenance max + sbom）⇒ §9.7 的 `COPY go.mod` 与 `.dockerignore` 修复被验证 |
+| smoke / healthz | ✅ | `Wait for healthy` / `Assert healthz payload identifies the service` / **`Assert graceful shutdown within stop grace period`** 全 success ⇒ M0 验收项云端兑现，且 A2（信号→Shutdown）首次拿到执行面证据 |
+| security / scans | ❌ | `Secret scan (gitleaks)` ✅；**`gosec` 步失败**；`Dependency vulnerability scan (OSV)` = **skipped** |
+
+**security 红的真因（我的工件缺陷，本地零额度复现，非代码安全问题）**：
+ci.yml 写的是 `args: -exit-code 1 -severity HIGH ./...`，而当前 gosec CLI **已无 `-exit-code` 这个 flag**。
+本机用 `v2.22.2` 与 `v2.29.0` 两个版本跑同一串参数，均在参数解析阶段中止：
+`flag provided but not defined: -exit-code`，**exit=2，一个文件都没分析**。⇒ 这一红是工件线（devops），不是代码线。
+附带缺陷：该步一失败，后面的 OSV 步被标 `skipped`，所以 **govulncheck 至今从未真正执行过**（云端 + 本地都是零证据）。
+
+**修好参数之后的真实安全面**（`gosec -severity high -fmt=text ./...` @merged tip，23 文件 / 2773 行）：exit=1，**2 条 HIGH**：
+1. `internal/pool/pool.go:73` **G404**（CWE-338，Confidence MEDIUM）`rand.New(rand.NewSource(time.Now().UnixNano()))`
+   —— 账号池加权随机选择的 rng，非密钥用途，但时间种子可预测轮换顺序。归 backend 线，待裁定（改 crypto/rand 种子 或 `#nosec` 附理由）。
+2. `internal/config/config.go:146-150` **G101**（CWE-798，**Confidence LOW**）—— 命中的是
+   `TokenKeepalive: "0 22 * * *"`：**字段名含 `Token` + 字符串字面量**触发的名字启发式，值是 cron 表达式，不是凭据（gitleaks 亦判 0 秘密）。
+   键名属冻结契约面，不能改名 ⇒ 出路是就地 `#nosec[G101]` 附理由（backend 线），**不建议**用全局 `-exclude=G101` 放松门禁。
+
+MEDIUM 4 条（**不作为门禁**，但两条有审查价值，已转 backend/QA）：
+`internal/web/panel.go:129` **G705** XSS via taint（A1 已清洗+编码，gosec 仍看到请求头 → html 的污点流，属残留告警）；
+`internal/config/config.go:162` 与 `internal/api/trail.go:35` **G304** file inclusion via variable（配置路径/留痕路径，按设计）；
+`internal/api/api.go:90` **G117** `json.Marshal(cfg)` 含 `APIKey` ⇒ **机器印证了既有挂账「api_key 遮蔽」**（面板 raw config 返回体）。
+
+**工件修复（本地提交，未 push）**：ci.yml 的 security job 改为 —— gosec **版本 pin `v2.29.0`（不再 `@master`）**、
+参数改 `"-severity high -fmt=text ./..."`、三个扫描各自 `continue-on-error: true`、新增 `Aggregate scan verdict`
+（`if: always()`）按 `steps.*.outcome` 汇总判红 ⇒ 任一扫描失败不再掩盖另外两个的证据。HIGH 仍是阻断阈值，未放松。
+Makefile：`scan` 的 `-severity` 大小写对齐；新增 `workflows` 目标（actionlint 离线校验）。
+
+**新增离线门禁 `actionlint v1.7.12`**：对现行 `ci.yml` + `release.yml` **零告警**；用故意写坏探针验证它能抓住
+§9.7 那类云端拒绝——探针里 job 级 `hashFiles` 直接报
+`calling function "hashFiles" is not allowed here … only available in jobs.<job_id>.steps.*`，正是前两次 run
+`jobs=0 / conclusion=failure` 的根因。⇒ 这类错误今后在本地 `make workflows` 就该被拦，不必再靠 push 试。
+**未把 actionlint 放进 CI**：那需要「下载并执行 release 二进制」，属面扩大，待 PM/主人裁定后再落。
+
+**仍挂账（本轮后）**：govulncheck（从未执行，参数已就绪，等下一次 owner push 顺带首跑）；
+fnOS fpk 真机六项；M2 接线批（Scheduler 实例化 + `Start(ctx)` 消费 shutdown + `TaskHandler` ctx 转正 +
+`runHealthcheck` 硬编码 `:7863` 改读 `cfg.Listen`）；api_key 遮蔽（本轮获 G117 机器印证）。
+**已收**：`-race`（Linux 首跑绿）、docker 多架构构建、`/healthz` smoke 含 `stop ≤10s`、gitleaks、build×4 云端、`go test` 云端。
+
+
 
