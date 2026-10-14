@@ -501,5 +501,57 @@ Summary:
 **devops 侧判定 @22409df**：R2-sec 在 CI/门禁面**已验证 = 绿**，gosec HIGH 由 2 → 0，且经 §9.12/§9.13 的云端与安全线事实串联后，M1 安全线本地侧收口。
 **唯一仍未闭合的依赖（不是缺陷，是顺序）**：`bc60417`（gosec 参数修复 + 聚合判定）与 `8de5436`（注释/台账）随 `22409df` 一起仍在本地 ⇒ security job 的云端首绿与 **govulncheck 首跑**必须等主人自主 push 后才拿得到；团队不提 push 请求。
 
+## 9.15 收官云端核验 @`e0c6bce`（run #5 / 38499871123，security 首绿 + govulncheck 首跑）
+
+### 9.15-a push 侧事实（只读）
+
+- `git ls-remote`：`refs/heads/main = e0c6bcebfe6b3c7a60a3a8e8ed6d8aebf01e9ef1` = 本地 main ✅
+- `git rev-list --parents -n1 e0c6bce` = 单亲 `3adc38d`；`git diff --stat 3adc38d e0c6bce` = **空** ⇒ 主人自署的空提交（title「gosec参数修复」），**tree 与已复验过的 `3adc38d` 逐字节相同** ⇒ 本轮云端结果可直接对照 §9.14 的本地门禁结论。
+- push 区间 `14bdaa3..e0c6bce` = 恰 6 个 commit：`bc60417 → 4109d6c → 8de5436 → 22409df → 3adc38d → e0c6bce`。
+- 核验纪律：未重跑、未取消、未动 Actions Settings、未 push、产品代码零改动（本文件为唯一写入，docs-only）。
+
+### 9.15-b 逐 job 实测（run 终态 `completed / failure`，wall-clock 362 s，billable 0）
+
+| job | 结论 | 墙钟 | 关键步骤 |
+| --- | --- | --- | --- |
+| test / race | **success** | 40 s | `-race` 绿（Linux 侧挂账已闭合） |
+| panel / build | success | 26 s | 面板 typecheck+test；build/upload 仍 skipped（无 build script） |
+| lint / vet | success | 27 s | `go vet` / `gofmt` / golangci-lint v1.64.8 全绿 |
+| **security / scans** | **failure** | 91 s | gitleaks **success**、**gosec success（云端首绿）**、OSV 步骤 conclusion=success（`continue-on-error` 产物）、**`Aggregate scan verdict => failure`** |
+| build ×4（linux-amd64/arm64、darwin-arm64、windows-amd64） | success ×4 | 17–21 s | hash + size budget 均绿 |
+| docker / multi-arch | **success** | 242 s | qemu + buildx，Build (no push) 绿 |
+| smoke / healthz | **success** | 45 s | 起容器 → healthy → healthz payload 断言 → **优雅停机 ≤ grace** → cleanup，10/10 步绿 |
+
+- `timing.billable.UBUNTU.total_ms = 0`（10 个 job run 逐一 0 ms）⇒ 公开仓 + 标准 runner 不计量，主人的额度顾虑在本仓不成立。
+- 聚合门禁按设计工作：`steps.<id>.outcome` 只把 **osv** 判为红，gitleaks/gosec 不再被互相遮蔽 ⇒ 本轮唯一的红**被精确归因到单个扫描器**，这正是 `bc60417` 重构要买的东西。
+- gosec 镜像在 run #4/#5 之间换过 digest（`a6cd2f30…` → `4342ad11…`），钉的是 `securego/gosec@v2.29.0` 标签、非 digest ⇒ 版本钉住、实现仍可漂移（登记，不阻塞）。
+
+### 9.15-c govulncheck 首跑（历史上被 `-exit-code` 缺陷遮蔽两轮，本轮首次真正执行）
+
+**它跑了**，且以调用图痕迹自证（`/check-runs/115644219125/annotations`，日志端点未认证 404）：
+`gateway.main calls http.Server.ListenAndServe`(L117) / `http.ServeMux.HandleFunc`(L71) / `http.ServeMux.Handle`(L93) / `gateway.runHealthcheck calls http.Get`(L181) / `main calls signal.Notify → http.CanonicalHeaderKey`(L114) ⇒ 退出码 1 → osv 判红。
+
+**根因本地复现（同一棵树 `e0c6bce`、同一 DB 快照 `vuln.go.dev @2026-10-08`，只换被分析的 Go 版本）**：
+
+| 口径 | 结果 |
+| --- | --- |
+| 源码模式 @系统 go1.27.2 + govulncheck v1.9.0 | **`No vulnerabilities found.`，exit=0** |
+| 便携 go1.24.13 构建产物 → **binary 模式**（与 CI 的 `GO_VERSION: "1.24"` 解析出的 1.24.13 同版本） | **25 条标准库漏洞可达，exit=3**；另 4 条 import 包 / 12 条 require 模块不可达 |
+
+25 条全部是 **Go 标准库版本问题**，修复版本集中在 `go1.25.9–1.25.13` 与 `go1.26.9`：`net/http`（GO-2026-6617/6613/6612/6611/6610/6609/6603/6605/6089/5026/4918，共 11 条）、`crypto/tls`（6607/6090/5856/4870）、`net/textproto`（6608/5039）、`crypto/x509`（5037/4947/4946）、`net/url`（6218/4601）、`net`（4971）、`os`（4602）、`encoding/asn1`（5972）。
+云端五条痕迹与本地命中集**一致且是其子集**（`ListenAndServe` ← GO-2026-6089 fixed@1.25.13；`CanonicalHeaderKey` ← GO-2026-6617 fixed@1.26.9；`http.Get` ← GO-2026-6613/6605/5026/4918）。
+
+**⇒ 判定：osv 红不是产品代码缺陷，也不是第三方依赖问题**（`go.mod` 无任何 `require`，纯标准库模块），**而是我们自己把分析版本钉在了 1.24**：
+1. **CI 侧可复现性缺陷（我认领）**：`GO_VERSION: "1.24"` + `govulncheck@latest`（其模块 `go.mod` 要求 ≥ 1.25/1.26）意味着扫描实际生效的运行时版本取决于 `GOTOOLCHAIN` 解析，而不是我们声明的钉版 ⇒ 结果随 runner/上游漂移，不可复现。便携 go1.24.13 下 `govulncheck@latest` 根本装不出来（`requires go >= 1.26.0 (GOTOOLCHAIN=local)`），这条约束本身就是证据。
+2. **闭合它需要一次成组的版本决策**，且受已批准规则约束（抬 Go 版必须同一 commit 抬 golangci-lint / gosec 钉版并本地重跑两道门禁）：golangci-lint v1.64.8 最多读 export data v2、gosec v2.29.0 最多读 v4，而 go1.27 产出 v5 ⇒ 抬到哪个 Go 版能让**三道分析器同时可读且 osv 归零**，是 PM/backend 的产品级决策，我不单方面改。
+3. 附带发现（登记 M2，不阻塞）：CI 印 `Restore cache failed: … Supported file pattern: go.sum` ⇒ **本仓无 `go.sum`**（当前无外部 require 所以能构建，但依赖一旦引入即为未锁定状态）；以及 `checkout@v4 / setup-go@v5 / gitleaks-action@v2` 的 Node.js 20 弃用告警、`ubuntu-latest` 将于 **2026-10-19** 迁移到 Ubuntu 26 的通知。
+
+**M1 口径建议**：功能与门禁面 9/10 job 全绿，唯一红项经归因为「工具链钉版 × 标准库漏洞库」的顺序问题，**不构成 M1 代码缺陷**；osv 归零随上述版本决策一并进 M2 首批，M1 收案不必为它再消耗一次云端额度。
+
+### 9.15-d 工具链保留裁定落账
+
+主人 seq=751：「1、收 2、我已经push了 3、**保留**」 ⇒ `%LOCALAPPDATA%\Temp\devops-go`（便携 go1.24.13 + golangci-lint v1.64.8 + gosec v2.29.0 + actionlint v1.7.12，官方 `golang.org/dl` zip、SHA256 已校验）**不清理**，作为后续复验的可复现门禁链保留；本轮 §9.15-c 的 binary 模式复现正是靠它才拿到与 CI 同版本（1.24.13）的证据。
+纪律不变：不装系统 Go、不改 PATH、不写入仓库、产物只落临时目录。
+
 
 
