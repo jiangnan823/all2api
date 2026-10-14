@@ -676,5 +676,23 @@ B2 单独测出 `golangci exit=3 / issue lines=0`，且 harness 的报错过滤 
 2. **本机边界照旧**：无 docker、无 make、云端未跑 —— `docker build` / `make panel` / Actions 首绿仍属主人/云端取证面；merge 模拟中 panel job 的真实产物断言（§9.17-b.1 的 declared/real 判据）在云端首跑时才第一次真执行。
 3. harness 脚本存档：`%LOCALAPPDATA%\Temp\devops-go`（`b3cross2.sh` 逐 SHA 门禁 + 身份断言、`b3merge.sh`/`b3merge2.sh` 合流模拟与 blob 级复核），Temp 不保证存活，结论以本节文字为准。
 
+## 9.19 本机稳定运行取证（主人指令「先保证本机能够稳定运行再说」，2026-10-14 傍晚）
+
+云端首绿与 docker/make 讨论之前的本机运行面：**用主人原生 Go 链构建产物并在本机跑稳**。源 = main tip `241da8b`；构建 = 原生 `go1.27.2 windows/amd64`（`C:\Program Files\Go`，`CGO_ENABLED=0 go build -trimpath`，零外部依赖、零网络下载、一次通过）——这是原生链**首次**产出可运行二进制（此前 §9.13 原生链只做过门禁复跑对照）。go.mod 下限 1.26.0，1.27.2 直接可编；分析工具版本 skew（§9.13-b）只影响钉版门禁，不影响构建与运行。
+
+运行矩阵三条路径全过（产物与工作目录均在 `%LOCALAPPDATA%\Temp\all2api-run\`，scratch 工作目录，不碰仓库）：
+
+| 路径 | 结果 |
+| --- | --- |
+| bare（无 config.json → 内置默认） | 起动横幅正确：默认 `:7863`、开放模式告警（PM seq=461 核对点）、注册 workbuddy 适配器 |
+| `config.example.json` 作 `./config.json` | 配置读入（告警行显示 `listen ":7863"` 来自文件），无 "not found" 行 |
+| `gateway.exe healthcheck` 子命令 | `healthcheck OK`，exit 0 |
+
+端点探测：`/healthz` 200（首响 1.3 ms，JSON 含 version/buildDate/uptime）、`GET /` 200（**占位页是 main 的预期形态**——真实面板在 B1 未合分支，dist 仅 `.gitkeep`）、`POST /v1/chat/completions` 501（诚实桩，M2 范围）、`GET /api/config` 200。
+
+稳定性：合计 500 发请求（300 顺序 + 10 并发 × 50 发 healthz 与 GET / 混合）**全 200、零失败**；进程工作集 11.9 MB 无增长；运行日志零增长（仅启动横幅，无错误行）；scratch 目录零副作用（`auths/`、`data/` 未被创建——cron 时段未到）。重启周期：强杀 → 原样重启 → healthz 恢复 200；结束态进程已停、无残留进程。
+
+边界（如实登记）：优雅停机路径（SIGINT → `server.Shutdown` ≤10s，main.go A2 修复项）在 Windows 非交互 shell 无法注入 Ctrl+C，本机未取证，属 CI smoke / 交互台架取证面。README「Quick Start」契约（config.json 同目录、`:7863`、面板 `http://localhost:7863`）与本机实测行为一致，无需改动。
+
 
 
