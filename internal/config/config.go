@@ -37,14 +37,14 @@ type PoolConfig struct {
 // tags-table §2 deprecation list) — writing the conservative "6" into a
 // per-second field means 360 rpm, 60x the approved budget.
 type ThrottleConfig struct {
-	SteadyRPM           int           `json:"steady_rpm"`                       // sustained requests per minute — the ONLY steady-rate key
-	BurstRPM            int           `json:"burst_rpm"`                        // burst ceiling per minute
-	MinGapMS            [2]int        `json:"min_gap_ms"`                       // random inter-request gap [lo,hi] ms (kills machine cadence)
-	DailyCap            int           `json:"daily_cap"`                        // requests per local day (quota anchor next-04:00)
-	Inflight            int           `json:"inflight"`                         // max concurrent in-flight requests on this source
-	Backoff             BackoffConfig `json:"backoff"`                          // per-reason backoff policy
-	JitterMinutes       int           `json:"jitter_minutes,omitempty"`         // ± minutes on signin/task schedules, default 15
-	HalveBudgetAfter429 bool          `json:"halve_budget_after_429,omitempty"` // Qoder stance: halve remaining daily cap for the day after a 429
+	SteadyRPM           int           `json:"steady_rpm"`             // sustained requests per minute — the ONLY steady-rate key
+	BurstRPM            int           `json:"burst_rpm"`              // burst ceiling per minute
+	MinGapMS            [2]int        `json:"min_gap_ms"`             // random inter-request gap [lo,hi] ms (kills machine cadence)
+	DailyCap            int           `json:"daily_cap"`              // requests per local day (quota anchor next-04:00)
+	Inflight            int           `json:"inflight"`               // max concurrent in-flight requests on this source
+	Backoff             BackoffConfig `json:"backoff"`                // per-reason backoff policy
+	JitterMinutes       int           `json:"jitter_minutes"`         // ± minutes on signin/task schedules, default 15 (M2 B2 ruling 3: always on the wire)
+	HalveBudgetAfter429 bool          `json:"halve_budget_after_429"` // Qoder stance: halve remaining daily cap for the day after a 429
 }
 
 // BackoffConfig cooldown semantics by trigger reason.
