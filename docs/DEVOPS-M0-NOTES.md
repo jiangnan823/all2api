@@ -694,5 +694,29 @@ B2 单独测出 `golangci exit=3 / issue lines=0`，且 harness 的报错过滤 
 
 边界（如实登记）：优雅停机路径（SIGINT → `server.Shutdown` ≤10s，main.go A2 修复项）在 Windows 非交互 shell 无法注入 Ctrl+C，本机未取证，属 CI smoke / 交互台架取证面。README「Quick Start」契约（config.json 同目录、`:7863`、面板 `http://localhost:7863`）与本机实测行为一致，无需改动。
 
+## 9.20 M2 四支批次首推 + 一次断言自伤的定位与修复 + 云端首绿（主人指令「你来push」，2026-10-14 晚）
+
+主人指令后执行批次首推：`a860150`(B1) → `32e3bf8`(B2) → `905793f`(B3prep) 按模拟顺序合入 main，零冲突，合流 tip `f041f2c`（§9.19 的 2 个 docs 提交随批）。push 前对**真实合流 tip** 重跑钉版七面（§9.18 口径）全绿，随后单次 push `7641a4c..f041f2c`。
+
+### 9.20-a run 38540551451：9/10 绿，唯 smoke 面板断言红
+
+lint/vet（golangci v2.14.0 + B3prep 修复**首绿**）、test/race、panel/build（Probe+Assert 双步真执行）、security/scans（gosec HIGH=0 + govulncheck 钉版首跑绿）、build 四变体（Restore+Assert 搬运断言绿）、docker 多架构全部通过；smoke 唯一红在 B1 新增的 `Assert served panel is the built bundle`。取回失败步骤日志（git 凭据管理器里主人存过的 GitHub 凭证走认证 API），证据链：
+
+- `GET /` 返回的 html **就是 B1 构建产物**（引用 `/assets/index-UYStx7In.js` 与 `/assets/index-YSB_QJaj.css`）——web stage 判据、`COPY --from=web` 搬运、`go:embed`、运行时服务**整条链路是通的**，js 引用断言已通过；
+- 失败的是 CSS 探测，实收 `http=307`。
+
+### 9.20-b 根因：断言自己的 URL 拼了一个多余的 `/`
+
+脚本原形 `"http://…:${LISTEN_PORT}/$(grep -Eo '/assets/…\.css')"` —— grep 输出**自带前导 `/`**，拼出 `//assets/…`。三层事实用本地 `-v` 探测逐层钉死：curl 原样发送 `GET //assets/…`（默认**不**合并双斜杠）；Go 1.22+ `ServeMux` 对非规范路径回 **307**（1.26.9 `server.go:2691` `RedirectHandler(…, StatusTemporaryRedirect)`，非旧文档常说的 301）+ `Location: /assets/…`；规范路径本身 200（js/css 双双实测）。即：**管道真绿、断言打歪**。
+
+### 9.20-c 本轮 harness 自伤两记（§9.17-d 家族，追加两条）
+
+1. 首次本地复现时我得到「双斜杠也是 200」的假阴性——真相是本会话 bash 的 `grep` 是 ZCode 封装的 **ugrep.exe 原生二进制**，MSYS 向原生 exe 传参时把 `/assets/…` 开头的模式改写（实测退化为 `ts/…`），内层 grep 空匹配导致探测实际打到 `/`。绕法：`command grep`。教训：**本会话内一切以 `/` 开头的 grep 模式/路径参数先过 `command grep`**。
+2. 首判 301 来自我记忆里的旧版 ServeMux 行为，未先查钉版源码——`server.go` 一 grep 就能看到 307。教训：**结论靠钉版源码与 `-v` 实测，不靠记忆里的版本行为**。
+
+### 9.20-d 修复与首绿
+
+`78150e4`：探测改为「grep 匹配路径原样拼接（不加斜杠）」，js/css **对称双探测**，引用路径缺失时大声失败；本地先验证（真 bundle 二进制：js/css 双 200；旧双斜杠形态 307+Location 复现）再 actionlint 通过后推送。run `38542929639`（head `78150e4`）：**10/10 job 全绿，云端首绿成立**。smoke 内 `Assert served panel is the built bundle` 与上轮被它挡住的 `Assert graceful shutdown within stop grace period`（容器内优雅停机**首次取证**）均 success。首推合批的三个预期目标全部兑现：B0 lint 线首绿（B3prep 解锁）、panel 管道断言全链路真执行、镜像内真实面板端到端可证。
+
 
 
