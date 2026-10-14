@@ -130,6 +130,9 @@ workflows: ## lint the Actions workflows offline (needs actionlint)
 fpk: ## package the fnOS .fpk app (see deploy/fnos/README.md for prerequisites)
 	bash deploy/fnos/package-fpk.sh
 
+package-windows: panel ## build the Windows zip package (installer + uninstaller), needs go + powershell
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -OutDir dist
+
 check: vet lint race build build-all docker-smoke ## the full pre-push gate
 
 clean:
