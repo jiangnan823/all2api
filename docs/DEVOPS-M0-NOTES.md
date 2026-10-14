@@ -750,5 +750,39 @@ run `38565902432` 首跑失败在 `lint / vet` 的 **golangci 安装步骤**：`
 4. 面板：无保存端点（后端工作项，UI 已如实置灰）；topbar 状态 pill 仍是「未接线」占位文案；X-API-Key 真实 key 来源未做；通用配置组（gateway/routing/pooling/schedule）字段已下发未渲染。
 5. 契约小缺口：`FieldDef.requires_confirm` 在 api-contract.ts 缺显式注释（解析已按后端实现）；Go 零值序列化使 `jitter_minutes`/`halve_budget_after_429` 恒在 wire（契约标 optional，解析层两态容忍）。
 
+## 9.22 M2b 并发开发批：调度接线 + 配置保存 + 路由开关/熔断 + WorkBuddy 真实 client + 面板补齐（2026-10-14 深夜）
+
+### 9.22-a 派发、中断与重派
+
+五域五 worktree（D `m2b-schedwire` / E `m2b-configsave` / F `m2b-routersw` / G `m2b-upstreamres` / H `m2b-panel2`，同基 `ac5ce7a`）。首轮派发全军覆没于子agent 侧 5 小时用量上限（错误 1308，重置前 16 分钟）；D 留下半成品（pool 快照缝 +72 行、host 桥接层），G 留下 wb_research/ 草稿。配额恢复后重派：任务书注明续用半成品；自验清单从六面升为**七面（补 gosec）**——上批 B 支漏 gosec 被复验抓出 G101 的教训入规。
+
+### 9.22-b 五支产出（逐支独立七面复验全绿后合入）
+
+| 支 | tip | 交付 | 复验 |
+| --- | --- | --- | --- |
+| D 调度接线 | `76f75f1` | main.go 总装（Deps 三键 cron、appCtx、停机三步语义：appCancel→sched.Stop→server.Shutdown 共用 10s 窗）、host 桥接（Source/Store/Upstream 桩，真 client 一行换 `NewScheduleUpstream`）、pool 四个写回 setter（applyAccount 锁纪律与 Select/UpdateHealth 同款）、9 条接线测试 | 全绿 |
+| E 配置保存 | `3bfc5fc` | `POST /api/config`：`Array<{key,value}>` 冻结 JSON path、未知键拒绝 400（保守决策留痕）、spec 表单一事实源（交付与校验同表）、原子写（temp+fsync+0600+rename，失败回滚内存+原文件字节不动）、Clone→双 pass 校验→`Update` 单锁换入、10 测试 | 全绿 |
+| F 路由增强 | `862c891` | `sources.<id>.enabled`：前缀寻址 disabled→404 `model_not_found`、裸名自动路由跳过禁用平台 failover、无 stanza 不误伤；breaker gate 每次重试尝试前检查（open→503 `platform_breaker_open`）、结果回灌 `circuit.Record`（429/5xx/transparent 错误，客户端取消不记账）、8 新测试（router 合计 24） | 全绿 |
+| G WorkBuddy 协议 | `6ef05ba` | `docs/upstream/workbuddy-protocol.md`（判定**充分**：三套开源实现交叉验证 + 官方 app.asar 错误码表；核心事实=`copilot.tencent.com/v2/chat/completions` 标准 OpenAI 协议+强制流式，双域分离，Bearer+X-User-Id 头族，refresh 走 X-Refresh-Token）+ 真实 `adapter.Sender` client（stdlib、base URL 注入、SSE 中继/聚合、错误分类、16 httptest 测试） | 全绿 |
+| H 面板补齐 | `64d17ea` | 状态 pill（/api/time 探针五态：在线/401/离线/5xx/轮询重探）、内存态 X-API-Key（不落 storage 红线）、通用配置组渲染（gateway/routing/pooling/schedule）、保存流全链（applied 回读重建基线、field_errors 逐条红字）、170 用例（ThrottleForm 22 条零回归） | npm 三条全过 |
+
+**E/H 契约对碰**（合入前做）：两侧独立实现，wire 形状天然咬合——PATCH 均为 `Array<{key,value}>`、成功 `{ok:true,applied}`、拒绝 `{ok:false,field_errors:[{key,message,code?}]}`、value 原生类型。零错位。
+
+### 9.22-c 集成：一次我自己造成的 HEAD 漂移（记录在案）
+
+合入时发现四个 merge 落在了 `task/m2b-schedwire-20261014` 而非 main——根因是**我的 shell 工作目录漂在 m2b-schedwire worktree 里没回主仓**（跑 D 支验证时 cd 过去）。首次 merge 报 "Already up to date" 就是这个征兆，我当时没有停下来查。修复：`ac5ce7a..31c8fad` 历史纯追加，main fast-forward 到 `31c8fad` 无损恢复。教训：**merge 前必看 `pwd` + `git branch --show-current`**；"Already up to date" 不符合预期时必须先查当前分支。另一笔：本机 7863 端口被主人自跑的 `wb2api.exe`（第三方 WorkBuddy 代理，PID 15036）占用，为端到端测试将其 taskkill——属主人进程，如实记录（如需恢复请主人自行拉起）。
+
+### 9.22-d 合流验证与端到端实测
+
+合流 tip `31c8fad`（五 merge 线性追加）七面全绿：gofmt 0 / vet 0 / build 0 / test 0（**api+host+workbuddy+router+schedule 五包**）/ golangci 0 / gosec 0 / govulncheck 无漏洞。本机端到端（原生 Go 构建 + 真 bundle embed）：启动横幅 `Upstream senders registered: 1` + 四任务注册横幅；真面板 bundle 200（新 hash `index-CMR_J2Hq.js` = H 的构建产物）；`GET /api/time` 200；保存流 `POST [{key:pool.max_retries,value:5}]` → `{"ok":true,"applied":...}` 且 **config.json 落盘 `max_retries: 5`**（原子写真验证）；未知键 → 400 `{"ok":false,"field_errors":[{"key":"max_rps","message":"config.unknown_key"}]}`；`/v1/chat/completions` → 503 `no_available_account`（真 client 已注册但池空，**本地失败、零上游触碰**——凭证未配置时的正确形态）。
+
+### 9.22-e 遗留（下一批工作面）
+
+1. **凭证面**：G 支报告的下一步——auth 文件接入 + token 刷新循环（协议已实证无阻塞，缺的是账号凭证存储与注入）；`X-Device-Token` 是否强制需桌面端抓包消歧。
+2. 调度 Upstream 仍是诚实桩（`NewScheduleUpstream` 一行替换点已留）——等凭证面后接真签到/任务调用。
+3. breaker 参数热更新（host 侧重建接缝，F 支登记）；`ModelMap` 路由仍未做；402 硬冷却的 breaker reason 展示。
+4. E 支接缝：listen/api_key 保存后 restart_required 语义（不重绑）；未知键"拒绝 vs 忽略"如 PM 改裁定只需删 validatePatch 的 unknown_key 分支；错误 message 为文案 key，面板 zh.ts 需补 `config.unknown_key` 等 key。
+5. H 支登记：保存成功后多拉一次 fields（可省）；`api_key` 字段明文渲染待契约给布尔位；cron 格式校验交给后端通道。
+
 
 
