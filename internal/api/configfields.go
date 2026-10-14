@@ -67,8 +67,8 @@ func fbool(key, label, effect string) fieldDef {
 // handleConfigFields serves GET /api/config/fields → ConfigGroup[].
 // Read-only anchors (backoff.exhaust_402_until, notice_version) are NOT
 // editable fields (PM ruling: 不进可编辑集) and are deliberately absent.
-// Ranges: PRD §7.1 pins base_429_sec ≥ 600; all other bounds are engineering
-// guardrails pending UI §5.20 column-range sign-off — they never rename keys.
+// Ranges: PRD §7.1 pins base_429_sec ≥ 600; throttle-column bounds follow the
+// §5.20 range sign-off v0.1 (4 narrowed maxima, lower bounds unchanged).
 func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -110,8 +110,15 @@ func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 	for _, id := range sourceIDs {
 		p := "sources." + id + ".throttle."
 		th := configGroup{Group: "sources_throttle." + id, Fields: []fieldDef{
-			fnum(p+"steady_rpm", "config.field.steady_rpm.label", "rpm", 1, 10000, "next_request"),
-			fnum(p+"burst_rpm", "config.field.burst_rpm.label", "rpm", 1, 10000, "next_request"),
+			// Bounds are the §5.20 range sign-off v0.1 (UI UE, PM-ratified):
+			// lower bounds adopt the backend values unchanged, upper bounds are
+			// narrowed to the highest value with a real home-gateway scenario
+			// behind it. This constant table is the single source of truth for
+			// editable bounds — the frontend hard-codes no second set.
+			fnumWithDesc(p+"steady_rpm", "config.field.steady_rpm.label", "rpm", 1, 120,
+				"config.field.steady_rpm.desc", "next_request"),
+			fnumWithDesc(p+"burst_rpm", "config.field.burst_rpm.label", "rpm", 1, 300,
+				"config.field.burst_rpm.desc", "next_request"),
 			// min_gap_ms is ONE array-valued field [lo,hi] (M2 B2 ruling 2:
 			// delivery and write-back unified with the Go [2]int wire shape).
 			// The frozen FieldDef type enum has no tuple member, so this stays
@@ -119,14 +126,19 @@ func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 			// shape is documented through the description copy key.
 			fnumWithDesc(p+"min_gap_ms", "config.field.min_gap_ms.label", "ms", 0, 60000,
 				"config.field.min_gap_ms.desc", "next_request"),
-			fnum(p+"daily_cap", "config.field.daily_cap.label", "count", 1, 1000000, "next_request"),
-			fnum(p+"inflight", "config.field.inflight.label", "count", 1, 64, "next_request"),
-			fnum(p+"backoff.base_429_sec", "config.field.base_429_sec.label", "sec", 600, 86400, "next_request"),
-			fnum(p+"backoff.not_found_sec", "config.field.not_found_sec.label", "sec", 0, 3600, "next_request"),
+			fnumWithDesc(p+"daily_cap", "config.field.daily_cap.label", "count", 1, 10000,
+				"config.field.daily_cap.desc", "next_request"),
+			fnumWithDesc(p+"inflight", "config.field.inflight.label", "count", 1, 32,
+				"config.field.inflight.desc", "next_request"),
+			fnumWithDesc(p+"backoff.base_429_sec", "config.field.base_429_sec.label", "sec", 600, 86400,
+				"config.field.base_429_sec.desc", "next_request"),
+			fnumWithDesc(p+"backoff.not_found_sec", "config.field.not_found_sec.label", "sec", 0, 3600,
+				"config.field.not_found_sec.desc", "next_request"),
 		}}
 		if jitterSupported(id) {
 			th.Fields = append(th.Fields,
-				fnum(p+"jitter_minutes", "config.field.jitter_minutes.label", "min", 0, 120, "next_request"))
+				fnumWithDesc(p+"jitter_minutes", "config.field.jitter_minutes.label", "min", 0, 120,
+					"config.field.jitter_minutes.desc", "next_request"))
 		}
 		if halveBudgetSupported(id) {
 			th.Fields = append(th.Fields,

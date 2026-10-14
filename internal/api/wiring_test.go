@@ -195,3 +195,123 @@ func TestThrottleWireKeysAlwaysPresent(t *testing.T) {
 		t.Fatalf("absent jitter_minutes must keep the contract default 15 on read, got %d", got)
 	}
 }
+
+// B2b: §5.20 range sign-off v0.1 landing. The FieldDef min/max delivered here
+// is the SINGLE source of truth for editable throttle bounds — lower bounds
+// adopt the backend values unchanged, four upper bounds narrowed (steady
+// 10000→120, burst 10000→300, daily_cap 1000000→10000, inflight 64→32).
+// Every throttle column also carries a description copy KEY (never inline
+// text, UI §5.16) whose name must match fronted's zh.ts table 1:1.
+func TestThrottleSignoffBoundsExact(t *testing.T) {
+	loadB2Config(t, `{"listen":":0"}`)
+	groups := decodeGroups(t, doGet(t, "/api/config/fields"))
+
+	type bound struct {
+		key  string
+		min  float64
+		max  float64
+		desc string
+	}
+	cols := []bound{
+		{"steady_rpm", 1, 120, "config.field.steady_rpm.desc"},
+		{"burst_rpm", 1, 300, "config.field.burst_rpm.desc"},
+		{"min_gap_ms", 0, 60000, "config.field.min_gap_ms.desc"},
+		{"daily_cap", 1, 10000, "config.field.daily_cap.desc"},
+		{"inflight", 1, 32, "config.field.inflight.desc"},
+		{"backoff.base_429_sec", 600, 86400, "config.field.base_429_sec.desc"},
+		{"backoff.not_found_sec", 0, 3600, "config.field.not_found_sec.desc"},
+	}
+	for _, id := range []string{"qoder", "trae", "workbuddy"} {
+		for _, c := range cols {
+			f := groupField(t, groups, "sources_throttle."+id, "sources."+id+".throttle."+c.key)
+			if f == nil {
+				t.Fatalf("%s.%s must be delivered", id, c.key)
+			}
+			if f.Min == nil || *f.Min != c.min || f.Max == nil || *f.Max != c.max {
+				t.Fatalf("%s.%s bound drift: got [%v,%v], want [%v,%v] (sign-off v0.1 row)",
+					id, c.key, deref(f.Min), deref(f.Max), c.min, c.max)
+			}
+			if f.Description != c.desc {
+				t.Fatalf("%s.%s description must be the sign-off copy key %q, got %q",
+					id, c.key, c.desc, f.Description)
+			}
+		}
+	}
+	// jitter is source-filtered (B2 ruling 6): present with signed bounds only
+	// for the signin sources, absent for trae (coverage in
+	// TestJitterFieldDefSourceFilter).
+	for _, id := range []string{"workbuddy", "qoder"} {
+		f := groupField(t, groups, "sources_throttle."+id, "sources."+id+".throttle.jitter_minutes")
+		if f == nil {
+			t.Fatalf("%s jitter must be delivered", id)
+		}
+		if f.Min == nil || *f.Min != 0 || f.Max == nil || *f.Max != 120 {
+			t.Fatalf("jitter_minutes bound drift: got [%v,%v], want [0,120]", deref(f.Min), deref(f.Max))
+		}
+		if f.Description != "config.field.jitter_minutes.desc" {
+			t.Fatalf("jitter description must be config.field.jitter_minutes.desc, got %q", f.Description)
+		}
+	}
+}
+
+func deref(p *float64) float64 {
+	if p == nil {
+		return -1
+	}
+	return *p
+}
+
+// Sign-off test point ④: boundary pairs against the delivered FieldDef bounds
+// (in-range max accepted, max+1 rejected as "range"). The assertion is placed
+// on the bound authority itself so frontend and backend boundary tables can
+// never diverge — the validation predicate mirrors what both sides must use.
+func TestThrottleBoundaryPairs(t *testing.T) {
+	loadB2Config(t, `{"listen":":0"}`)
+	groups := decodeGroups(t, doGet(t, "/api/config/fields"))
+
+	inRange := func(f *fieldDef, v float64) bool {
+		return f.Min != nil && f.Max != nil && v >= *f.Min && v <= *f.Max
+	}
+	// {field, atMax must pass, overMax must fail} — 120/121, 300/301, 10000/10001, 32/33.
+	pairs := []struct {
+		key     string
+		atMax   float64
+		overMax float64
+	}{
+		{"steady_rpm", 120, 121},
+		{"burst_rpm", 300, 301},
+		{"daily_cap", 10000, 10001},
+		{"inflight", 32, 33},
+	}
+	for _, pr := range pairs {
+		f := groupField(t, groups, "sources_throttle.qoder", "sources.qoder.throttle."+pr.key)
+		if f == nil {
+			t.Fatalf("%s missing", pr.key)
+		}
+		if !inRange(f, pr.atMax) {
+			t.Fatalf("%s: %v is the signed-off max and must be valid", pr.key, pr.atMax)
+		}
+		if inRange(f, pr.overMax) {
+			t.Fatalf("%s: %v exceeds the signed-off max and must be rejected (code=range)", pr.key, pr.overMax)
+		}
+	}
+	// Narrowing must not have swallowed any recommended default (config.go
+	// defaultThrottle): WB 6/20/600/2, Qoder 4/12/300/1, Trae 2/6/100/1.
+	for _, id := range []string{"qoder", "trae", "workbuddy"} {
+		th := config.Shared.Get().Sources[id].Throttle
+		for _, v := range []struct {
+			key string
+			val float64
+		}{
+			{"steady_rpm", float64(th.SteadyRPM)},
+			{"burst_rpm", float64(th.BurstRPM)},
+			{"daily_cap", float64(th.DailyCap)},
+			{"inflight", float64(th.Inflight)},
+		} {
+			f := groupField(t, groups, "sources_throttle."+id, "sources."+id+".throttle."+v.key)
+			if f == nil || !inRange(f, v.val) {
+				t.Fatalf("built-in default %s.%s=%v must stay inside the narrowed bounds", id, v.key, v.val)
+			}
+		}
+	}
+}
