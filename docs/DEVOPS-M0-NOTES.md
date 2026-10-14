@@ -784,5 +784,28 @@ run `38565902432` 首跑失败在 `lint / vet` 的 **golangci 安装步骤**：`
 4. E 支接缝：listen/api_key 保存后 restart_required 语义（不重绑）；未知键"拒绝 vs 忽略"如 PM 改裁定只需删 validatePatch 的 unknown_key 分支；错误 message 为文案 key，面板 zh.ts 需补 `config.unknown_key` 等 key。
 5. H 支登记：保存成功后多拉一次 fields（可省）；`api_key` 字段明文渲染待契约给布尔位；cron 格式校验交给后端通道。
 
+## 9.23 M3 凭证接入 + Windows 安装包 + **首次真实代理打通**（主人提供凭证目录，2026-10-15 凌晨）
+
+### 9.23-a M3a 凭证接入（`9cbbda3`，独立七面复验全绿后合入）
+
+主人确认凭证在本机：`Desktop/workbuddy2api-账号登录信息-2026-10-13`（第三方 wb2api.exe 的数据目录），`auths/` 下 **4 个 workbuddy 账号**（accessToken JWT ~1300 字 + refreshToken + realm/domain，`expiresAt` unix 秒），字段与 G 支协议报告逐项吻合。实现（单独 agent 垂直交付，host 侧 `CredentialStore` + `LoadAuthDir` + client 侧 `refresh.go` 单飞刷新）：**凭证绝不进 pool.Account/state_file**（红线测试断言四类序列化产物不含 token 子串）；401/过期 → `POST /v2/plugin/auth/token/refresh`（`X-Refresh-Token`，无 Authorization）→ 单飞 + 5 分钟静默窗 → store 更新 + **原子回写 auth 文件**（raw map 重写保结构，失败只记日志不断请求链）。已把 4 个凭证文件复制进本机运行目录 `auths/`（仓库外，`.gitignore:6` 本就忽略 auths/）。
+
+### 9.23-b Windows 安装包（`1b268ed`，沙箱实测装/卸）
+
+本机无 NSIS/Inno Setup → 仓库内 `scripts/package-windows.ps1`（+ Makefile `package-windows` 目标）产出 `dist/all2api-<ver>-windows-amd64.zip`：版本注入 exe、config 模板、`install.ps1`（默认 Program Files 需管理员 / `-PerUser` 免提权；`-Autostart`/`-Firewall` 可选；升级不覆盖用户 config）、`uninstall.ps1`（**默认保留用户数据**——config/`auths\` 凭证/`data\` 状态；`-Purge` 连数据删）、`.bat` 双击包装、中文 README（含端口设置说明）。脚本自带 go 常见位置回退探测（本机 go 不在系统 PATH 的坑）。沙箱实测：per-user 安装 → 装出目录起 gateway healthz 200；卸载保留数据 ✓；`-Purge` 删树 ✓（首测 purge "失败"是测试 shell 自己 CWD 占目录的 Windows 限制，中立目录复测通过——记一笔防重犯）。
+
+### 9.23-c 首次真实代理打通（本机，真实凭证 + 真实上游）
+
+运行配置 `credit_floor=0`（auth 文件无 credit，按 0 注册——M3a 留的接缝提示，floor=100 默认会挡请求路径选号）。启动横幅：`Loaded 4 workbuddy credential(s) from ./auths` + `WorkBuddy credential source + refresh sink wired`。实测两发：
+
+- 非流式 `deepseek-v4-flash`「1+1等于几？」→ **HTTP 200，`"content":"2"`，usage 18+1 tokens，1.5s**——路由→池选号→凭证→WorkBuddy client→copilot.tencent.com→SSE 聚合→OpenAI JSON 全链真实打通；
+- 流式 → SSE chunk 正常下发（role 首帧 + content 帧）。
+
+两个有教育意义的中间现象：坏模型名 `test` 收到的是**上游真实报错**透传（鉴权已通）；随后一发 `no_available_account` 是池的 30s 防雷 lease 把 4 账号按重试依次出局——设计如此，lease 过期即恢复。
+
+### 9.23-d 状态与遗留
+
+产品闭环达成：网关现在是**真正能用的 OpenAI 兼容代理**（4 账号池 + 自动刷新 + 面板操作）。CI run `38603899453` 十 job 全绿。遗留：M3b 调度 Upstream 接真（签到/活跃/猫旅/保活走真实端点，store 已备好凭证源）；credit 播种策略（结算接口或保活带回）；安装包进 CI release 流水线（现为本机构建）。
+
 
 
