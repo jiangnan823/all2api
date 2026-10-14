@@ -718,5 +718,37 @@ lint/vet（golangci v2.14.0 + B3prep 修复**首绿**）、test/race、panel/bui
 
 `78150e4`：探测改为「grep 匹配路径原样拼接（不加斜杠）」，js/css **对称双探测**，引用路径缺失时大声失败；本地先验证（真 bundle 二进制：js/css 双 200；旧双斜杠形态 307+Location 复现）再 actionlint 通过后推送。run `38542929639`（head `78150e4`）：**10/10 job 全绿，云端首绿成立**。smoke 内 `Assert served panel is the built bundle` 与上轮被它挡住的 `Assert graceful shutdown within stop grace period`（容器内优雅停机**首次取证**）均 success。首推合批的三个预期目标全部兑现：B0 lint 线首绿（B3prep 解锁）、panel 管道断言全链路真执行、镜像内真实面板端到端可证。
 
+## 9.21 M2 并发开发批（主人指令「并发子agent开始开发」）：路由层 + 调度处理器 + 面板设置屏，三支并行合入全绿
+
+### 9.21-a 切域与派发（互不踩脚是前提，不是运气）
+
+按文件面切三个独立域，各自 worktree/分支、同基 `15f86d8`：**A 路由层** `task/m2-router-20261014`（唯一可碰 `cmd/gateway/main.go` + `internal/adapter/sender.go` 新文件 + `internal/router/` 新包）；**B 调度处理器** `task/m2-schedule-20261014`（只加 `internal/schedule/` 新文件，依赖倒置接口本地化）；**C 面板设置屏** `task/m2-panel-screens-20261014`（只动 `web-panel/`）。任务书钉死：stdlib only（仓零依赖不许破）、npm 依赖冻结、禁 push、钉版工具链自验、ugrep 封装坑预警（§9.20-c）、上游协议仓内没有 → **接口先行 + 假上游测试，不许发明平台端点**。
+
+### 9.21-b 三支产出与逐支独立复验（不采信自述）
+
+| 支 | tip | 产出 | 独立复验 |
+| --- | --- | --- | --- |
+| A 路由层 | `8ce99f7` | `adapter.Sender` 接口 + `internal/router`（423 行）+ 16 条测试（558+241 行）；`/v1/chat/completions` 非流式+SSE、`/v1/responses` 跟 flag、Bearer 鉴权、前缀/裸名路由、池选号编排、结果回灌 UpdateHealth | 六面全绿 |
+| B 调度处理器 | `5e5723f`→`de9925a` | 四任务 handler + `Deps` 依赖倒置 + 13 条确定性测试（960 行，零既有文件改动） | 首验 **gosec G101 1 条** → 见 c 节 → 重验六面绿 |
+| C 面板设置屏 | `17c03ae` | SettingsScreen + panelApi/settingsModel lib + 26 条新测试（合计 155 用例）；真拉 `/api/config`+`/api/config/fields` 元数据驱动，dirty 跟踪，保存置灰+诚实文案 | npm typecheck/test/build 三条 0 |
+
+**B 支 G101**：`DefaultTokenKeepaliveCron` 常量名含 "Token" 被 gosec 猜成硬编码凭证（值为 cron 表达式）——按 `config.go:149` 同族先例（`TokenKeepalive` 行内精确豁免）修为 `de9925a`。**教训入规：子agent 自验清单此前未含 gosec，本批起任务书必须含全套七面**，否则复验才发现等于多烧一轮。
+
+### 9.21-c 合入、合流门禁与本机端到端
+
+A→B→C 顺序合入零冲突（文件面互斥兑现），合流 tip `1fc1161`。钉版七面全绿（gofmt 0 / vet 0 / build 0 / test 0 含 router+schedule 新包 / golangci 0 条 / gosec 0 / govulncheck 无漏洞）。本机端到端（真 bundle embed 重编）：`GET /` 200 真面板（hash 资产）、`GET /api/config` 200、`POST /v1/chat/completions` → **503 OpenAI 信封 `no_upstream_sender`**（路由层活、诚实地报缺真实上游客户端）、`POST /v1/responses` → 501（flag 默认关）、启动横幅新增 `Upstream senders registered: 0`。
+
+### 9.21-d 云端一次临时性失败与重跑
+
+run `38565902432` 首跑失败在 `lint / vet` 的 **golangci 安装步骤**：`go install …@v2.14.0` 校验依赖 `uudashr/iface@v1.5.1` 时 sum.golang.org 返回 HTTP/2 `INTERNAL_ERROR`（校验和数据库传输层抖动，非代码/配置缺陷；同步骤此前多次成功）。处置：API `rerun-failed-jobs`（201）重跑失败 job 及受影响下游，终态 **completed/success 全绿**。不改配置不迁就临时故障。
+
+### 9.21-e 三支如实登记的缺口（下一批工作面）
+
+1. **无平台 HTTP client**：`Sender` 只有测试假实现，生产二进制 `/v1` 全部 503 `no_upstream_sender`——等上游协议调研批（这是本批设计形态，不是缺陷）；`/v1/responses` 返回 chat 形状，原生 envelope 转换属协议批。
+2. 路由未消费 `sources.<id>.enabled`（一键摘源对 /v1 未生效）与 per-source 熔断器（host.Breaker 有、dispatch 未用）；`ModelMap` 未参与路由（顶层与 router 下两处同名字段语义未裁定）。
+3. 调度：`cat_travel` 无 config 键（事实来源仅 schedule.go 包头注释，已固化为常量并测试锁死）；`Scheduler.Stop()` 不取消 context，停机靠集成方注入 baseCtx——**接线批**要做 `RegisterDefaultHandlers(appCtx, …)` 总装（Source/Upstream/Store/Crons/ReportStats 五依赖注入）。
+4. 面板：无保存端点（后端工作项，UI 已如实置灰）；topbar 状态 pill 仍是「未接线」占位文案；X-API-Key 真实 key 来源未做；通用配置组（gateway/routing/pooling/schedule）字段已下发未渲染。
+5. 契约小缺口：`FieldDef.requires_confirm` 在 api-contract.ts 缺显式注释（解析已按后端实现）；Go 零值序列化使 `jitter_minutes`/`halve_budget_after_429` 恒在 wire（契约标 optional，解析层两态容忍）。
+
 
 
