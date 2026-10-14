@@ -473,5 +473,33 @@ Summary:
 
 **devops 侧判定**：R2-sec 双签中「gosec 实测 HIGH=0」这一签**成立**，条件是把工具链钉在便携链（go1.24.13 + gosec v2.29.0）。
 
+## 9.14 merged tip `22409df` 收尾复验（R2-sec 合流后，安全线收口）
+
+**合流结构独立复核**（未采信自报）：
+- `git rev-list --parents -n1 22409df` = `22409df / 8de54360 / 4109d6cf` ⇒ **确为 `--no-ff` 双亲 merge commit**，base 取 `main@8de5436`，与 PM seq=739 指令一致 ✅
+- `git diff 8de5436..22409df` = 恰 2 文件 / +2 −2（`config.go`、`pool.go` 行尾 nosec），**非 Go 路径 0 个** ⇒ 合流未夹带任何其他变化 ✅
+- `git diff 4109d6c..22409df` = 仅 `.github/workflows/ci.yml` + `docs/DEVOPS-M0-NOTES.md`（我的 `8de5436` 工件本体）⇒ **merge commit 代码增量 = 0** ✅
+- merged tip 两文件 blob 与分支 tip **逐一同值**（`ac63914` / `ee4ddc8`）⇒ 同一 tree 内容合入 ✅；工作树干净，未 push。
+
+**门禁实测 @22409df**（便携链 go1.24.13 + gosec v2.29.0 + golangci-lint v1.64.8，与 CI 钉版同构；`git archive` 导出，检出与 worktree 未碰）：
+
+| 门禁 | 结果 |
+| --- | --- |
+| `go vet ./...` | exit=0 |
+| `go build ./...` | exit=0 |
+| `go test ./...` | exit=0，`ok internal/api` |
+| **`gosec -severity high -fmt=text ./...`** | **exit=0 / Files 23 / Lines 2773 / Nosec 2 / Issues 0**；载入错误 **0** 处、`Severity: HIGH` 标记行 **0** 行 ⇒ **安全线合入门禁达成** |
+| `golangci-lint run ./...`（仓库内 `.golangci.yml`） | **exit=0，0 条**（noctx 豁免仍只钉 `cmd/gateway/main.go:181` 一行） |
+| `gofmt -l`（LF blob 镜像 30 文件） | **0/30**，便携链与系统链（1.24.13 / 1.27.2）结论一致 |
+| 系统 go1.27.2 快子集 | `vet` / `build` / `test` 均 exit=0（lint 与 gosec **不在本机 1.27 上出结论**，理由见 §9.13-b） |
+
+**冻结面台账口径（供 PM 落 PRD v0.2.5）**：
+- `14bdaa3..22409df` = 5 个路径：`internal/config/config.go`、`internal/pool/pool.go`（backend 代码线，各 1 行 nosec）+ `.github/workflows/ci.yml`、`Makefile`、`docs/DEVOPS-M0-NOTES.md`（devops 工件线，`bc60417` / `8de5436`，均已逐例追认）。
+- `9963226..22409df` 对冻结清单命中 = **4 项，全部来自 devops 工件线**（`.github/workflows/ci.yml`、`.golangci.yml`、`Makefile`、`docs/DEVOPS-M0-NOTES.md`），代码线对冻结清单命中 = **0**。
+⇒ 台账仍按既定口径落字：「**代码线冻结面零命中 + 工件线四项已逐例追认**」，不写"merged tip 冻结面零命中"。
+
+**devops 侧判定 @22409df**：R2-sec 在 CI/门禁面**已验证 = 绿**，gosec HIGH 由 2 → 0，且经 §9.12/§9.13 的云端与安全线事实串联后，M1 安全线本地侧收口。
+**唯一仍未闭合的依赖（不是缺陷，是顺序）**：`bc60417`（gosec 参数修复 + 聚合判定）与 `8de5436`（注释/台账）随 `22409df` 一起仍在本地 ⇒ security job 的云端首绿与 **govulncheck 首跑**必须等主人自主 push 后才拿得到；团队不提 push 请求。
+
 
 
