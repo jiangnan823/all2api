@@ -130,6 +130,14 @@ func defaultThrottle(source string) ThrottleConfig {
 	return t
 }
 
+// Defaults returns the built-in default configuration (the exact baseline
+// Load starts from before unmarshalling a file). Exported for the config-save
+// path's rollback story and for tests that need the contract defaults without
+// a file on disk.
+func Defaults() Config {
+	return defaults()
+}
+
 func defaults() Config {
 	return Config{
 		Listen:        ":7863",
@@ -195,9 +203,59 @@ func (h *HotReloadable) Reload() error {
 	return nil
 }
 
+// Path returns the file path this instance was Load()ed from ("" before the
+// first Load). The config-save endpoint writes back to the same resolution
+// chain (main.go resolveConfigPath: -config → ALL2API_CONFIG → ./config.json),
+// so it saves whatever path the running process actually loaded — never a
+// second resolution of its own.
+func (h *HotReloadable) Path() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.path
+}
+
 // Get returns a snapshot of the current config (safe for concurrent read).
 func (h *HotReloadable) Get() Config {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.Config
+}
+
+// Clone returns a deep copy of the current config: the caller may freely
+// mutate the maps (Sources, ModelMap, Router.ModelMap) without tearing
+// concurrent Get() readers. Read-modify-write cycles MUST go through
+// Update (which holds the write lock across the whole swap) rather than
+// mutating the struct returned by Get.
+func (h *HotReloadable) Clone() Config {
+	c := h.Get()
+	return cloneConfig(c)
+}
+
+// Update atomically swaps the in-memory config under the write lock. The
+// caller works on a private Clone and hands the finished copy over here, so
+// readers via Get never observe a half-mutated struct (maps are replaced as
+// a whole, never edited in place).
+func (h *HotReloadable) Update(c Config) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Config = c
+}
+
+func cloneConfig(c Config) Config {
+	sources := make(map[string]SourceConfig, len(c.Sources))
+	for id, sc := range c.Sources {
+		sources[id] = sc
+	}
+	modelMap := make(map[string]string, len(c.ModelMap))
+	for k, v := range c.ModelMap {
+		modelMap[k] = v
+	}
+	routerModelMap := make(map[string]string, len(c.Router.ModelMap))
+	for k, v := range c.Router.ModelMap {
+		routerModelMap[k] = v
+	}
+	c.Sources = sources
+	c.ModelMap = modelMap
+	c.Router.ModelMap = routerModelMap
+	return c
 }

@@ -15,10 +15,13 @@ import (
 )
 
 // Register wires the M1 queue-③/④ routes (plus the wiring-batch recover
-// endpoint) onto mux. The host carries the circuit↔pool wiring; recover is
-// registered only when a host exists so the endpoint can never hang empty.
+// endpoint and the M2 config-save endpoint) onto mux. The host carries the
+// circuit↔pool wiring; recover is registered only when a host exists so the
+// endpoint can never hang empty. The method-specific "POST /api/config"
+// pattern wins over the catch-all "/api/config" read view for POST requests.
 func Register(mux *http.ServeMux, h *host.Host) {
 	mux.HandleFunc("/api/config", withAPIKey(handleConfig))
+	mux.HandleFunc("POST /api/config", withAPIKey(handleConfigSave))
 	mux.HandleFunc("/api/config/fields", withAPIKey(handleConfigFields))
 	mux.HandleFunc("/api/time", withAPIKey(handleServerTime))
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))
@@ -88,10 +91,22 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	cfg := config.Shared.Get()
 
-	raw, err := json.Marshal(cfg)
+	panel, err := buildPanelConfig(cfg)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "config unavailable"})
 		return
+	}
+	writeJSON(w, http.StatusOK, panel)
+}
+
+// buildPanelConfig renders the frozen PanelConfig response shape from a
+// config snapshot. Shared by GET /api/config and the applied payload of
+// POST /api/config (ConfigSaveResponse.applied — the panel trusts the
+// server-side readback, never its optimistic local values).
+func buildPanelConfig(cfg config.Config) (panelConfigResponse, error) {
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return panelConfigResponse{}, err
 	}
 
 	throttle := make(map[string]config.ThrottleConfig, len(cfg.Sources))
@@ -111,13 +126,13 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	flags.RedisMirror = boolAt(extras, "redis_mirror")
 	flags.DebugBodySampling = boolAt(extras, "debug_body_sampling")
 
-	writeJSON(w, http.StatusOK, panelConfigResponse{
+	return panelConfigResponse{
 		Raw:           raw,
 		FeatureFlags:  flags,
 		Throttle:      throttle,
 		Advanced:      advanced,
 		NoticeVersion: cfg.NoticeVersion,
-	})
+	}, nil
 }
 
 func boolAt(m map[string]json.RawMessage, key string) bool {
