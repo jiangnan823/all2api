@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sort"
 
 	"all2api/internal/config"
 )
@@ -15,6 +16,15 @@ import (
 // passthrough — no contract-surface change, no D2 needed.
 func halveBudgetSupported(source string) bool {
 	return source == "qoder"
+}
+
+// jitterSupported is the sibling filter decided in M2 B2 (PM ruling 6):
+// jitter_minutes is a signin-schedule attribute, delivered only for the
+// sources that run timed signin tasks (workbuddy, qoder). Frontend renders
+// "FieldDef present = render" and never guesses source classes itself —
+// the display condition lives exclusively in this delivery set.
+func jitterSupported(source string) bool {
+	return source == "workbuddy" || source == "qoder"
 }
 
 // FieldDef metadata delivery (M1 queue ④). The panel form is backend-driven
@@ -42,6 +52,12 @@ type configGroup struct {
 func fnum(key, label, unit string, min, max float64, effect string) fieldDef {
 	lo, hi := min, max
 	return fieldDef{Key: key, Label: label, Type: "number", Unit: unit, Min: &lo, Max: &hi, Effect: effect}
+}
+
+func fnumWithDesc(key, label, unit string, min, max float64, desc, effect string) fieldDef {
+	f := fnum(key, label, unit, min, max, effect)
+	f.Description = desc
+	return f
 }
 
 func fbool(key, label, effect string) fieldDef {
@@ -82,20 +98,36 @@ func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 		}},
 	}
 
-	// Per-source groups generated from configured sources — frozen paths only.
+	// Deterministic delivery order (M2 B2 ruling 7): fixed global groups first,
+	// then per-source throttle/danger pairs sorted by source id — Go map
+	// iteration order must never leak onto the wire.
+	sourceIDs := make([]string, 0, len(cfg.Sources))
 	for id := range cfg.Sources {
+		sourceIDs = append(sourceIDs, id)
+	}
+	sort.Strings(sourceIDs)
+
+	for _, id := range sourceIDs {
 		p := "sources." + id + ".throttle."
 		th := configGroup{Group: "sources_throttle." + id, Fields: []fieldDef{
 			fnum(p+"steady_rpm", "config.field.steady_rpm.label", "rpm", 1, 10000, "next_request"),
 			fnum(p+"burst_rpm", "config.field.burst_rpm.label", "rpm", 1, 10000, "next_request"),
-			fnum(p+"min_gap_ms.lo", "config.field.min_gap_ms_lo.label", "ms", 0, 60000, "next_request"),
-			fnum(p+"min_gap_ms.hi", "config.field.min_gap_ms_hi.label", "ms", 0, 60000, "next_request"),
+			// min_gap_ms is ONE array-valued field [lo,hi] (M2 B2 ruling 2:
+			// delivery and write-back unified with the Go [2]int wire shape).
+			// The frozen FieldDef type enum has no tuple member, so this stays
+			// type=number with min/max applying to BOTH components; the array
+			// shape is documented through the description copy key.
+			fnumWithDesc(p+"min_gap_ms", "config.field.min_gap_ms.label", "ms", 0, 60000,
+				"config.field.min_gap_ms.desc", "next_request"),
 			fnum(p+"daily_cap", "config.field.daily_cap.label", "count", 1, 1000000, "next_request"),
 			fnum(p+"inflight", "config.field.inflight.label", "count", 1, 64, "next_request"),
 			fnum(p+"backoff.base_429_sec", "config.field.base_429_sec.label", "sec", 600, 86400, "next_request"),
 			fnum(p+"backoff.not_found_sec", "config.field.not_found_sec.label", "sec", 0, 3600, "next_request"),
-			fnum(p+"jitter_minutes", "config.field.jitter_minutes.label", "min", 0, 120, "next_request"),
 		}}
+		if jitterSupported(id) {
+			th.Fields = append(th.Fields,
+				fnum(p+"jitter_minutes", "config.field.jitter_minutes.label", "min", 0, 120, "next_request"))
+		}
 		if halveBudgetSupported(id) {
 			th.Fields = append(th.Fields,
 				fbool(p+"halve_budget_after_429", "config.field.halve_budget_after_429.label", "next_request"))
