@@ -108,7 +108,7 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 	defer s.mu.Unlock()
 
 	platformMap := s.accounts[platform]
-	if platformMap == nil || len(platformMap) == 0 {
+	if len(platformMap) == 0 { // S1009: len() of a nil map is already 0
 		return nil, nil
 	}
 
