@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- B1：入口页。Go 侧 serveIndexInjected 会把 window.__ALL2API_BASE__ 注入标签插到 <head> 之后，
+     故本文件必须保留开标签 <head>，且不得在此内联任何凭证或配置。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>all2api 管理面板</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>本面板需要浏览器启用 JavaScript 才能显示配置。</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -169,3 +169,24 @@ export function reasonCopy(code: string, message?: string) {
   if (hit) return hit;
   return { label: message || REASON_FALLBACK.label, action: REASON_FALLBACK.action };
 }
+
+/**
+ * 面板外壳文案（B1）。全部为**新增键**，不改动上方任何冻结文案：
+ * §9 逐字基准与 402 唯一形态由 TC-M1-033 diff 通道守卫，本批零触碰。
+ */
+export const PANEL = {
+  TITLE: 'all2api 管理面板',
+  RAIL_ARIA: '主导航',
+  LOGO: 'a2',
+  NAV_SETTINGS: '配置',
+  NAV_CONNECT: '接入',
+  THEME: '切换明暗主题',
+  STATUS_LABEL: '接口状态',
+  STATUS_UNWIRED: '未接线',
+  SETTINGS_TITLE: '按源节流与高级选项',
+  SETTINGS_SUB: '每个来源的节流预算与请求特征改写都集中在此管理。',
+  CONNECT_TITLE: '接入与凭证',
+  CONNECT_SUB: '新增来源、校验凭证，以及接入须知的确认记录。',
+  EMPTY_TITLE: '本节尚未接入网关接口',
+  EMPTY_BODY: '这里显示的是网关的实时配置与状态。本次构建交付的是界面骨架，接线完成后内容自动出现。',
+} as const;
