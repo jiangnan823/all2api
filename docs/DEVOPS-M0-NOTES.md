@@ -652,5 +652,29 @@ got=$(go version -m "$BIN" | awk '$1=="mod"{print $3}')   # 与 env 钉版逐字
 
 `b0six.sh` 首次跑出 `Files : 0 / Lines : 0 / Issues : 0` 且 golangci 报 `go: executable file not found` —— 原因是我把 Windows 的 `;` 分隔符写进了 bash 的 `PATH`。这是**同一族故障的本地复现**：加载器找不到 `go` 时 gosec 不报错，只安静印零。改用 `cygpath` 生成 `:` 分隔 PATH 后，六面全部按 §9.16-c 口径重跑通过（gofmt 0/30、vet/build/test exit 0、`config verify` exit 0、lint 恰 4 条、gosec `Nosec 2 / Issues 0`、`No vulnerabilities found`、`actionlint` exit 0）。教训：**任何"零发现"结论都要先看有没有载入错误行**，本轮已在 `ci.yml` 注释与 Makefile 注释里把这条写成硬口径。
 
+## 9.18 B3 前置复验 + B2 exit=3 定性 + M2 四支合流模拟全绿（2026-10-14 下午，主仓零触碰）
+
+对象是三条未合分支：backend 的 B3 前置 `905793f`（修掉 §9.16-d.1 登记的 4 条 lint 红，fix-only：`recover_test.go` 三处 `httptest.NewRequest`→`NewRequestWithContext` + `pool.go:111` 去掉 nil 合取，无豁免）、backend 的 B2 `32e3bf8`（api 接线三提交，+418 −20，5 文件）、fronted 的 B1 `a860150`（已由 §9.17 覆盖 devops 半边）。全部测量在 `%LOCALAPPDATA%\Temp\devops-go` 的临时树进行（`git archive` / 独立克隆），主仓工作树与各 worktree 未动。
+
+### 9.18-a 先修我自己 harness 的测量 bug（v1：两棵树其实是一棵）
+
+首轮复验用 `checkout-index -a` 导树 —— 它导出的是**当前索引的内容**（= main），所以「7641a4c 对照」与「905793f 修复」两棵镜像字节相同，修复行测出来必然是假的。v2（`b3cross2.sh`）改用 `git archive <sha>` 逐 SHA 取树，并在任何门禁数字之前先做 blob 身份断言（`rev-parse <sha>:<file>` vs `hash-object --no-filters` 镜像文件）。v2 重跑的结论才算数：**对照组 7641a4c 恰好 4 条**（三条 noctx + 一条 S1009，与 §9.16-c 登记逐字一致，证明 harness 能测出红）；**905793f 六面全绿**（gofmt 0、vet/build/test exit 0、golangci exit 0 且 0 条、gosec `Issues : 0` 且 could-not-import 0、两文件 blob 身份 MATCH）。§9.16-d.1 的 4 条红就此核销。
+
+### 9.18-b B2 的 exit=3：基点偏斜，不是代码缺陷
+
+B2 单独测出 `golangci exit=3 / issue lines=0`，且 harness 的报错过滤 grep 一无所获 —— 与 §9.17-d 同族：**结论异常时先看原始输出**。保留全量 stderr 复跑后真因一行即见：`can't load config: unsupported version of the configuration: ""` —— B1/B2 都从 `2131d30` 切出，**早于 B0（545460d）把 `.golangci.yml` 迁到 v2 schema**，所以 B2 树里的配置还是 v1 格式，v2.14.0 二进制在配置加载一步即退，扫描器一次都没跑。⇒ pre-B0 基点的分支树**无法**用钉版 v2 二进制单测，其代码的有效测量面是合流后的树（下节）；同时 vet/build/test/gosec 四面在 B2 单树上本来就绿。
+
+### 9.18-c 合流模拟：main + B1 + B2 + B3prep = `73a4047`，七面全绿
+
+独立克隆里按 `a860150 → 32e3bf8 → 905793f` 顺序合并到 `7641a4c`，零冲突。门禁（工具四元组自证 go1.26.9 / v2.14.0 / v2.29.0 / v1.9.0，`GOTOOLCHAIN=local`）：vet 0、build 0、test 0（`ok all2api/internal/api 0.598s`）、golangci exit 0 且 0 条、gosec `Issues : 0` + 0 载入错误、govulncheck `No vulnerabilities found.` —— **lint 线在含 B2 新码的树上也是绿的**，B3prep 的修复在合并后依然成立。
+
+身份核验踩到第二个 harness 坑并当场甄别：克隆 `core.autocrlf=true` 把工作树检成 CRLF，导致 (i) `hash-object` 对四个关键文件全部"身份不符"、(ii) gofmt 把 32 个文件全部 flag。甄别与修正：**身份断言改在对象库层面做**（`rev-parse <merged>:<f>` vs `rev-parse <src>:<f>`，与检出过滤器无关）—— 7/7 MATCH（B3prep 两修复文件、B2 的 `wiring_test.go`/`time.go`、B1 的 `package.json`、main 的 `.golangci.yml`/`ci.yml`，即合流 tip 精确携带四源各自的内容）；EOL 敏感门禁改在 `git archive` 的 LF 镜像上跑 —— gofmt 0、golangci 仍 0 条。另注记一处坏指标：日志里「files containing CRLF: 29/31」是 `grep -rlc` 组合缺陷（`-c` 输出击败 `-l`，数的其实是文件总数），从来不是 CRLF 命中数，勿引用。
+
+### 9.18-d 落地口径与遗留
+
+1. **建议合批**：B0（545460d）+ B1（a860150）+ B2（32e3bf8）+ B3prep（905793f）同批 push 取云端首绿 —— B3prep 已把 B0 单独合入时注定红的 lint 解锁，四支内容互斥、合流树本地七面全绿；再单独 push 任一支都是多烧一次云端额度（§9.16-d.1 的顺序建议至此兑现）。
+2. **本机边界照旧**：无 docker、无 make、云端未跑 —— `docker build` / `make panel` / Actions 首绿仍属主人/云端取证面；merge 模拟中 panel job 的真实产物断言（§9.17-b.1 的 declared/real 判据）在云端首跑时才第一次真执行。
+3. harness 脚本存档：`%LOCALAPPDATA%\Temp\devops-go`（`b3cross2.sh` 逐 SHA 门禁 + 身份断言、`b3merge.sh`/`b3merge2.sh` 合流模拟与 blob 级复核），Temp 不保证存活，结论以本节文字为准。
+
 
 
