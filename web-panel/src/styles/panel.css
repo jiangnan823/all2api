@@ -404,3 +404,157 @@
     align-items: stretch;
   }
 }
+
+/* M2 B2 设置屏容器（加载/错误态、来源选择器、高级区、dirty 汇总条）。token 全部取自 tokens.css */
+.settings-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.settings-screen__state {
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.settings-screen__state--error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  border-color: var(--status-danger);
+  color: var(--text-primary);
+}
+
+.settings-screen__state-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--status-danger);
+}
+
+.settings-screen__state-msg {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.settings-screen__state-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.settings-screen__meta {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.settings-screen__src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+}
+
+.settings-screen__src legend {
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.settings-screen__src-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-h);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.settings-screen__src-item:has(input:checked) {
+  background: var(--bg-selected);
+  border-color: var(--brand);
+}
+
+.settings-screen__src-item input {
+  accent-color: var(--brand);
+}
+
+/* dirty 高亮：本地改动未保存的来源在选择器上点亮（后端只读，改动不会落盘） */
+.settings-screen__dirty-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--status-warn);
+}
+
+.settings-screen__advanced {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+}
+
+.settings-screen__advanced-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.settings-screen__switch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-h);
+  cursor: pointer;
+}
+
+.settings-screen__switch input {
+  accent-color: var(--brand);
+}
+
+.settings-screen__switch-state {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.settings-screen__switch-state--off {
+  color: var(--status-warn);
+  font-weight: 600;
+}
+
+.settings-screen__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-divider);
+}
+
+.settings-screen__bar-note {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.settings-screen__readonly-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  color: var(--status-warn);
+}
