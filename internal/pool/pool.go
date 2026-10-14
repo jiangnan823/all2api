@@ -233,6 +233,10 @@ func (s *WeightedRandomSelector) RecoverAccount(platform, accountID string) bool
 }
 
 // ListAccounts returns all accounts for a platform.
+//
+// The returned slice aliases the pool's live *Account values — readers race
+// with pool mutations. Prefer SnapshotAccounts for anything that inspects
+// fields after the call (the scheduled-task source does).
 func (s *WeightedRandomSelector) ListAccounts(platform string) []*Account {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -242,4 +246,72 @@ func (s *WeightedRandomSelector) ListAccounts(platform string) []*Account {
 		result = append(result, acc)
 	}
 	return result
+}
+
+// SnapshotAccounts returns value copies of every pooled account across all
+// platforms. Copies share nothing with the pool's live state, so callers may
+// inspect or retain them lock-free. Minimal read-only seam for the
+// scheduled-task account source (M2 batch ②); unordered.
+func (s *WeightedRandomSelector) SnapshotAccounts() []Account {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]Account, 0, 16)
+	for _, platformMap := range s.accounts {
+		for _, acc := range platformMap {
+			result = append(result, *acc)
+		}
+	}
+	return result
+}
+
+// applyAccount locates a pooled account and mutates it under the write lock —
+// the shared body of the four scheduler write-back setters below. Caller must
+// NOT hold s.mu (same lock discipline as Select/UpdateHealth: every field
+// write happens under Lock, line 111 precedent).
+func (s *WeightedRandomSelector) applyAccount(platform, accountID string, mutate func(*Account)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	acc, ok := s.accounts[platform][accountID]
+	if !ok {
+		return false
+	}
+	mutate(acc)
+	return true
+}
+
+// ApplyAccountCredit adds a signed credit delta to a pooled account
+// (scheduled-task reward write-back; Round stays request-path only).
+// Returns false when the account is unknown.
+func (s *WeightedRandomSelector) ApplyAccountCredit(platform, accountID string, delta int64) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.Credit += delta
+	})
+}
+
+// SetAccountStatus writes a lifecycle status ("active"/"cooling"/"disabled").
+// Returns false when the account is unknown.
+func (s *WeightedRandomSelector) SetAccountStatus(platform, accountID, status string) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.SetStatus(status)
+	})
+}
+
+// SetAccountCooldown puts the account into cooldown until the given time and
+// sets its status to "cooling" (Account.TriggerCooldown parity, absolute-time
+// form). Returns false when the account is unknown.
+func (s *WeightedRandomSelector) SetAccountCooldown(platform, accountID string, until time.Time) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.CooldownEnd = until
+		acc.SetStatus("cooling")
+	})
+}
+
+// SetAccountExpiry records a refreshed credential expiry (token_keepalive
+// write-back). Returns false when the account is unknown.
+func (s *WeightedRandomSelector) SetAccountExpiry(platform, accountID string, at time.Time) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.ExpiresAt = at
+	})
 }

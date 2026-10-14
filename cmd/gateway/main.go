@@ -20,6 +20,7 @@ import (
 	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
 	_ "all2api/internal/platforms"
 	"all2api/internal/router"
+	"all2api/internal/schedule"
 	"all2api/internal/web"
 )
 
@@ -104,6 +105,49 @@ func main() {
 	}
 	fmt.Printf("Upstream senders registered: %d\n", senders)
 
+	// Scheduled tasks (M2 batch ②): assemble the schedule.Deps seam onto the
+	// shared host pool and start the cron loop. The per-account upstream is
+	// host.NewScheduleUpstream — the honest no-protocol stub (every op wraps
+	// schedule.ErrUnsupportedTask, batches count Skipped quietly). The
+	// REPLACEMENT POINT for the real client is that one constructor call.
+	schedDeps := &schedule.Deps{
+		Source:          host.NewScheduleSource(gwHost.Pool),
+		Upstream:        host.NewScheduleUpstream(),
+		Store:           host.NewScheduleStore(gwHost.Pool),
+		FailureCooldown: time.Duration(cfg.Pool.CooldownSec) * time.Second,
+		Crons: schedule.Crons{
+			Signin:         cfg.Schedule.SigninCron,
+			ActiveCheck:    cfg.Schedule.TaskCron,
+			TokenKeepalive: cfg.Schedule.TokenKeepalive,
+		},
+		// ReportStats is called inline per finished batch (including aborted
+		// ones) and must not block: log via the same stdout banner channel the
+		// rest of main uses. (observability.Info is currently a no-op sink —
+		// logWith discards keysAndValues before touching the writer — so it
+		// would silently drop these counters; noted as an M2 gap.)
+		ReportStats: func(s schedule.RunStats) {
+			fmt.Printf("schedule: task=%s total=%d success=%d failed=%d skipped=%d\n",
+				s.Task, s.Total, s.Success, s.Failed, s.Skipped)
+		},
+	}
+
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
+	sched := schedule.NewScheduler()
+	for _, task := range schedule.BuildDefaultTasks(schedDeps) {
+		sched.AddTask(task)
+	}
+	schedule.RegisterDefaultHandlers(appCtx, sched, schedDeps)
+	if err := sched.Start(); err != nil {
+		fmt.Printf("Scheduler error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Scheduled tasks registered:\n")
+	for _, t := range sched.GetTasks() {
+		fmt.Printf("  - %s (cron: %s, enabled: %v)\n", t.Name, t.CronSpec, t.Enabled)
+	}
+
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -132,13 +176,24 @@ func main() {
 	case <-sigCh:
 	}
 
-	// Shutdown with 10s timeout
+	// Shutdown with 10s timeout. The scheduler's tickLoop only checks its own
+	// stopCh (never the context), so shutdown is two-sided: appCancel stops
+	// any in-flight batch mid-loop (handlers see context.Canceled via
+	// injectContext → runAccounts' ctx gate), then scheduler.Stop waits for
+	// the tick goroutine to close its stopped channel. Ordering inside the
+	// same 10s window: cancel first so batches start unwinding before the
+	// HTTP listener drains — the honest shape is that a batch mid-upstream-op
+	// still finishes that op; nothing here forces it.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
+
+	appCancel()
+	sched.Stop()
 
 	fmt.Println("\nShutting down...")
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		fmt.Printf("Shutdown error: %v\n", err)
+		appCancel()
 		os.Exit(1)
 	}
 	fmt.Println("Shutdown complete.")
