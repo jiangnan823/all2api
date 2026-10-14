@@ -46,7 +46,7 @@ test: ## unit tests
 race: ## unit tests with the race detector (this is the CI gate)
 	go test -race -count=1 -timeout 300s ./...
 
-lint: ## golangci-lint (install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8)
+lint: ## golangci-lint (install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 — schema v2, needs Go >= 1.26)
 	golangci-lint run --timeout 5m
 
 build: embed ## build for the host platform
@@ -82,8 +82,15 @@ docker-smoke: docker ## run the container and assert /healthz (M0 acceptance)
 	docker logs $(BINARY)-smoke; docker rm -f $(BINARY)-smoke >/dev/null; \
 	echo "SMOKE FAILED"; exit 1
 
+# Mirrors the CI security job argument-for-argument. Parity is not cosmetic: gosec's loader
+# silently prints `Issues : 0` when it cannot read the package data, so a scan run on the
+# wrong Go pin is worse than no scan. Run it with GOTOOLCHAIN=local on the go1.26.9 pin from
+# ci.yml (measured matrix: docs/DEVOPS-M0-NOTES.md §9.16).
 scan: ## local security scan before pushing (mirrors the CI security job)
-	gosec -severity high ./...
+	@echo "toolchain: $$(go version)  GOTOOLCHAIN=$$(go env GOTOOLCHAIN)"
+	gosec --version
+	gosec -severity high -fmt=text ./...
+	govulncheck -version
 	govulncheck ./...
 
 workflows: ## lint the Actions workflows offline (needs actionlint)

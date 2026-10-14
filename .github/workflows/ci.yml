@@ -20,14 +20,29 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pinned to go.mod's `go 1.24`. The analysis tools below are built against a Go
-  # <= this version and CANNOT read export data produced by a newer toolchain:
-  # measured on one tree with Go 1.27.2, golangci-lint v1.64.8 exited 3 with bogus
-  # typechecking errors, and gosec v2.29.0 printed `Issues : 0` after 63 failed
-  # package loads — a SILENT FALSE GREEN, worse than a red.
-  # Raising this value therefore requires raising those pins in the same commit and
-  # re-running both gates locally under the new pairing.
-  GO_VERSION: "1.24"
+  # Version coupling (all three legs measured on the same tree, e0c6bce):
+  #   * the analysers must be BUILT with a Go >= the Go that compiles this module, or
+  #     their package loader cannot read the export data. At go1.27.2 gosec v2.29.0
+  #     printed `Issues : 0` after 63 failed loads — a SILENT FALSE GREEN, worse than a
+  #     red (its decoder caps at export data v4, and v2.29.0 is already the newest
+  #     release, so this is fixed by lowering OUR Go pin, not by raising gosec's).
+  #   * at go1.24 the v1 lint line is dead (v1.64.8 exits 7: "file requires newer Go
+  #     version go1.26") and govulncheck cannot even install (x/vuln needs go >= 1.26).
+  #   * osv reaches zero only at the stdlib fixes: go1.25.13 / go1.26.9.
+  # 1.26.9 is the only point that satisfies all three at once. Raising this value means
+  # raising the three tool pins below in the SAME commit and re-running every gate
+  # locally under the new pairing — never one at a time.
+  GO_VERSION: "1.26.9"
+  # `local` means the toolchain that builds and analyses this repo is exactly
+  # GO_VERSION. `auto` (the Go default) would silently fetch a different Go whenever a
+  # tool's own go.mod asked for a newer one, so the scan would report on a version we
+  # never declared — that is precisely how the run @e0c6bce osv result became
+  # unreproducible. If a pinned tool ever needs a newer Go, raise GO_VERSION instead of
+  # relaxing this.
+  GOTOOLCHAIN: "local"
+  GOLANGCI_VERSION: "v2.14.0"
+  GOSEC_VERSION: "v2.29.0"
+  GOVULNCHECK_VERSION: "v1.9.0"
   NODE_VERSION: "22"
   BINARY: all2api
   ENTRYPOINT: ./cmd/gateway
@@ -37,10 +52,13 @@ env:
   LISTEN_PORT: "7863"
 
 jobs:
+  # All jobs pin `ubuntu-24.04` instead of `ubuntu-latest`: latest migrates to Ubuntu 26
+  # on 2026-10-19, and a runner OS change landing in the same window as the Go pin bump
+  # would make any red impossible to attribute. Pinned label = one variable at a time.
   # ---------------------------------------------------------------- panel -----
   panel:
     name: panel / build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # No job-level `if` here, on purpose. GitHub evaluates jobs.<job_id>.if with only
     # the github/needs/vars/inputs contexts and only the always/cancelled/success/
     # failure functions — `env` AND `hashFiles()` are both rejected there, and a
@@ -122,13 +140,20 @@ jobs:
   # ---------------------------------------------------------------- lint ------
   lint:
     name: lint / vet
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          # The repo has no go.sum yet (the module declares zero requires), and setup-go's
+          # default dependency pattern is **/go.sum — with no such file the module-cache key
+          # silently misses on every run ("Restore cache failed: Dependencies file is not
+          # found", measured on run 38499871123). go.mod is the honest lock input today.
+          # When M2 adds a dependency this must move to go.sum in the same commit, together
+          # with `go mod verify` and `-mod=readonly`.
+          cache-dependency-path: go.mod
 
       - name: go vet
         run: go vet ./...
@@ -143,18 +168,36 @@ jobs:
             exit 1
           fi
 
+      # Skew triage: a green lint job only means something if the loader actually read
+      # the packages. Print the two versions that decide that (the toolchain that built
+      # the analyser vs the toolchain compiling this module) before the verdict line.
+      - name: Toolchain self-report
+        run: |
+          set -e
+          go version
+          echo "GOTOOLCHAIN=$(go env GOTOOLCHAIN)  pinned GO_VERSION=${{ env.GO_VERSION }}"
+
+      # Installed from source, pinned, at the SAME Go as the module: the golangci release
+      # action hands us a prebuilt binary whose own toolchain we cannot observe, and a
+      # loader older than the compiled module silently degrades into bogus typechecking
+      # errors (measured at go1.27). Pin lives in the env block, raised together with
+      # GO_VERSION only.
+      - name: Install golangci-lint (source build, pinned)
+        run: |
+          set -e
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_VERSION }}
+          "$(go env GOPATH)/bin/golangci-lint" --version
+
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          # Must be built with a Go toolchain >= go.mod's version (currently 1.24).
-          # If backend raises the Go version, raise this in the same commit.
-          version: v1.64.8
-          args: --timeout=5m
+        run: |
+          set -e
+          # v2 has no default lint timeout; CI bounds it explicitly (v1 kept this in config).
+          "$(go env GOPATH)/bin/golangci-lint" run --timeout 5m ./...
 
   # ---------------------------------------------------------------- test ------
   test:
     name: test / race
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -167,6 +210,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          # The repo has no go.sum yet (the module declares zero requires), and setup-go's
+          # default dependency pattern is **/go.sum — with no such file the module-cache key
+          # silently misses on every run ("Restore cache failed: Dependencies file is not
+          # found", measured on run 38499871123). go.mod is the honest lock input today.
+          # When M2 adds a dependency this must move to go.sum in the same commit, together
+          # with `go mod verify` and `-mod=readonly`.
+          cache-dependency-path: go.mod
 
       - name: Unit tests with race detector
         run: go test -race -count=1 -timeout 300s ./...
@@ -184,7 +234,7 @@ jobs:
   # ---------------------------------------------------------------- build -----
   build:
     name: build / ${{ matrix.os }}-${{ matrix.arch }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [lint, test]
     strategy:
       fail-fast: false
@@ -208,6 +258,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          # The repo has no go.sum yet (the module declares zero requires), and setup-go's
+          # default dependency pattern is **/go.sum — with no such file the module-cache key
+          # silently misses on every run ("Restore cache failed: Dependencies file is not
+          # found", measured on run 38499871123). go.mod is the honest lock input today.
+          # When M2 adds a dependency this must move to go.sum in the same commit, together
+          # with `go mod verify` and `-mod=readonly`.
+          cache-dependency-path: go.mod
 
       # The Go gate is deliberately independent of the panel job: it compiles against
       # the tracked internal/web/dist/.gitkeep placeholder so a frontend gap can never
@@ -259,7 +316,7 @@ jobs:
   # ---------------------------------------------------------------- image -----
   image:
     name: docker / multi-arch build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build]
     steps:
       - uses: actions/checkout@v4
@@ -284,7 +341,7 @@ jobs:
   # ---------------------------------------------------------------- smoke -----
   smoke:
     name: smoke / healthz
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [image]
     steps:
       - uses: actions/checkout@v4
@@ -373,7 +430,7 @@ jobs:
   # ------------------------------------------------------------ security ------
   security:
     name: security / scans
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test]
     steps:
       - uses: actions/checkout@v4
@@ -395,34 +452,57 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          # The repo has no go.sum yet (the module declares zero requires), and setup-go's
+          # default dependency pattern is **/go.sum — with no such file the module-cache key
+          # silently misses on every run ("Restore cache failed: Dependencies file is not
+          # found", measured on run 38499871123). go.mod is the honest lock input today.
+          # When M2 adds a dependency this must move to go.sum in the same commit, together
+          # with `go mod verify` and `-mod=readonly`.
+          cache-dependency-path: go.mod
 
-      # Version is pinned, not @master: @master silently changes the rule set and the
-      # CLI surface under us (that is how the removed `-exit-code` flag reached us).
-      # Raise deliberately, and re-run the gosec gate locally at the same version
-      # before bumping — flags differ between releases.
+      - name: Scan toolchain self-report
+        run: |
+          set -e
+          go version
+          echo "GOTOOLCHAIN=$(go env GOTOOLCHAIN)  pinned GO_VERSION=${{ env.GO_VERSION }}"
+          echo "pins: gosec=${{ env.GOSEC_VERSION }} govulncheck=${{ env.GOVULNCHECK_VERSION }} golangci=${{ env.GOLANGCI_VERSION }}"
+
+      # Built from source at the pinned version, on THIS job's Go — no prebuilt release
+      # artifact, no container image whose toolchain we cannot see. gosec's package loader
+      # cannot read export data newer than its own build, and when it fails it still prints
+      # `Issues : 0`: a silent false green (measured: 63 failed loads under go1.27). Source
+      # install makes "analyser Go >= module Go" a property we control instead of a hope.
+      #
+      # Pinned, not @master: @master silently changes the rule set and the CLI surface under
+      # us (that is how the removed `-exit-code` flag reached us). `-exit-code 1` is still
+      # WRONG on current gosec — the flag no longer exists and the binary aborts during
+      # argument parsing without analysing a single file. gosec already exits non-zero when
+      # it reports issues at or above `-severity`, which is the behaviour we want here.
+      #
+      # HIGH stays the blocking threshold on purpose: same bar as before, only now it is
+      # actually evaluated. Lower severities are reported but are not gates — they belong in
+      # review, not CI.
       - name: gosec
         id: gosec
         continue-on-error: true
-        uses: securego/gosec@v2.29.0
-        with:
-          # `-exit-code 1` was the original spelling and it is WRONG on current gosec:
-          # the flag no longer exists, so the binary aborts during argument parsing
-          # (`flag provided but not defined: -exit-code`, exit=2) without analysing a
-          # single file. gosec already exits non-zero when it reports issues at or
-          # above `-severity`, which is the behaviour we want here.
-          #
-          # HIGH stays the blocking threshold on purpose: it is the same bar this job
-          # had before, only now it is actually evaluated. Lower severities are
-          # reported by gosec but are not gates — they belong in review, not CI.
-          args: "-severity high -fmt=text ./..."
+        run: |
+          set -e
+          go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}
+          GOSEC="$(go env GOPATH)/bin/gosec"
+          "$GOSEC" --version
+          "$GOSEC" -severity high -fmt=text ./...
 
+      # Pinned, not @latest: the tool's own go.mod requires a Go >= its declared minimum, so
+      # @latest under GOTOOLCHAIN=local is either an install failure or, under auto, a scan
+      # executed by a toolchain nobody declared. Raise together with GO_VERSION.
       - name: Dependency vulnerability scan (OSV)
         id: osv
         continue-on-error: true
         run: |
           set -e
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
+          "$(go env GOPATH)/bin/govulncheck" -version
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
       # Fails the job if ANY scan failed, and names them so the red is attributable
       # to a specific line (secret / static / dependency) at a glance.

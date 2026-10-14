@@ -1,78 +1,114 @@
-# golangci-lint config for all2api
+# golangci-lint v2 config for all2api
 # Repo path: .golangci.yml
 #
 # Rationale: gate on the correctness risks that actually bite a proxy gateway —
 # response-body leaks, missing context propagation, swallowed upstream errors,
 # slice-reuse bugs in the account pool — not style trivia.
 #
-# Version coupling (important): the golangci-lint binary must be built with a Go
-# toolchain >= the version declared in go.mod. If backend raises `go 1.24` to a
-# newer release, bump `version:` in .github/workflows/ci.yml at the same time or
-# the lint job will fail to parse the module.
+# Version coupling (measured, do not "simplify"): the golangci-lint binary must be
+# BUILT with a Go >= the Go that compiles this module; its package loader cannot read
+# newer export data than it understands. Go 1.26 sources additionally cannot be parsed
+# by the v1 line at all (v1.64.8 exits 7 with "file requires newer Go version go1.26"),
+# which is why the M2 pin bump moves this file to schema v2 in the same commit as
+# GO_VERSION in .github/workflows/ci.yml. Raise the Go version without raising the
+# `GOLANGCI_VERSION` pin and this gate degrades into noise or a false green.
 #
 # Only linters that genuinely exist are listed: an unknown name aborts the whole
 # run, which is the worst kind of false sense of security.
+#
+# Migrated from the v1 schema with `golangci-lint migrate` (v2.14.0, go1.26.9), then
+# reviewed by hand: `stylecheck` folded into `staticcheck.checks` (-ST1000/-ST1003 kept
+# as before), `disable-all: true` -> `default: none`, `issues.exclude-rules` ->
+# `linters.exclusions.rules`, and `run.timeout` dropped because v2 has no default lint
+# timeout — CI passes `--timeout 5m` explicitly instead.
+
+version: "2"
 
 run:
-  timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
-    - errcheck
-    - govet
-    - staticcheck
-    - stylecheck
-    - unused
-    - ineffassign
     - bodyclose
-    - noctx
+    - copyloopvar
+    - durationcheck
+    - errcheck
     - errorlint
+    - govet
+    - ineffassign
+    - makezero
     - nilerr
+    - noctx
     - rowserrcheck
     - sqlclosecheck
-    - durationcheck
-    - makezero
-    - copyloopvar
+    - staticcheck
     - unconvert
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - fmt.Fprintf
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+  exclusions:
+    generated: lax
+    # v2 injects these presets by default. They are listed explicitly so that a future
+    # "why was that finding hidden" question has an answer in this file rather than in
+    # a tool default. If a real finding gets masked by one of them, remove that preset
+    # in the same commit that fixes the code — do not add a per-finding exemption.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    exclude-functions:
-      - (io.Closer).Close
-      - (*os.File).Close
-      - fmt.Fprintf
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  staticcheck:
-    checks: ["all"]
-  stylecheck:
-    checks: ["all", "-ST1000", "-ST1003"]
+      # 裁定三.4 (PM seq=679): the `healthcheck` subcommand's http.Get is registered as
+      # exempt, not fixed. Rationale: runHealthcheck is a one-shot CLI probe (Docker
+      # HEALTHCHECK, fpk status, CI smoke) that exits immediately after one request, so
+      # there is no long-lived request whose missing context could leak or hang.
+      #
+      # Deliberately triple-scoped (path + message + source line) instead of a blanket
+      # `noctx` disable: the moment the call is removed, rewritten to http.NewRequest,
+      # or moved to another file, this rule stops matching and noctx goes back to
+      # guarding the whole tree. Any NEW noctx finding still fails the gate — v2 proves
+      # it by flagging httptest.NewRequest in the test files (M2 B3 pre-batch, backend).
+      - linters:
+          - noctx
+        path: ^cmd/gateway/main\.go$
+        text: net/http\.Get must not be called
+        source: 'resp, err := http\.Get\('
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-
-    # 裁定三.4 (PM seq=679): the `healthcheck` subcommand's http.Get is registered as
-    # exempt, not fixed. Rationale: runHealthcheck is a one-shot CLI probe (Docker
-    # HEALTHCHECK, fpk status, CI smoke) that exits immediately after one request, so
-    # there is no long-lived request whose missing context could leak or hang.
-    #
-    # Deliberately triple-scoped (path + message + source line) instead of a blanket
-    # `noctx` disable: the moment the call is removed, rewritten to http.NewRequest,
-    # or moved to another file, this rule stops matching and noctx goes back to
-    # guarding the whole tree. Any NEW noctx finding still fails the gate.
-    - linters:
-        - noctx
-      path: ^cmd/gateway/main\.go$
-      text: net/http\.Get must not be called
-      source: 'resp, err := http\.Get\('
-
   max-issues-per-linter: 0
   max-same-issues: 0
+
+# v2 splits formatting out of the linter set. We deliberately enable no formatter here:
+# the `gofmt check` CI step is a read-only assertion, and letting the tool rewrite files
+# in CI would blur who owns the change.
+formatters:
+  enable: []
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

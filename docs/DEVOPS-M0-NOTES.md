@@ -553,5 +553,65 @@ Summary:
 主人 seq=751：「1、收 2、我已经push了 3、**保留**」 ⇒ `%LOCALAPPDATA%\Temp\devops-go`（便携 go1.24.13 + golangci-lint v1.64.8 + gosec v2.29.0 + actionlint v1.7.12，官方 `golang.org/dl` zip、SHA256 已校验）**不清理**，作为后续复验的可复现门禁链保留；本轮 §9.15-c 的 binary 模式复现正是靠它才拿到与 CI 同版本（1.24.13）的证据。
 纪律不变：不装系统 Go、不改 PATH、不写入仓库、产物只落临时目录。
 
+## 9.16 B0（G0 半步 + G1 成组钉版）落地与同构链自证 @`2131d30`+
+
+PM seq=809 裁定六项版本决策、seq=814 传达主人 seq=812「都按照你的建议来」后 B0 领单开工。本节是 devops 工件线口径：改动全部落 CI/lint/构建配置与 `go.mod` 声明，**产品码零触碰**（`internal/**`、`cmd/**`、`web/**` 无一文件被改）。
+
+### 9.16-a 为什么是 go1.26.9 —— 四方可读性实测
+
+决策依据不是版本号偏好，而是「**同一棵树在不同 Go 版本下编译、被各分析器读取时的实际结果**」：
+
+| 组合 | 实测现象 | 结论 |
+| --- | --- | --- |
+| go1.24.13（旧钉版）+ 全部工具 | gosec HIGH=0 但 osv 报 **25** 条标准库命中（binary 模式复现一致） | 安全线红，且红在钉版自身 |
+| go1.27.2 + gosec v2.29.0（二进制与 `go install` 源码构建两种都试） | 印 `Issues : 0`，同时 **63** 处 `could not import … export data version 5 is greater than maximum supported version 4` | **静默假绿**，绝不接受：gosec 封顶 export data v4，而 go1.27 产出 v5；cap 在它 pin 的 x/tools，不在构建用的 Go |
+| go1.26.9 + gosec v2.29.0 | 载入错误 **0** 处、`Issues : 0`、exit 0 | 可读且真绿 |
+| go1.26 源码 + golangci-lint v1.64.8 | exit **7** `file requires newer Go version go1.26 (application built with go1.24)` | v1 线对本仓升版已死，必须 v2 |
+| golangci-lint v2.14.0 | 自身 `go.mod` 要求 `go 1.26.0`，且拒绝 v1 配置格式 | 反推 Go 下限 = 1.26.0 |
+| govulncheck v1.9.0 @go1.26.9 | `No vulnerabilities found.`，exit 0 | osv 归零成立（1.26.9 已含 net/http 那批修复） |
+
+⇒ 唯一同时满足「osv 归零 + 三分析器 export data 可读 + 可复现」的版本点是 **go1.26.9**；gosec 保留 v2.29.0（最新版无解，问题在解码器而非发布版本），golangci 升 **v2.14.0**，govulncheck 由 `@latest` 改钉 **v1.9.0**。
+
+### 9.16-b 五个文件的改动面
+
+1. `.github/workflows/ci.yml`
+   - 新增 jobs 级 `env`：`GO_VERSION: "1.26.9"`、`GOTOOLCHAIN: "local"`、`GOLANGCI_VERSION: "v2.14.0"`、`GOSEC_VERSION: "v2.29.0"`、`GOVULNCHECK_VERSION: "v1.9.0"`、`NODE_VERSION: "22"`，并把 a 节实测矩阵作为注释钉在块头（防止后来者"顺手改回 latest"）。
+   - `GOTOOLCHAIN: local` 关闭自动换链：runner 上"构建的 Go"与"做结论的 Go"必须是同一个版本，否则扫描描述的是一个未声明的版本。
+   - gosec 从 `uses: securego/gosec@v2.29.0` 改为 `go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}`：action 的 digest 在同 tag 下漂移过（`a6cd2f30…` → `4342ad11…`），源码安装让"用的哪一版"可被 `--version` 自证。golangci 同理改为 `go install …/v2/cmd/golangci-lint@v2.14.0`，不再走 `golangci-lint-action@v6`。
+   - 两道 job 各加 `Toolchain self-report` / `Scan toolchain self-report`：印 `go version`、`go env GOTOOLCHAIN`、以及每个工具的 `--version`（golangci / gosec / govulncheck 的 Scanner + DB updated）⇒ 云端日志自身即可复核版本四元组。
+   - `Aggregate scan verdict` 门禁逻辑不变（`gitleaks gosec osv` 三 id 逐个查 `outcome`），仍靠 `continue-on-error` 把红归因到具体一行。
+   - 7 处 `runs-on: ubuntu-latest` → `ubuntu-24.04`（2026-10-19 起 latest 迁 Ubuntu 26；一次只动一个变量，迁移单独评估）。
+   - 4 处 `actions/setup-go@v5` 补 `cache-dependency-path: go.mod` + 注释：本仓当前**无 `go.sum`**（零外部 require），默认路径会印 `Restore cache failed: … Supported file pattern: go.sum`；依赖一旦引入，这行必须改回 `go.sum` 并配 `go mod verify` / `-mod=readonly`（G2 前置，已登记）。
+2. `.golangci.yml` —— 整体重写为 v2 schema：`version: "2"`、`run.tests: true`、`linters.default: none` + 显式 15 个 linter（stylecheck 折进 `staticcheck.checks: [all, -ST1000, -ST1003]`）、errcheck `exclude-functions` 与 `govet` fieldalignment 关闭逐项照搬、`exclusions` 用显式 `presets` 列表 + `errcheck _test\.go` 规则、`noctx` 豁免仍只钉 `cmd/gateway/main.go:181` 一行（裁定三.4 原样保留，注释未丢）、`issues.max-*: 0`、`formatters.enable: []`。`golangci-lint config verify` exit 0。
+3. `go.mod` —— `go 1.24` → `go 1.26.0`（下限），注释指明 CI 钉的是补丁版 1.26.9、升此数字必须在同一 commit 同步抬三把分析器钉版。
+4. `Dockerfile` —— `golang:1.24-alpine` → `golang:1.26.9-alpine`：容器构建与认证它的门禁必须同版本，否则产物里的标准库（及其漏洞集）与被扫对象不是同一个。
+5. `Makefile` —— `lint` 帮助文本改 v2 安装路径；新增/对齐 `scan` 目标，**逐参数镜像 CI security job**（`gosec -severity high -fmt=text ./...` + `govulncheck ./...`，并印 `go version` / `GOTOOLCHAIN` / 工具版本），使"本地推前自查"与云端结论口径一致。
+
+### 9.16-c 同构链本地全门禁自证（便携 go1.26.9，`GOTOOLCHAIN=local`）
+
+工具版本四元组与 CI 钉版完全一致（go1.26.9 / golangci-lint v2.14.0 / gosec v2.29.0 / govulncheck v1.9.0），全部 `go install` 源码构建进临时目录：
+
+| 门禁 | 结果 |
+| --- | --- |
+| `go version` / `go env GOVERSION` / `GOTOOLCHAIN` | `go1.26.9 windows/amd64` / `go1.26.0` / `local` |
+| `go vet ./...` | exit **0** |
+| `go build ./...` | exit **0** |
+| `go test -count=1 ./...` | exit **0**，`ok all2api/internal/api 0.568s` |
+| `golangci-lint config verify` | exit **0** |
+| `golangci-lint run --timeout 5m ./...` | exit 1，**恰好 4 条**（见 d 节），无第五类噪音 |
+| `gosec -severity high -fmt=text ./...` | exit **0**，`Files 23 / Lines 2773 / Nosec 2 / Issues 0`，`could not import` **0** 处 ⇒ 真绿而非解码器失明 |
+| `govulncheck -version` | `Go: go1.26.9 / Scanner: govulncheck@v1.9.0 / DB updated: 2026-10-08 22:31:09` |
+| `govulncheck ./...` | `No vulnerabilities found.` exit **0** ⇒ osv 归零达成 |
+| `actionlint .github/workflows/ci.yml` | exit 0，无告警 |
+
+### 9.16-d 依赖与遗留（不是缺陷，是顺序）
+
+1. **`lint / vet` 在 B0 单独合入时会是红**：那 4 条是 golangci v1→v2 后新暴露的真实代码命中，归 backend ——`internal/api/recover_test.go:80/196/223` 的 `noctx`（`httptest.NewRequest` → `…NewRequestWithContext`）与 `internal/pool/pool.go:111` 的 `S1009`。PM 已裁定「**修码不加豁免**」。⇒ 建议 **B0 与 B3 前置同批合入**，否则云端要为一个注定红的 lint 再消耗一次额度（主人额度有限，这条是硬约束）。
+2. **job 名零改动**：job key 与显示名逐一保持原值 —— `panel / build`、`lint / vet`、`test / race`、`build / <os>-<arch>`（矩阵）、`docker / multi-arch build`、`smoke / healthz`、`security / scans`；`Toolchain self-report`、`Scan toolchain self-report`、`Aggregate scan verdict` 都是 **step** 不是 job，不进 required 名单 ⇒ 未来开分支保护时 required 上下文不受本次改动影响（seq=809 的「改名必须同步 required 名单」提醒对后续批次继续生效）。
+3. **`go.sum` 缺失**：本轮以 `cache-dependency-path: go.mod` 绕开报错，属于**症状处置不是闭合**；依赖落地时走 G2（`go mod tidy` + `go.sum` 入仓 + `go mod verify` + `-mod=readonly` + 缓存路径改回）。
+4. **工具链获取方式偏差（请追认）**：主人规则是「下载只从官方 `golang.org/dl` 拿 zip，校验 SHA256」。本机到 `go.dev/dl` 的 TLS 直接失败（既有环境问题），go1.26.9 是通过 `GOTOOLCHAIN=go1.26.9` 由 Go 模块代理取得 `golang.org/toolchain@v0.0.1-go1.26.9.windows-amd64`，**经 sumdb 校验和验证**后缓存在临时目录。实质上仍是官方分发 + 校验和，但通道不是 zip 直下；若裁定不接受，撤法是把 1.26.9 的自证降级为"仅 CI 云端首绿"，本地门禁结论作废。纪律其余部分未破：不装系统 Go、不改 PATH、不写入仓库、产物只落临时目录（`%LOCALAPPDATA%\Temp\devops-go\gvbin126`）。
+5. **1.24.13 便携链保留**（主人 seq=751「保留」）：不删，它是本轮唯一能复现"旧 CI 结论"的对照链；升 1.26.9 后它降级为历史对照用途。
+6. **云端首绿仍未取**：B0 工件在本地 commit，等主人自主 push 后才拿得到 security job 的新链首绿与 govulncheck 钉版首跑；本轮不提 push 请求。
+
 
 

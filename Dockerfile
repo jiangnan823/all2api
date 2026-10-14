@@ -42,7 +42,9 @@ RUN set -eux; \
     fi
 
 # ---------------------------------------------------------------- build -----
-FROM golang:1.24-alpine AS build
+# Patch-pinned to ci.yml's GO_VERSION: a container build on a different Go produces a
+# different stdlib (and a different vulnerability set) than the gate that certifies it.
+FROM golang:1.26.9-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache ca-certificates tzdata git
