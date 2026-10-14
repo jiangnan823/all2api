@@ -190,3 +190,79 @@ export const PANEL = {
   EMPTY_TITLE: '本节尚未接入网关接口',
   EMPTY_BODY: '这里显示的是网关的实时配置与状态。本次构建交付的是界面骨架，接线完成后内容自动出现。',
 } as const;
+
+/**
+ * 设置屏（M2 B2 接线批）全部为新增键，不触碰上方任何冻结段。
+ * 边界如实：本里程碑后端只有只读接口（GET /api/config、/api/config/fields、/api/time），
+ * 没有配置保存端点——保存按钮常置灰 + SAVE_DISABLED_NOTE 是产品口径，不是实现偷懒。
+ */
+export const SETTINGS = {
+  LOADING: '正在读取网关配置…',
+  ERROR_TITLE: '网关配置读取失败',
+  ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  TIME_NOW: '服务器时间 {local}（{tz}），与本机相差约 {sec} 秒',
+  TIME_UNAVAILABLE: '服务器时间暂不可用（不影响配置展示）',
+  SOURCE_PICKER_LABEL: '来源',
+  NO_SOURCES: '当前网关配置没有任何来源。',
+  ADVANCED_TITLE: '高级选项（逐源）',
+  ADVANCED_EMPTY: '该来源没有下发任何高级选项。',
+  SOURCE_ENABLED_LABEL: '来源启用',
+  SOURCE_ENABLED_ON: '已启用',
+  SOURCE_ENABLED_OFF: '已停用',
+  SAVE: '保存全部改动',
+  SAVE_DISABLED_NOTE: '当前里程碑后端为只读接口，保存未开放：改动只保留在本页，刷新或离开后丢失。',
+  DIRTY_BADGE: '有本地改动',
+  DIRTY_SUMMARY: '{count} 个来源有本地改动未保存（后端只读，保存未开放）',
+  SYNCED_NOTE: '当前展示的是网关生效中的实时配置。',
+  DISCARD: '放弃本地改动',
+} as const;
+
+/** SETTINGS 模板占位符替换（与 consentCheckLabel 同一做法，组件不内联拼串逻辑）。 */
+export function settingsLine(tpl: string, vars: Record<string, string | number>): string {
+  return tpl.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ''));
+}
+
+/**
+ * 后端 /api/config/fields 的 label / description 是文案层 key（UI §5.16，configfields.go 逐字下发
+ * 如 'config.field.steady_rpm.label'），面板在这里换算成展示文案；未知 key 原样回显（可追溯优于装懂）。
+ * 展示串复用既有冻结文案（THROTTLE / ADVANCED 的对应值），不另立第二写法。
+ */
+export const CONFIG_FIELD_COPY: Record<string, string> = {
+  'config.field.steady_rpm.label': '稳态请求',
+  'config.field.burst_rpm.label': '突发上限',
+  'config.field.min_gap_ms.label': '最小间隔',
+  'config.field.daily_cap.label': '每日上限',
+  'config.field.inflight.label': '在途请求',
+  'config.field.base_429_sec.label': '429 退避基数',
+  'config.field.not_found_sec.label': '404 退避',
+  'config.field.jitter_minutes.label': '签到抖动',
+  'config.field.halve_budget_after_429.label': THROTTLE.HALVE,
+  'config.field.fingerprint_rewrite.label': ADVANCED.COLUMN,
+  'config.field.fingerprint_rewrite.desc': '该开关逐源独立、默认关闭；开启影响发往该来源的请求特征，随时可再关闭。',
+  'config.field.source_enabled.label': SETTINGS.SOURCE_ENABLED_LABEL,
+};
+
+export function configFieldCopy(copyKey: string): string {
+  return CONFIG_FIELD_COPY[copyKey] ?? copyKey;
+}
+
+/** 后端单位码 → 展示单位。'count' 在 daily_cap / inflight 两字段复用同一码，展示档按字段定形；其余码直查。 */
+const FIELD_UNIT_FOR_COUNT: Record<string, string> = {
+  daily_cap: THROTTLE.UNIT_DAILY,
+  inflight: THROTTLE.UNIT_INFLIGHT,
+};
+
+const UNIT_CODE_COPY: Record<string, string> = {
+  rpm: THROTTLE.UNIT_RPM,
+  ms: THROTTLE.UNIT_MS,
+  sec: THROTTLE.UNIT_SEC,
+  min: THROTTLE.UNIT_MIN,
+  credit: '点',
+};
+
+export function configUnitCopy(unit: string | undefined, fieldKey: string): string {
+  if (!unit) return THROTTLE.DASH;
+  if (unit === 'count') return FIELD_UNIT_FOR_COUNT[fieldKey] ?? '次';
+  return UNIT_CODE_COPY[unit] ?? unit;
+}

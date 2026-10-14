@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PANEL } from '../i18n/zh';
+import { SettingsScreen } from './SettingsScreen';
 
 type Theme = 'light' | 'dark';
 type SectionId = 'settings' | 'connect';
@@ -37,8 +38,8 @@ function EmptyState() {
 
 /**
  * B1 面板外壳：左 rail（功能主干，不含来源）+ 顶栏 + 内容区，结构取自 UI UE
- * 《all2api-panel-hifi-v0.2》。本批只交付骨架与真实可用的主题切换；
- * 配置节（B2）与接入节（B4/B5）在此挂载各自的容器组件，props 集合与纯组件零改动。
+ * 《all2api-panel-hifi-v0.2》。B1 交付骨架与真实可用的主题切换；
+ * M2 B2 起配置节挂载真实功能屏（SettingsScreen），接入节（B4/B5）仍为空状态待接线。
  */
 export function PanelApp() {
   const [theme, toggleTheme] = useTheme();
@@ -97,7 +98,8 @@ export function PanelApp() {
               </h2>
             </div>
             <p className="shell__section-sub">{PANEL.SETTINGS_SUB}</p>
-            <EmptyState />
+            {/* M2 B2 起设置节为真实功能屏：读取 /api/config + /api/config/fields（只读），接入节仍为空状态 */}
+            <SettingsScreen />
           </section>
 
           <section className="shell__section" id="connect" aria-labelledby="shell-h-connect">

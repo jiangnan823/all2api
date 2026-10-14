@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
@@ -10,21 +10,28 @@ import { PANEL } from '../src/i18n/zh';
  * B1 外壳门禁：axe 基线 + 导航可达性 + 主题切换的内存态承诺 + 接线批的安全红线自查。
  * 安全扫描面 = 本批新增的入口层（src/app、src/main.tsx、index.html）；
  * freeze.test.ts 的 IMPL_DIRS 不含这两处，故红线在本文件自证，不动冻结测试。
+ * M2 B2 起设置节挂真实功能屏（SettingsScreen 会发 /api/config 等请求），
+ * 本文件用永不 settle 的 fetch 桩把它钉在加载态——外壳断言不依赖设置屏内部实现（那是 settings.test 的面）。
  */
 expect.extend(toHaveNoViolations);
 
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+});
+
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   delete document.documentElement.dataset.theme;
 });
 
 describe('外壳结构', () => {
-  it('渲染标题、两节与未接线状态（无伪造数据）', () => {
+  it('渲染标题、两节（设置节已接线，接入节空状态）与未接线状态', () => {
     render(<PanelApp />);
     expect(screen.getByRole('heading', { level: 1, name: PANEL.TITLE })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: PANEL.SETTINGS_TITLE })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: PANEL.CONNECT_TITLE })).toBeTruthy();
-    expect(screen.getAllByText(PANEL.EMPTY_TITLE)).toHaveLength(2);
+    expect(screen.getAllByText(PANEL.EMPTY_TITLE)).toHaveLength(1);
     expect(screen.getByText(PANEL.STATUS_UNWIRED)).toBeTruthy();
   });
 

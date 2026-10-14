@@ -34,7 +34,22 @@ export function isSigninSource(source: string): boolean {
   return source === 'workbuddy' || source === 'qoder';
 }
 
+/**
+ * 后端 /api/config/fields 下发的按源字段注册表（UI §5.13「前端不硬编码表单」的数据源侧）。
+ * 注入后 editableThrottleFields / validateThrottleBudget 的 label、单位与边界均以交付集为准
+ * （后端 configfields.go 是可编辑边界的唯一权威表）；注册表为空时回退上方仓内表（单测/离线场景）。
+ * 显示条件（jitter / halve 是否交付）完全由交付集决定，前端不自行猜测来源类别。
+ */
+let deliveredThrottleFields: Readonly<Record<string, readonly FieldDef[]>> | null = null;
+
+/** 由设置屏在 GET /api/config/fields 成功后注入解析好的展示字段；传 null 清空（测试隔离用）。 */
+export function setDeliveredThrottleFields(bySource: Record<string, FieldDef[]> | null): void {
+  deliveredThrottleFields = bySource;
+}
+
 export function editableThrottleFields(source: string): FieldDef[] {
+  const delivered = deliveredThrottleFields?.[source];
+  if (delivered) return delivered.map((f) => ({ ...f }));
   return THROTTLE_FIELDS.filter((f) => {
     if (f.key === 'jitter_minutes') return isSigninSource(source);
     return true;
@@ -65,26 +80,39 @@ function checkInt(
   }
 }
 
-/** 提交前的结构校验；服务端仍是权威，返回的 key 一律是冻结 JSON path。 */
+/** 提交前的结构校验；服务端仍是权威，返回的 key 一律是冻结 JSON path。
+ *  边界与报错 label 优先取交付字段集（后端 configfields.go 为唯一权威表），无交付时回退仓内默认。 */
 export function validateThrottleBudget(source: string, budget: ThrottleBudget): FieldError[] {
   const out: FieldError[] = [];
   const p = (k: string) => throttlePath(source, k);
+  const fields = editableThrottleFields(source);
+  const ruleOf = (key: string, lo: number, hi: number, label: string) => {
+    const hit = fields.find((f) => f.key === key);
+    return { lo: hit?.min ?? lo, hi: hit?.max ?? hi, label: hit?.label ?? label };
+  };
 
-  const steady = editableThrottleFields(source).find((f) => f.key === 'steady_rpm');
-  const burst = editableThrottleFields(source).find((f) => f.key === 'burst_rpm');
-  checkInt(out, p('steady_rpm'), '稳态请求', budget.steadyRpm, steady?.min ?? 1, steady?.max ?? 60);
-  checkInt(out, p('burst_rpm'), '突发上限', budget.burstRpm, burst?.min ?? 1, burst?.max ?? 120);
-  checkInt(out, p('daily_cap'), '每日上限', budget.dailyCap, 1, 10000);
-  checkInt(out, p('inflight'), '在途请求', budget.inflight, 1, 32);
-  checkInt(out, p('backoff.base_429_sec'), '429 退避基数', budget.backoff?.base429Sec, 600, 3600);
-  checkInt(out, p('backoff.not_found_sec'), '404 退避', budget.backoff?.notFoundSec, 60, 3600);
+  const steady = ruleOf('steady_rpm', 1, 60, '稳态请求');
+  const burst = ruleOf('burst_rpm', 1, 120, '突发上限');
+  const daily = ruleOf('daily_cap', 1, 10000, '每日上限');
+  const inflightRule = ruleOf('inflight', 1, 32, '在途请求');
+  const base429 = ruleOf('backoff.base_429_sec', 600, 3600, '429 退避基数');
+  const notFound = ruleOf('backoff.not_found_sec', 60, 3600, '404 退避');
+  const jitter = ruleOf('jitter_minutes', 0, 120, '签到抖动');
+
+  checkInt(out, p('steady_rpm'), steady.label, budget.steadyRpm, steady.lo, steady.hi);
+  checkInt(out, p('burst_rpm'), burst.label, budget.burstRpm, burst.lo, burst.hi);
+  checkInt(out, p('daily_cap'), daily.label, budget.dailyCap, daily.lo, daily.hi);
+  checkInt(out, p('inflight'), inflightRule.label, budget.inflight, inflightRule.lo, inflightRule.hi);
+  checkInt(out, p('backoff.base_429_sec'), base429.label, budget.backoff?.base429Sec, base429.lo, base429.hi);
+  checkInt(out, p('backoff.not_found_sec'), notFound.label, budget.backoff?.notFoundSec, notFound.lo, notFound.hi);
   if (budget.jitterMinutes !== undefined) {
-    checkInt(out, p('jitter_minutes'), '签到抖动', budget.jitterMinutes, 0, 120);
+    checkInt(out, p('jitter_minutes'), jitter.label, budget.jitterMinutes, jitter.lo, jitter.hi);
   }
 
+  const gap = ruleOf('min_gap_ms', 0, 60000, '最小间隔');
   const [lo, hi] = budget.minGapMs ?? [0, 0];
-  checkInt(out, p('min_gap_ms'), '最小间隔下界', lo, 0, 60000);
-  checkInt(out, p('min_gap_ms'), '最小间隔上界', hi, 0, 60000);
+  checkInt(out, p('min_gap_ms'), `${gap.label}下界`, lo, gap.lo, gap.hi);
+  checkInt(out, p('min_gap_ms'), `${gap.label}上界`, hi, gap.lo, gap.hi);
   if (lo > hi) {
     out.push({ key: p('min_gap_ms'), message: THROTTLE.ERR_GAP_ORDER, code: 'range' });
   }
