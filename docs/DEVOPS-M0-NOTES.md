@@ -393,5 +393,85 @@ fnOS fpk 真机六项；M2 接线批（Scheduler 实例化 + `Start(ctx)` 消费
 `runHealthcheck` 硬编码 `:7863` 改读 `cfg.Listen`）；api_key 遮蔽（本轮获 G117 机器印证）。
 **已收**：`-race`（Linux 首跑绿）、docker 多架构构建、`/healthz` smoke 含 `stop ≤10s`、gitleaks、build×4 云端、`go test` 云端。
 
+## 9.13 主人本机新装 Go 原生复跑对照（Goal 判据 ①b）+ R2-sec 双签复核
+
+### 9.13-a 环境探测（实测，非推断）
+
+| 探针 | 实值 |
+| --- | --- |
+| `go version` | **go1.27.2 windows/amd64**（`C:\Program Files\Go\bin\go.exe`） |
+| `go env GOROOT / GOPATH / GOCACHE` | `C:\Program Files\Go` / `C:\Users\User\go`（**该目录不存在** ⇒ 主人只装了 Go 本体，无任何 `go install` 工具） / `AppData\Local\go-build`（已有 201 MB 编译缓存） |
+| `go env CGO_ENABLED / CC / GOTOOLCHAIN` | **0** / `gcc`（仅是默认命令名，**磁盘与 PATH 上都没有 gcc**） / `auto` |
+| C 编译器 | `gcc`、`cc`、`clang`、`tcc`、`x86_64-w64-mingw32-gcc` 全部 `NOT on PATH`；`Program Files` 两层内无 gcc/clang 可执行 |
+| gosec / golangci-lint / actionlint | 主机**均无**（`C:\Users\User\go\bin` 不存在）⇒ 本机唯一可用副本仍是便携链 |
+
+**`-race` 本机可行性（用最小探针坐实，不猜）**：两条独立证据同一结论——
+1. 真包：`CGO_ENABLED=1 go test -race ./internal/api` → `# runtime/cgo` / `cgo: C compiler "gcc" not found: exec: "gcc": executable file not found in %PATH%`，**exit=1，build failed**；
+2. 最小探针（5 行 `import "C"` 程序，独立临时 module，不碰仓库）：`CGO_ENABLED=1 go build` → **同一条 gcc not found 错误**，exit=1。
+⇒ **Windows 面 `-race` 在主人本机装了 Go 之后依旧不可行**，阻塞点是 CGO 依赖的 C 编译器，与 Go 版本无关。
+（附注：`CGO_ENABLED=1 go build ./...` 会 exit=0——本项目全包纯 Go，不触发 cgo 编译；所以**必须用上面两种强制探针**，否则会得到"CGO 可用"的假结论。这是本轮方法论上一个值得记的坑。）
+⇒ `-race` 的证据来源仍然只有云端 Linux job（§9.12 已收），本机不补。
+
+### 9.13-b 版本 skew：新装 Go 跑不动 CI 钉版的分析工具（本轮最重要的意外发现）
+
+CI 钉的是 `GO_VERSION: "1.24"` + `golangci-lint-action@v6 / version: v1.64.8`；主机 Go 是 **1.27.2**。同一源码树、同一命令交叉实测：
+
+| 工具（CI 钉版） | 便携 go1.24.13 下 | 系统 go1.27.2 下 |
+| --- | --- | --- |
+| `golangci-lint v1.64.8 run ./...` | **exit=0，0 条** | **exit=3，无法运行**：`cannot decode "internal/goarch", export data version 5 is greater than maximum supported version 2`；并假报 typechecking error（`workbuddy/adapter.go:20 a.SetName undefined` —— 嵌入方法因依赖包 export data 载入失败而"消失"） |
+| `gosec v2.29.0 -severity high ./...` | 干净：0 处载入错误 | **63 处** `could not import …（cannot decode …, export data version 5 > maximum supported version 4）`，**但汇总表照样打印 `Issues : 0`** |
+
+⇒ 两条硬结论：
+1. **系统 go1.27.2 不能作为 lint / scan 门禁的执行链**；gosec 在降级（packages 载入失败）状态下仍输出 `Issues : 0`，是**假绿**，绝不能据此判安全面干净。
+2. 便携链 `go1.24.13 + golangci 1.64.8 + gosec 2.29.0 + actionlint 1.7.12` 与 CI 钉版同构，是**本机唯一与云端等价的链** ⇒ 删留口径应据此定：**保留**。
+3. 登记一条真实风险（M2 待落 CI 注释）：**若 backend 抬 `go.mod` 的 Go 版本，必须在同一 commit 抬 golangci-lint / gosec 版本**，否则门禁不是红，而是**静默假绿**——比红危险。
+
+### 9.13-c 原生链 vs 便携链逐项对照（源码 = `main@bc60417`，导出到临时目录，不碰检出）
+
+| 门禁 | 便携 go1.24.13 | 系统 go1.27.2 | 判定 |
+| --- | --- | --- | --- |
+| `go vet ./...` | exit=0 | exit=0 | 一致 |
+| `go build ./...` | exit=0 | exit=0 | 一致 |
+| `go test ./...` | `ok internal/api` | `ok internal/api 0.737s` | 一致 |
+| `go test -v ./internal/api` | 5/5 PASS | **5/5 PASS**（recover 402 / 凭证失效 / 未知 source / 需 APIKey / halve-budget source 过滤） | 一致 |
+| `gofmt -l`（`git cat-file blob` LF 镜像，30 文件 0 CR） | **0/30** | **0/30**，且两版 `gofmt -d` 输出**逐字节相同（均 0 字节）** | 一致，跨版本无格式化分歧 |
+| `golangci-lint v1.64.8` | **0 条 / exit=0** | 无法运行（见 9.13-b） | **不一致：仅便携链可用** |
+| `go test -race` | 不可行（无 gcc） | **同样不可行（无 gcc）** | 一致（都是环境限制） |
+
+四目标交叉编译产物字节数（**同一棵树、同一 flags**：`CGO_ENABLED=0 -trimpath -ldflags "-s -w -X main.version/commit/buildDate"`）：
+
+| 目标 | 便携 go1.24.13 | 系统 go1.27.2 | delta |
+| --- | --- | --- | --- |
+| linux/amd64 | 6,529,208 | 7,348,384 | **+819,176（+12.5%）** |
+| linux/arm64 | 6,160,568 | 6,815,904 | +655,336（+10.6%） |
+| windows/amd64 | 6,718,464 | 7,565,824 | +847,360（+12.6%） |
+| darwin/arm64 | 6,291,426 | 6,968,466 | +677,040（+10.8%） |
+
+⇒ 差异**纯属 Go 1.24 → 1.27 的编译器/运行时体积变化，不是代码膨胀**（源码逐字节相同）；CI 的 60 MB size budget 远未触及。
+⇒ 另一条回归价值：便携链在 `bc60417` 上重建出的四个字节数与 §9.11 在 `05a0d41` 记录的**逐一完全相同** ⇒ 便携链口径跨轮稳定，可当体积回归基线用。
+
+**原生链运行时冒烟（go1.27.2 产物）**：`GET /healthz` → **200**，body `{"status":"ok","service":"all2api","version":"v0.1.0-m1-nativecmp","buildDate":"2026-10-14T01:00:00Z","uptime":"3.51s"}`；
+`gw127.exe healthcheck` → `healthcheck OK`，**exit=0**；banner 保留 open-mode 警告。
+收尾：进程已停（Stop-Process 后 `:7863` 探测 `http_code=000` = 无监听）、临时 config 只写空 api_key、scratch 目录已删。
+
+### 9.13-d R2-sec 双签复核（分支 tip `4109d6c`，gosec HIGH=0 独立执行方）
+
+**独立取证（未采信自报）**：`git rev-list --parents -n1 4109d6c` = 单亲 **bc60417** ✅；`git diff bc60417 4109d6c` = **恰 2 文件 / 2 增 2 删**，全部是行尾 `// #nosec …` 追加；非 Go 路径数 **0**；权威 blob `config.go ac63914` / `pool.go ee4ddc8`，基线 `8c7e624` / `03a3d05` 与 R1 链条吻合 ✅；`cryptoSeed` 试验**无残码**（diff 面即全部改动）✅。
+
+**合入门禁实测**（便携 go1.24.13 + gosec v2.29.0，参数与 CI 修复后完全一致 `-severity high -fmt=text ./...`）：
+```
+Summary:
+  Files  : 23
+  Lines  : 2773
+  Nosec  : 2
+  Issues : 0
+```
+⇒ **HIGH=0 达成**，exit=0。`Nosec : 2` 恰等于两处豁免点数 ⇒ 证明是**按行生效**的定点抑制，不是 `-exclude` 关规则、不是降阈值（与裁定一约束一致）。
+⚠️ 同一命令在系统 go1.27.2 下也印 `Issues : 0`，但带 63 处包载入错误 ⇒ **不计入独立证据**，以便携链那次为准（见 9.13-b 的假绿警告）。
+
+**快子集 @4109d6c**：`go vet` / `go build ./...` / `go test ./...`（`ok internal/api`）在**两条链下均 exit=0**；`gofmt -l` **0/30**（LF 镜像，两链一致）⇒ 新增的行内注释未破坏结构体字段对齐，lint/gofmt 门禁不受影响。
+
+**devops 侧判定**：R2-sec 双签中「gosec 实测 HIGH=0」这一签**成立**，条件是把工具链钉在便携链（go1.24.13 + gosec v2.29.0）。
+
 
 

@@ -20,6 +20,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Pinned to go.mod's `go 1.24`. The analysis tools below are built against a Go
+  # <= this version and CANNOT read export data produced by a newer toolchain:
+  # measured on one tree with Go 1.27.2, golangci-lint v1.64.8 exited 3 with bogus
+  # typechecking errors, and gosec v2.29.0 printed `Issues : 0` after 63 failed
+  # package loads — a SILENT FALSE GREEN, worse than a red.
+  # Raising this value therefore requires raising those pins in the same commit and
+  # re-running both gates locally under the new pairing.
   GO_VERSION: "1.24"
   NODE_VERSION: "22"
   BINARY: all2api
