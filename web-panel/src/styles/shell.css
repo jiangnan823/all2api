@@ -129,6 +129,58 @@
   color: var(--text-secondary);
 }
 
+/* M2 第二批接线：pill 色调跟随探测结果（连通=success，401=warn，离线=danger，未探测=idle） */
+.shell__status--ok .shell__status-dot {
+  background: var(--status-success);
+}
+
+.shell__status--warn .shell__status-dot {
+  background: var(--status-warn);
+}
+
+.shell__status--err .shell__status-dot {
+  background: var(--status-danger);
+}
+
+.shell__status--ok strong {
+  color: var(--status-success);
+}
+
+.shell__status--warn strong {
+  color: var(--status-warn);
+}
+
+.shell__status--err strong {
+  color: var(--status-danger);
+}
+
+.shell__status-detail {
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+.shell__status-refresh {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+
+.shell__status-refresh:hover {
+  color: var(--text-primary);
+}
+
+.shell__status-refresh:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .shell__status-dot {
   width: 8px;
   height: 8px;

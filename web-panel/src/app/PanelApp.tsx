@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { PANEL } from '../i18n/zh';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { PANEL, settingsLine } from '../i18n/zh';
+import { probePillStatus, PILL_POLL_MS, type PillStatus } from '../lib/statusPill';
 import { SettingsScreen } from './SettingsScreen';
 
 type Theme = 'light' | 'dark';
@@ -27,6 +28,80 @@ function useTheme(): [Theme, () => void] {
   return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))];
 }
 
+/**
+ * topbar 状态 pill（M2 第二批接线）：GET /api/time 判服务连通（成功 = 在线并给出服务器时间
+ * 偏差；401 = key 不符；其余 = 离线）。挂载即探测一次，之后按 PILL_POLL_MS 周期轮询，
+ * 断线在下一轮内可见；「立即探测」按钮供手动刷新。全部内存态，不落 storage。
+ */
+function StatusPill() {
+  const [status, setStatus] = useState<PillStatus>({ phase: 'initial' });
+  const [checking, setChecking] = useState(false);
+  const seqRef = useRef(0);
+
+  const probe = useCallback(async () => {
+    const seq = ++seqRef.current;
+    setChecking(true);
+    const next = await probePillStatus();
+    if (seq === seqRef.current) setStatus(next);
+    setChecking(false);
+  }, []);
+
+  useEffect(() => {
+    void probe();
+    const timer = window.setInterval(() => void probe(), PILL_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [probe]);
+
+  const copy = pillCopy(status);
+  const tone = pillTone(status);
+  return (
+    <p className={`shell__status shell__status--${tone}`} role="status">
+      <span className="shell__status-dot" aria-hidden="true" />
+      <span>{PANEL.STATUS_LABEL}</span>
+      <strong>{copy.value}</strong>
+      {copy.detail !== null && <span className="shell__status-detail">{copy.detail}</span>}
+      <button
+        type="button"
+        className="shell__status-refresh"
+        onClick={() => void probe()}
+        disabled={checking}
+        title={PANEL.STATUS_REFRESH}
+        aria-label={PANEL.STATUS_REFRESH}
+      >
+        ↻
+      </button>
+    </p>
+  );
+}
+
+function pillTone(status: PillStatus): 'idle' | 'ok' | 'warn' | 'err' {
+  switch (status.phase) {
+    case 'online': return 'ok';
+    case 'unauthorized': return 'warn';
+    case 'offline': return 'err';
+    default: return 'idle';
+  }
+}
+
+function pillCopy(status: PillStatus): { value: string; detail: string | null } {
+  switch (status.phase) {
+    case 'online':
+      return {
+        value: PANEL.STATUS_ONLINE,
+        detail: settingsLine(PANEL.STATUS_SKEW, { sec: status.skewSec, tz: status.time.timezone }),
+      };
+    case 'unauthorized':
+      return { value: PANEL.STATUS_UNAUTHORIZED, detail: null };
+    case 'offline':
+      return { value: PANEL.STATUS_OFFLINE, detail: status.detail };
+    case 'initial':
+      return { value: PANEL.STATUS_UNWIRED, detail: null };
+    case 'checking':
+      // 探测中不额外占位：展示沿用上一轮 status（状态机另有 phase，但 UI 只在首发时见 initial）
+      return { value: PANEL.STATUS_CHECKING, detail: null };
+  }
+}
+
 function EmptyState() {
   return (
     <div className="shell__empty">
@@ -40,6 +115,7 @@ function EmptyState() {
  * B1 面板外壳：左 rail（功能主干，不含来源）+ 顶栏 + 内容区，结构取自 UI UE
  * 《all2api-panel-hifi-v0.2》。B1 交付骨架与真实可用的主题切换；
  * M2 B2 起配置节挂载真实功能屏（SettingsScreen），接入节（B4/B5）仍为空状态待接线。
+ * M2 第二批：topbar 状态 pill 接真实探测（/api/time），不再是不接线的占位文案。
  */
 export function PanelApp() {
   const [theme, toggleTheme] = useTheme();
@@ -74,11 +150,7 @@ export function PanelApp() {
         <header className="shell__topbar">
           <h1 className="shell__title">{PANEL.TITLE}</h1>
           <span className="shell__spacer" />
-          <p className="shell__status">
-            <span className="shell__status-dot" aria-hidden="true" />
-            <span>{PANEL.STATUS_LABEL}</span>
-            <strong>{PANEL.STATUS_UNWIRED}</strong>
-          </p>
+          <StatusPill />
           <button
             type="button"
             className="btn"

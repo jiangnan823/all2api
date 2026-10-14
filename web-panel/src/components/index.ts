@@ -7,4 +7,4 @@ export type { AdvancedToggleProps } from './AdvancedToggle';
 export { DangerAction } from './DangerAction';
 export type { DangerActionProps } from './DangerAction';
 export { consentRequestBody, consentRejectionOf } from '../lib/consent';
-export { throttlePatchToConfigPatch, throttlePath, validateThrottleBudget, fingerprintRewriteEnabled } from '../lib/throttle';
+export { throttlePatchToConfigPatch, throttlePath, validateThrottleBudget, budgetDiff, fingerprintRewriteEnabled } from '../lib/throttle';

@@ -558,3 +558,138 @@
   line-height: var(--lh-loose);
   color: var(--status-warn);
 }
+
+/* ---- M2 第二批：X-API-Key 内存态输入 / 通用配置组 / 保存流反馈 ---- */
+
+.settings-screen__apikey {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+}
+
+.settings-screen__apikey-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.settings-screen__apikey-input {
+  min-height: 36px;
+  max-width: 420px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+.settings-screen__apikey-note {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.settings-screen__generic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.settings-screen__generic-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+}
+
+.settings-screen__generic-group legend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.settings-screen__generic-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 220px;
+  font-size: var(--fs-sm);
+}
+
+.settings-screen__generic-field input {
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+.settings-screen__generic-field input[type='checkbox'] {
+  min-height: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
+.settings-screen__generic-unit {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.settings-screen__generic-desc {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.settings-screen__generic-effect {
+  font-size: var(--fs-xs);
+  color: var(--status-warn);
+}
+
+.settings-screen__save-errors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--status-danger);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+}
+
+.settings-screen__save-errors-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--status-danger);
+}
+
+.settings-screen__save-errors ul {
+  margin: 0;
+  padding-left: var(--sp-5);
+}
+
+.settings-screen__save-errors code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+
+.settings-screen__save-failed {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--status-danger);
+}

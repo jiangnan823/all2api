@@ -173,6 +173,8 @@ export function reasonCopy(code: string, message?: string) {
 /**
  * 面板外壳文案（B1）。全部为**新增键**，不改动上方任何冻结文案：
  * §9 逐字基准与 402 唯一形态由 TC-M1-033 diff 通道守卫，本批零触碰。
+ * M2 第二批：状态 pill 接真实探测（/api/time = 服务连通；401 = key 不符；其余 = 离线），
+ * STATUS_UNWIRED 保留为首屏未完成首次探测时的观感键。
  */
 export const PANEL = {
   TITLE: 'all2api 管理面板',
@@ -183,6 +185,12 @@ export const PANEL = {
   THEME: '切换明暗主题',
   STATUS_LABEL: '接口状态',
   STATUS_UNWIRED: '未接线',
+  STATUS_ONLINE: '已连接',
+  STATUS_UNAUTHORIZED: '未授权',
+  STATUS_OFFLINE: '离线',
+  STATUS_CHECKING: '探测中',
+  STATUS_SKEW: '与服务器相差约 {sec} 秒（{tz}）',
+  STATUS_REFRESH: '立即重新探测',
   SETTINGS_TITLE: '按源节流与高级选项',
   SETTINGS_SUB: '每个来源的节流预算与请求特征改写都集中在此管理。',
   CONNECT_TITLE: '接入与凭证',
@@ -192,9 +200,9 @@ export const PANEL = {
 } as const;
 
 /**
- * 设置屏（M2 B2 接线批）全部为新增键，不触碰上方任何冻结段。
- * 边界如实：本里程碑后端只有只读接口（GET /api/config、/api/config/fields、/api/time），
- * 没有配置保存端点——保存按钮常置灰 + SAVE_DISABLED_NOTE 是产品口径，不是实现偷懒。
+ * 设置屏（M2 B2 起，M2 第二批补齐保存流/通用组/X-API-Key）。全部为新增键，不触碰上方任何冻结段。
+ * 边界如实：保存端点后端并行开发中——运行期 404/501 原样展示错误码，不硬编码假成功；
+ * X-API-Key 只存内存态（M1 红线），刷新丢失是预期，文案如实说明。
  */
 export const SETTINGS = {
   LOADING: '正在读取网关配置…',
@@ -211,11 +219,23 @@ export const SETTINGS = {
   SOURCE_ENABLED_ON: '已启用',
   SOURCE_ENABLED_OFF: '已停用',
   SAVE: '保存全部改动',
-  SAVE_DISABLED_NOTE: '当前里程碑后端为只读接口，保存未开放：改动只保留在本页，刷新或离开后丢失。',
+  SAVING: '正在保存…',
+  /** 保存流主提示：dirty 非空时保存按钮激活，成功以服务端回读为准重建基线。 */
+  SAVE_OK_NOTE: '已保存，展示的是网关回读后的生效配置。',
+  SAVE_FAILED: '保存失败：{detail}',
+  SAVE_REJECTED_TITLE: '保存被网关拒绝（逐字段）',
+  SAVE_MALFORMED_RESPONSE: '网关返回了无法理解的保存响应',
+  /** 无 dirty 时的基线说明（原 SAVE_DISABLED_NOTE 语义随保存流上线退役，键名保留更替）。 */
+  SAVE_NOTE: '改动只保存在本页内存，提交保存后才写入网关；未保存即刷新或离开会丢失。',
   DIRTY_BADGE: '有本地改动',
-  DIRTY_SUMMARY: '{count} 个来源有本地改动未保存（后端只读，保存未开放）',
+  DIRTY_SUMMARY: '{count} 处本地改动未保存',
   SYNCED_NOTE: '当前展示的是网关生效中的实时配置。',
   DISCARD: '放弃本地改动',
+  GENERIC_EFFECT_RESTART: '需重启网关生效',
+  GENERIC_CONFIRM_NOTE: '危险字段：改动将随下一次保存一并提交。',
+  APIKEY_TITLE: '网关 API Key（可选，内存态）',
+  APIKEY_PLACEHOLDER: '粘贴网关 api_key（配置为空 = 开放模式，可留空）',
+  APIKEY_NOTE: '只保存在当前页面内存中，不会写入浏览器存储；刷新或关闭页面后需重新粘贴。',
 } as const;
 
 /** SETTINGS 模板占位符替换（与 consentCheckLabel 同一做法，组件不内联拼串逻辑）。 */
@@ -241,6 +261,26 @@ export const CONFIG_FIELD_COPY: Record<string, string> = {
   'config.field.fingerprint_rewrite.label': ADVANCED.COLUMN,
   'config.field.fingerprint_rewrite.desc': '该开关逐源独立、默认关闭；开启影响发往该来源的请求特征，随时可再关闭。',
   'config.field.source_enabled.label': SETTINGS.SOURCE_ENABLED_LABEL,
+  // ---- 通用配置组字段（M2 第二批；key 逐字 = 后端 configfields.go 交付） ----
+  'config.field.listen.label': '监听地址',
+  'config.field.api_key.label': '网关 API Key',
+  'config.field.external_base_url.label': '对外 Base URL',
+  'config.field.external_base_url.desc': '生成接入地址时使用的对外可达地址；留空则用请求本身的地址。',
+  'config.field.responses_api.label': '启用 /v1/responses 接口',
+  'config.field.credit_floor.label': '额度下限',
+  'config.field.max_retries.label': '最大重试',
+  'config.field.pool_cooldown_sec.label': '池冷却时长',
+  'config.field.signin_cron.label': '签到定时',
+  'config.field.task_cron.label': '任务定时',
+  'config.field.token_keepalive_cron.label': '凭证保活定时',
+};
+
+/** 通用配置组标题（组名 = 后端 configfields.go 交付的 group 字段，未识别组原样显示）。 */
+export const CONFIG_GROUP_TITLES: Record<string, string> = {
+  gateway: '网关',
+  routing: '路由',
+  pooling: '池化',
+  schedule: '定时任务',
 };
 
 export function configFieldCopy(copyKey: string): string {

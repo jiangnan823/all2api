@@ -1,22 +1,49 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ServerTimeResponse, ThrottleBudget } from '../types/api-contract';
+import type { FieldError, ServerTimeResponse, ThrottleBudget } from '../types/api-contract';
 import { AdvancedToggle, ThrottleForm } from '../components';
-import { fetchConfigGroups, fetchPanelConfig, fetchServerTime } from '../lib/panelApi';
-import { buildSettingsModel, draftEquals, type SettingsModel, type SourceDraft } from '../lib/settingsModel';
-import { setDeliveredThrottleFields } from '../lib/throttle';
+import {
+  fetchConfigGroups,
+  fetchPanelConfig,
+  fetchServerTime,
+  savePanelConfig,
+  setApiKeyProvider,
+  ApiError,
+} from '../lib/panelApi';
+import {
+  buildSettingsModel,
+  draftEquals,
+  genericDraftToConfigPatch,
+  genericEquals,
+  type GenericSection,
+  type GenericValues,
+  type SettingsModel,
+  type SourceDraft,
+} from '../lib/settingsModel';
+import { budgetDiff, setDeliveredThrottleFields, throttlePatchToConfigPatch } from '../lib/throttle';
 import { SETTINGS, settingsLine, sourceDisplayName } from '../i18n/zh';
 
 /**
- * 设置屏容器（M2 B2）：进入时并行拉 GET /api/config + GET /api/config/fields，
- * 按源装配 ThrottleForm（元数据驱动）与 AdvancedToggle（指纹开关，内含 DangerAction 确认）。
- * 如实边界：后端本里程碑为只读接口，无保存端点——保存按钮常置灰，dirty 草稿只留内存
- * （面板不落任何 storage，M1 安全红线），「放弃本地改动」即回到服务端基线。
+ * 设置屏容器（M2 B2 → M2 第二批）：进入时并行拉 GET /api/config + GET /api/config/fields，
+ * 按源装配 ThrottleForm（元数据驱动）与 AdvancedToggle（指纹开关，内含 DangerAction 确认），
+ * 并按交付元数据渲染通用配置组（gateway/routing/pooling/schedule，值取 raw 透传）。
+ * 保存流（M2 第二批）：dirty 非空时「保存全部改动」激活 → POST /api/config（ConfigPatch，
+ * 只发改动字段的冻结 JSON path）；成功按服务端回读 applied 重建基线，字段级拒绝逐条红字，
+ * 401/404 等按真实错误码如实展示（后端保存端点并行开发中，不硬编码假成功）。
+ * X-API-Key：内存态输入（M1 红线——不落任何 storage），粘贴即生效于后续全部请求，
+ * 清空即回到开放模式；刷新丢失是预期行为，UI 文案如实说明。
  */
 
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
   | { phase: 'ready'; model: SettingsModel };
+
+type SaveState =
+  | { phase: 'idle' }
+  | { phase: 'saving' }
+  | { phase: 'saved' }
+  | { phase: 'field-errors'; errors: FieldError[] }
+  | { phase: 'failed'; message: string; status?: number };
 
 export function SettingsScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
@@ -26,6 +53,9 @@ export function SettingsScreen() {
   const [timeFailed, setTimeFailed] = useState(false);
   /** 草稿基线重置（放弃改动 / 重新加载）时自增，强制 ThrottleForm 丢弃内部草稿重新挂载。 */
   const [formEpoch, setFormEpoch] = useState(0);
+  /** 通用配置组的本地草稿（key = 冻结 JSON path）。服务端基线在 model.generic[].server。 */
+  const [genericDrafts, setGenericDrafts] = useState<Record<string, GenericValues> | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>({ phase: 'idle' });
   const seqRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -33,6 +63,7 @@ export function SettingsScreen() {
     setState({ phase: 'loading' });
     setTime(null);
     setTimeFailed(false);
+    setSaveState({ phase: 'idle' });
     try {
       const [config, groups] = await Promise.all([fetchPanelConfig(), fetchConfigGroups()]);
       if (seq !== seqRef.current) return;
@@ -41,6 +72,7 @@ export function SettingsScreen() {
       setDeliveredThrottleFields(model.throttleFields);
       setState({ phase: 'ready', model });
       setDrafts(model.server);
+      setGenericDrafts(Object.fromEntries(model.generic.map((g) => [g.group, { ...g.server }])));
       setSelected((prev) => (prev && model.sources.includes(prev) ? prev : (model.sources[0] ?? null)));
       setFormEpoch((e) => e + 1);
     } catch (err) {
@@ -66,6 +98,18 @@ export function SettingsScreen() {
     if (!model || !drafts) return [] as string[];
     return model.sources.filter((s) => !draftEquals(model.server[s], drafts[s]));
   }, [model, drafts]);
+
+  const dirtyGroups = useMemo(() => {
+    if (!model || !genericDrafts) return [] as string[];
+    return model.generic
+      .filter((g) => {
+        const d = genericDrafts[g.group];
+        return d !== undefined && !genericEquals(g, d);
+      })
+      .map((g) => g.group);
+  }, [model, genericDrafts]);
+
+  const dirtyCount = dirtySources.length + dirtyGroups.length;
 
   function applyBudgetPatch(source: string, patch: Partial<ThrottleBudget>) {
     setDrafts((d) => {
@@ -94,10 +138,78 @@ export function SettingsScreen() {
     });
   }
 
+  function applyGenericField(group: string, key: string, value: string | number | boolean) {
+    setGenericDrafts((d) => {
+      const cur = d?.[group];
+      if (cur === undefined) return d;
+      return { ...d, [group]: { ...cur, [key]: value } };
+    });
+  }
+
   function discardAll() {
     if (!model) return;
     setDrafts(model.server);
+    setGenericDrafts(Object.fromEntries(model.generic.map((g) => [g.group, { ...g.server }])));
     setFormEpoch((e) => e + 1);
+    setSaveState({ phase: 'idle' });
+  }
+
+  /**
+   * 保存流：装配「只含改动字段」的 ConfigPatch 并 POST /api/config。
+   * 200 + ok=true → 以服务端回读 applied 为准重建基线（不信本地乐观值，契约明文）；
+   * 200 + fieldErrors → 逐字段红字（草稿保留，改完可再保存）；
+   * 401 → key 缺失/不符；404/501 → 后端端点未部署（并行开发中，如实展示）。
+   */
+  async function saveAll() {
+    if (!model || !drafts || !genericDrafts) return;
+    const patch = [
+      ...dirtyGroups.flatMap((g) => {
+        const section = model.generic.find((s) => s.group === g);
+        const draft = genericDrafts[g];
+        return section && draft ? genericDraftToConfigPatch(section, draft) : [];
+      }),
+      ...dirtySources.flatMap((s) => {
+        const draft = drafts[s];
+        if (!draft) return [];
+        const flagKeys: Array<{ key: string; value: boolean | undefined }> = [];
+        const base = model.server[s];
+        if (draft.fingerprint !== base.fingerprint) {
+          flagKeys.push({ key: `sources.${s}.advanced.request_fingerprint_rewrite`, value: draft.fingerprint });
+        }
+        if (draft.enabled !== base.enabled) {
+          flagKeys.push({ key: `sources.${s}.enabled`, value: draft.enabled });
+        }
+        return [...throttlePatchToConfigPatch(s, budgetDiff(base.budget, draft.budget)), ...flagKeys];
+      }),
+    ];
+    if (patch.length === 0) return;
+    setSaveState({ phase: 'saving' });
+    try {
+      const res = await savePanelConfig(patch);
+      if (res.ok && res.applied) {
+        // 服务端回读为准：重建全部基线，包括 generic 值与 advanced/enabled（可能与其他写入方合流）
+        const next = buildSettingsModel(res.applied, await fetchConfigGroups());
+        setDeliveredThrottleFields(next.throttleFields);
+        setState({ phase: 'ready', model: next });
+        setDrafts(next.server);
+        setGenericDrafts(Object.fromEntries(next.generic.map((g) => [g.group, { ...g.server }])));
+        setSelected((prev) => (prev && next.sources.includes(prev) ? prev : (next.sources[0] ?? null)));
+        setFormEpoch((e) => e + 1);
+        setSaveState({ phase: 'saved' });
+      } else if (res.fieldErrors && res.fieldErrors.length > 0) {
+        setSaveState({ phase: 'field-errors', errors: res.fieldErrors });
+      } else {
+        // ok=false 且无 fieldErrors：形状异常，如实报错不装懂
+        setSaveState({ phase: 'failed', message: SETTINGS.SAVE_MALFORMED_RESPONSE });
+      }
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : undefined;
+      setSaveState({
+        phase: 'failed',
+        message: err instanceof Error ? err.message : String(err),
+        status,
+      });
+    }
   }
 
   if (state.phase === 'loading') {
@@ -121,13 +233,16 @@ export function SettingsScreen() {
     );
   }
 
-  const { sources, danger } = state.model;
+  const { sources, danger, generic } = state.model;
   const current = selected !== null && drafts !== null ? drafts[selected] : null;
   const currentDanger = selected !== null ? danger[selected] : undefined;
   const dirtySet = new Set(dirtySources);
+  const saving = saveState.phase === 'saving';
 
   return (
     <div className="settings-screen">
+      <ApiKeySection />
+
       {time !== null && (
         <p className="settings-screen__meta">
           {settingsLine(SETTINGS.TIME_NOW, {
@@ -203,27 +318,171 @@ export function SettingsScreen() {
             </>
           )}
 
+          <GenericConfigSections
+            sections={generic}
+            drafts={genericDrafts}
+            dirtyGroups={dirtyGroups}
+            onChange={applyGenericField}
+          />
+
           <footer className="settings-screen__bar">
             <p className="settings-screen__bar-note" role="status">
-              {dirtySources.length > 0
-                ? settingsLine(SETTINGS.DIRTY_SUMMARY, { count: dirtySources.length })
-                : SETTINGS.SYNCED_NOTE}
+              {dirtyCount > 0
+                ? settingsLine(SETTINGS.DIRTY_SUMMARY, { count: dirtyCount })
+                : saveState.phase === 'saved'
+                  ? SETTINGS.SAVE_OK_NOTE
+                  : SETTINGS.SYNCED_NOTE}
             </p>
-            <button type="button" className="btn btn--primary" disabled title={SETTINGS.SAVE_DISABLED_NOTE}>
-              {SETTINGS.SAVE}
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={dirtyCount === 0 || saving}
+              onClick={() => void saveAll()}
+            >
+              {saving ? SETTINGS.SAVING : SETTINGS.SAVE}
             </button>
             <button
               type="button"
               className="btn"
-              disabled={dirtySources.length === 0}
+              disabled={dirtyCount === 0 || saving}
               onClick={discardAll}
             >
               {SETTINGS.DISCARD}
             </button>
           </footer>
-          <p className="settings-screen__readonly-note">{SETTINGS.SAVE_DISABLED_NOTE}</p>
+          {saveState.phase === 'field-errors' && (
+            <div className="settings-screen__save-errors" role="alert">
+              <p className="settings-screen__save-errors-title">{SETTINGS.SAVE_REJECTED_TITLE}</p>
+              <ul>
+                {saveState.errors.map((e) => (
+                  <li key={`${e.key}:${e.message}`}>
+                    <code>{e.key}</code> — {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {saveState.phase === 'failed' && (
+            <p className="settings-screen__save-failed" role="alert">
+              {settingsLine(SETTINGS.SAVE_FAILED, {
+                detail: saveState.status !== undefined ? `HTTP ${saveState.status}` : saveState.message,
+              })}
+            </p>
+          )}
+          <p className="settings-screen__readonly-note">{SETTINGS.SAVE_NOTE}</p>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * 通用配置组渲染（M2 第二批）：gateway/routing/pooling/schedule 的 FieldDef 元数据直渲。
+ * 每组一段 fieldset；number/cron/string → 单值输入，boolean → 勾选；requiresConfirm 字段
+ * 给危险区样式标注（保存流仍只按 JSON path 提交，确认语义与后端一致：值由用户显式改动）。
+ */
+function GenericConfigSections(props: {
+  sections: GenericSection[];
+  drafts: Record<string, GenericValues> | null;
+  dirtyGroups: string[];
+  onChange: (group: string, key: string, value: string | number | boolean) => void;
+}) {
+  const { sections, drafts, dirtyGroups, onChange } = props;
+  if (sections.length === 0) return null;
+  return (
+    <div className="settings-screen__generic">
+      {sections.map((s) => {
+        const values = drafts?.[s.group];
+        const dirty = dirtyGroups.includes(s.group);
+        return (
+          <fieldset key={s.group} className="settings-screen__generic-group" data-group={s.group}>
+            <legend>
+              {s.title}
+              {dirty && (
+                <span className="settings-screen__dirty-dot" title={SETTINGS.DIRTY_BADGE} aria-hidden="true" />
+              )}
+            </legend>
+            {values === undefined ? (
+              <p className="settings-screen__meta">{SETTINGS.LOADING}</p>
+            ) : (
+              s.fields.map((f) => {
+                const value = values[f.key];
+                const errHint = f.requiresConfirm ? SETTINGS.GENERIC_CONFIRM_NOTE : null;
+                return (
+                  <label key={f.key} className="settings-screen__generic-field">
+                    <span className="settings-screen__generic-label">
+                      {f.label}
+                      {f.unit !== undefined && <span className="settings-screen__generic-unit">（{f.unit}）</span>}
+                    </span>
+                    {f.type === 'boolean' ? (
+                      <input
+                        type="checkbox"
+                        name={f.key}
+                        checked={value === true}
+                        onChange={(e) => onChange(s.group, f.key, e.target.checked)}
+                      />
+                    ) : (
+                      <input
+                        type={f.type === 'number' ? 'number' : 'text'}
+                        name={f.key}
+                        value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+                        min={f.min}
+                        max={f.max}
+                        onChange={(e) => {
+                          if (f.type === 'number') {
+                            // 空输入保持空串（NaN 不落草稿），非空按数值落
+                            const n = e.target.value === '' ? '' : Number(e.target.value);
+                            onChange(s.group, f.key, typeof n === 'number' && Number.isFinite(n) ? n : '');
+                          } else {
+                            onChange(s.group, f.key, e.target.value);
+                          }
+                        }}
+                      />
+                    )}
+                    {f.description !== undefined && (
+                      <span className="settings-screen__generic-desc">{f.description}</span>
+                    )}
+                    {f.effect === 'restart_required' && (
+                      <span className="settings-screen__generic-effect">{SETTINGS.GENERIC_EFFECT_RESTART}</span>
+                    )}
+                    {errHint !== null && <span className="settings-screen__generic-effect">{errHint}</span>}
+                  </label>
+                );
+              })
+            )}
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * X-API-Key 内存态输入（M2 第二批）。粘贴即注入 panelApi provider（后续全部 /api/* 请求带头）；
+ * 清空 = 开放模式（不带头）。红线：值只存 React 内存态，任何 storage 均不落（M1 决策）；
+ * 刷新丢失是预期行为——文案如实说明，不假装持久化。
+ */
+function ApiKeySection() {
+  const [key, setKey] = useState('');
+  const apply = (next: string) => {
+    setKey(next);
+    setApiKeyProvider(() => next);
+  };
+  return (
+    <section className="settings-screen__apikey">
+      <label className="settings-screen__apikey-label" htmlFor="settings-apikey-input">
+        {SETTINGS.APIKEY_TITLE}
+      </label>
+      <input
+        id="settings-apikey-input"
+        type="password"
+        autoComplete="off"
+        className="settings-screen__apikey-input"
+        placeholder={SETTINGS.APIKEY_PLACEHOLDER}
+        value={key}
+        onChange={(e) => apply(e.target.value)}
+      />
+      <p className="settings-screen__apikey-note">{SETTINGS.APIKEY_NOTE}</p>
+    </section>
   );
 }
