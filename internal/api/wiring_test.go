@@ -8,6 +8,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,7 +38,7 @@ func doGet(t *testing.T, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	mux := http.NewServeMux()
 	Register(mux, nil) // nil host: recover route irrelevant for these surfaces
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	return rec
@@ -90,7 +91,7 @@ func TestServerTimeEndpoint(t *testing.T) {
 
 	mux := http.NewServeMux()
 	Register(mux, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/time", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/time", nil)
 	recPost := httptest.NewRecorder()
 	mux.ServeHTTP(recPost, req)
 	if recPost.Code != http.StatusMethodNotAllowed {
