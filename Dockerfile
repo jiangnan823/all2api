@@ -12,7 +12,7 @@
 #   module            all2api
 #   entrypoint        ./cmd/gateway
 #   binary            all2api
-#   panel source      web-panel/            (npm run --if-present build -> web-panel/dist)
+#   panel source      web-panel/            (vite build -> web-panel/dist; this file moves it)
 #   panel embed dir   internal/web/dist     (backend: //go:embed all:dist)
 #   listen            :7863
 #   health endpoint   /healthz
@@ -25,19 +25,37 @@
 # ----------------------------------------------------------------- web ------
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /src
+
+# Landing path convention (re-ruled by PM 2026-10-14, seq=870): the panel bundle lands in
+# `web-panel/dist` — here the flattened `/src/dist` — and THIS stage's COPY below is the mover
+# into the embed directory. Do not "fix" the path by pointing vite at ../internal/web/dist: the
+# flatten would then resolve the outDir outside the stage and bake a placeholder silently.
+#
+# `emptyOutDir: false` on the fronted side keeps any `web-panel/dist/.gitkeep` alive, so the
+# truth source for "was the panel built" is dist **minus .gitkeep**, and the old
+# `if [ -z "$(ls -A dist)" ]` test was not that: an empty-but-present directory (or one holding
+# only .gitkeep) produced a green placeholder bake. Now: a declared build script that produces
+# no real files is a hard failure, and the placeholder branch only survives while no build script
+# exists at all.
 COPY web-panel/ ./
-# web-panel/package.json exists but carries only typecheck/test until fronted lands
-# bundling (M1). `--if-present` keeps the image build green, and the dist check drops
-# in a placeholder index.html so //go:embed all:dist always has content.
+
 RUN set -eux; \
     if [ -f package.json ]; then \
+      declared=$(node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("package.json","utf8"));console.log(p.scripts&&p.scripts.build?"true":"false")'); \
       npm ci; \
       npm run --if-present build; \
     else \
+      declared=false; \
       echo "web-panel/package.json not found"; \
     fi; \
-    if [ -z "$(ls -A dist 2>/dev/null)" ]; then \
-      echo "no panel build output (no build script yet, M1 item) — embedding placeholder"; \
+    real=$(find dist -type f ! -name .gitkeep 2>/dev/null | wc -l); \
+    echo "panel build script declared=${declared}; real bundle files in dist (excluding .gitkeep)=${real}"; \
+    if [ "${declared}" = "true" ] && [ "${real}" -eq 0 ]; then \
+      echo "ERROR: package.json declares a build script but web-panel/dist holds no bundle — refusing to bake an image that would serve the placeholder panel"; \
+      exit 1; \
+    fi; \
+    if [ "${real}" -eq 0 ]; then \
+      echo "no panel bundle and no build script yet — embedding placeholder so //go:embed all:dist always compiles"; \
       mkdir -p dist && printf '<!doctype html><meta charset=utf-8><title>all2api panel pending</title>' > dist/index.html; \
     fi
 
@@ -56,6 +74,9 @@ COPY go.mod ./
 RUN go mod download
 
 COPY . .
+# The mover (direction B, seq=870): the bundle staged at /src/dist becomes the embed content.
+# The `web` stage has already failed the build if a build script was declared and this is empty,
+# so this COPY can only ever carry a real bundle or an explicit placeholder.
 COPY --from=web /src/dist /src/internal/web/dist
 
 ARG TARGETOS

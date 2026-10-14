@@ -29,13 +29,38 @@ embed: ## ensure the go:embed target exists so the build can compile
 	@mkdir -p $(EMBED_DIR)
 	@test -f $(EMBED_DIR)/index.html || @test -f $(EMBED_DIR)/.gitkeep || touch $(EMBED_DIR)/.gitkeep
 
-panel: ## build the web panel (no-op while the bundle script is still an M1 item)
-	@test -f $(PANEL_DIR)/package.json || { echo "no panel yet — skipping"; exit 0; }
+# B1 seam, direction B (PM seq=870): the bundle lands in $(PANEL_DIR)/dist and the mover — CI,
+# Dockerfile, and this target — copies it into $(EMBED_DIR) for //go:embed all:dist. Landing
+# path is not configurable per-consumer: outDir / assertion / mover must be one path, and the
+# old form of this target probed $(PANEL_DIR)/dist with `head -1` then `rm -rf` the embed dir,
+# which (a) went green on a .gitkeep-only dist and (b) destroyed the tracked placeholder.
+# Truth source = real files excluding .gitkeep; declared-but-empty and empty-destination are both
+# hard errors.
+panel: ## build the web panel and move the bundle into the embed dir
+	@test -f $(PANEL_DIR)/package.json || { echo "no panel project — skipping"; exit 0; }
 	cd $(PANEL_DIR) && npm ci && npm run --if-present build
-	@test -n "$$(find $(PANEL_DIR)/dist -type f 2>/dev/null | head -1)" \
-		|| { echo "panel produced no dist/ — embed dir left untouched"; exit 0; }
-	rm -rf $(EMBED_DIR) && mkdir -p $(EMBED_DIR)
-	cp -r $(PANEL_DIR)/dist/* $(EMBED_DIR)/
+	@real=$$(find $(PANEL_DIR)/dist -type f ! -name .gitkeep 2>/dev/null | wc -l); \
+	out=$$(cd $(PANEL_DIR) && npm pkg get scripts.build); \
+	echo "scripts.build -> $$out ; real bundle files in $(PANEL_DIR)/dist (excl. .gitkeep) = $$real"; \
+	case "$$out" in \
+	  '{}'|'') \
+	    if [ "$$real" -eq 0 ]; then \
+	      echo "no build script declared yet — $(EMBED_DIR) stays at .gitkeep (run 'make embed' before go build)"; \
+	      exit 0; \
+	    fi ;; \
+	esac; \
+	if [ "$$real" -eq 0 ]; then \
+	  echo "ERROR: $(PANEL_DIR) declares a build script but holds no bundle — refusing to embed a placeholder"; \
+	  exit 1; \
+	fi; \
+	mkdir -p $(EMBED_DIR); \
+	cp -R $(PANEL_DIR)/dist/. $(EMBED_DIR)/; \
+	landed=$$(find $(EMBED_DIR) -type f ! -name .gitkeep 2>/dev/null | wc -l); \
+	echo "moved into $(EMBED_DIR): $$landed real files"; \
+	if [ "$$landed" -eq 0 ]; then \
+	  echo "ERROR: mover ran but $(EMBED_DIR) is still empty — go build would embed the placeholder"; \
+	  exit 1; \
+	fi
 
 vet: ## go vet
 	go vet ./...
@@ -88,10 +113,12 @@ docker-smoke: docker ## run the container and assert /healthz (M0 acceptance)
 # ci.yml (measured matrix: docs/DEVOPS-M0-NOTES.md §9.16).
 scan: ## local security scan before pushing (mirrors the CI security job)
 	@echo "toolchain: $$(go version)  GOTOOLCHAIN=$$(go env GOTOOLCHAIN)"
-	gosec --version
-	gosec -severity high -fmt=text ./...
-	govulncheck -version
-	govulncheck ./...
+	@gosec --version || true
+	@echo "gosec module: $$(go version -m "$$(command -v gosec)" | awk '$$1=="mod"{print $$3}')"
+	@gosec -severity high -fmt=text ./...
+	@govulncheck -version
+	@echo "govulncheck module: $$(go version -m "$$(command -v govulncheck)" | awk '$$1=="mod"{print $$3}')"
+	@govulncheck ./...
 
 workflows: ## lint the Actions workflows offline (needs actionlint)
 	@actionlint .github/workflows/*.yml || { \

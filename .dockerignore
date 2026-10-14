@@ -34,10 +34,17 @@ bin/
 coverage.out
 vendor/
 
-# Panel sources are compiled in the `web` stage; the Go stage only needs dist.
+# Panel sources are compiled in the `web` stage; the Go stage only needs the bundle it produces.
+# `web-panel/dist` is excluded on purpose: with `emptyOutDir: false` a host-side stale bundle
+# would be copied into the stage and survive alongside the fresh one, so the image could embed
+# dead hashed assets while every assertion still counted "real files present". The stage must be
+# the only producer of the bundle it moves into internal/web/dist.
 web-panel/node_modules
+web-panel/dist
 web-panel/.next
 web-panel/tmp
+web-panel/coverage
+web-panel/.vite
 
 # Belt-and-braces for the `dist/` rule above: go:embed all:dist fails at compile time
 # if the embed dir (or its .gitkeep placeholder) is ever filtered out of the context.

@@ -67,7 +67,7 @@ jobs:
     # 38428692560/38428694889). Panel presence is therefore detected in a step and
     # each npm step is gated on that output.
     outputs:
-      dist: ${{ steps.build.outputs.built }}
+      dist: ${{ steps.probe.outputs.built }}
     steps:
       - uses: actions/checkout@v4
 
@@ -93,6 +93,26 @@ jobs:
         working-directory: ${{ env.PANEL_DIR }}
         run: npm ci
 
+      # Panel supply-chain self-report (B1 seam, devops 口径).
+      # CI installs with `npm ci` and deliberately does NOT add `--ignore-scripts`:
+      # esbuild's platform package needs its postinstall to drop the native binary, so
+      # suppressing lifecycle scripts would produce a panel job that is green and broken.
+      # Reproducibility instead rests on the lockfile (the npm cache key is this same
+      # package-lock.json), on `npm ci` refusing any lock drift, and on the evidence printed
+      # here. fronted reported a local `esbuild@0.28.2 postinstall 未被 allowScripts 覆盖`
+      # warning with exit 0 — if this repo ever adopts an allow-scripts policy it must
+      # whitelist esbuild's postinstall, and that decision belongs in this line, not silently
+      # inside a build step.
+      - name: Panel toolchain & supply-chain self-report
+        if: steps.detect.outputs.present == 'true'
+        working-directory: ${{ env.PANEL_DIR }}
+        run: |
+          set -e
+          node -v
+          npm -v
+          npm ls vite esbuild --depth=1 || true
+          echo "ignore-scripts=$(npm config get ignore-scripts)"
+
       # typecheck/test are hard gates whenever the scripts exist.
       - name: Typecheck + unit tests (if defined)
         if: steps.detect.outputs.present == 'true'
@@ -102,36 +122,55 @@ jobs:
           npm run --if-present typecheck
           npm run --if-present test
 
-      # Bundling is optional by design in M1: web-panel/package.json carries only
-      # typecheck/test (fronted 把「构建、静态服务、/api/* 接线」列 M1). `--if-present`
-      # makes a missing build script a notice, not a red job, so the Go gate
-      # (三变体 build/vet) is never misattributed to a frontend gap. Once a real
-      # `build` script lands, this step runs it and any failure is blocking.
-      - name: Build panel (skipped while no build script is defined)
-        id: build
+      # B1 (M2) makes bundling real. Landing path is the repo's documented convention, re-ruled
+      # by PM on 2026-10-14 (seq=870): **the panel bundle lands in `web-panel/dist`** and the
+      # mover (this pipeline, and the Dockerfile's `web` stage) is what feeds `internal/web/dist`.
+      # fronted's vite config therefore keeps `outDir: 'dist'` with `emptyOutDir: false`
+      # (`.gitignore:37` reserves a `web-panel/dist/.gitkeep` negation, and clearing the embed
+      # dir would break `//go:embed all:dist`, which cannot compile against an empty directory).
+      #
+      # The one thing this job must never do is print green without proving the bundle exists:
+      # the old step did `find dist` but then gated the non-empty assertion AND the artifact
+      # upload on that same step's output, so a wrong landing path skipped both `if`s and the
+      # job stayed green while nothing was embedded. Probing and asserting are separate steps now,
+      # and "a build script was declared but no files landed" is a red.
+      - name: Build panel (no-op while package.json declares no build script)
         if: steps.detect.outputs.present == 'true'
         working-directory: ${{ env.PANEL_DIR }}
         run: |
           set -e
           npm run --if-present build
-          if [ -n "$(find dist -type f 2>/dev/null | head -1)" ]; then
-            echo "built=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "built=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::web-panel has no build output yet — panel bundling is an M1 item (fronted)"
-          fi
 
-      - name: Assert build output is non-empty
-        if: steps.build.outputs.built == 'true'
-        working-directory: ${{ env.PANEL_DIR }}
+      - name: Probe panel bundle
+        id: probe
+        if: steps.detect.outputs.present == 'true'
         run: |
           set -e
-          out=$(find dist -type f 2>/dev/null | wc -l)
-          echo "panel dist files: $out"
-          test "$out" -gt 0 || { echo "::error::web panel produced no files"; exit 1; }
+          declared=$(node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.env.PANEL_DIR+"/package.json","utf8"));console.log(p.scripts&&p.scripts.build?"true":"false")')
+          real=$(find "${PANEL_DIR}/dist" -type f ! -name '.gitkeep' 2>/dev/null | wc -l)
+          echo "build script declared: ${declared}"
+          echo "real bundle files in ${PANEL_DIR}/dist (excluding .gitkeep): ${real}"
+          find "${PANEL_DIR}/dist" -type f ! -name '.gitkeep' 2>/dev/null | sort | head -20 || true
+          echo "declared=${declared}" >> "$GITHUB_OUTPUT"
+          built=false
+          if [ "${declared}" = "true" ] && [ "${real}" -gt 0 ]; then built=true; fi
+          echo "built=${built}" >> "$GITHUB_OUTPUT"
+          echo "panel bundle present: ${built}"
+          if [ "${declared}" = "false" ]; then
+            echo "::notice::${PANEL_DIR} declares no build script — bundling is a no-op and the embed stays on its placeholder (fronted owns B1)"
+          fi
+
+      - name: Assert the panel bundle is real
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          set -e
+          if [ "${{ steps.probe.outputs.declared }}" = "true" ] && [ "${{ steps.probe.outputs.built }}" != "true" ]; then
+            echo "::error::${PANEL_DIR} declares a build script but ${PANEL_DIR}/dist holds no real files — the mover would embed a placeholder page"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
-        if: steps.build.outputs.built == 'true'
+        if: steps.probe.outputs.built == 'true'
         with:
           name: panel-dist
           path: ${{ env.PANEL_DIR }}/dist
@@ -186,7 +225,17 @@ jobs:
         run: |
           set -e
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_VERSION }}
-          "$(go env GOPATH)/bin/golangci-lint" --version
+          BIN="$(go env GOPATH)/bin/golangci-lint"
+          "$BIN" --version
+          # Assert the pin instead of trusting it: `go install pkg@version` stamps the module
+          # into the binary, and `go version -m` is the only line that proves which version
+          # actually ran (golangci prints it, gosec does not — see the security job).
+          got=$(go version -m "$BIN" | awk '$1=="mod"{print $3}')
+          echo "embedded module version: ${got:-none}"
+          if [ "${got}" != "${{ env.GOLANGCI_VERSION }}" ]; then
+            echo "::error::golangci-lint on PATH is ${got:-unknown}, expected ${{ env.GOLANGCI_VERSION }}"
+            exit 1
+          fi
 
       - name: golangci-lint
         run: |
@@ -235,7 +284,12 @@ jobs:
   build:
     name: build / ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
-    needs: [lint, test]
+    # `panel` joins the dependency list so bundling is ordered BEFORE every go build, which
+    # is the seam fronted asked for: the shipped CI binaries must contain the real panel, not
+    # the .gitkeep placeholder. Attribution is preserved — a panel failure is still red in the
+    # panel job, and this job keeps a .gitkeep fallback for when no bundle exists (pre-B1), so
+    # a frontend gap can never masquerade as a Go build red.
+    needs: [lint, test, panel]
     strategy:
       fail-fast: false
       matrix:
@@ -266,12 +320,35 @@ jobs:
           # with `go mod verify` and `-mod=readonly`.
           cache-dependency-path: go.mod
 
-      # The Go gate is deliberately independent of the panel job: it compiles against
-      # the tracked internal/web/dist/.gitkeep placeholder so a frontend gap can never
-      # turn one of the three build variants red. Real panel assets are embedded on the
-      # release path (release.yml binaries + Dockerfile web stage) instead.
+      # The Go gate stays compilable without a panel: `//go:embed all:dist` needs a non-empty
+      # directory, and the tracked .gitkeep provides that. When the panel job did produce a
+      # bundle, THIS job is the mover: `web-panel/dist` (uploaded by the panel job) is restored
+      # straight into the embed directory, same shape as release.yml's "Restore panel dist", so
+      # the artefacts uploaded here are the binaries users actually get.
       - name: Ensure embed dir is buildable
         run: mkdir -p ${{ env.EMBED_DIR }} && touch ${{ env.EMBED_DIR }}/.gitkeep
+
+      - name: Restore panel dist into the embed dir
+        if: needs.panel.outputs.dist == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: panel-dist
+          path: ${{ env.EMBED_DIR }}
+
+      # "Green upload, empty download" is a real failure mode (artifact name typos, gated
+      # uploads), and it would land silently: go:embed happily compiles a directory that only
+      # contains .gitkeep. So the move is asserted at the destination, not assumed.
+      - name: Assert the bundle landed in the embed dir
+        if: needs.panel.outputs.dist == 'true'
+        run: |
+          set -e
+          n=$(find "${EMBED_DIR}" -type f ! -name .gitkeep | wc -l)
+          echo "real files in ${EMBED_DIR} after restore: ${n}"
+          find "${EMBED_DIR}" -type f ! -name .gitkeep | sort | head -20
+          if [ "${n}" -eq 0 ]; then
+            echo "::error::panel job reported a bundle but ${EMBED_DIR} received nothing — binaries would embed the placeholder"
+            exit 1
+          fi
 
       - name: Build
         env:
@@ -342,7 +419,10 @@ jobs:
   smoke:
     name: smoke / healthz
     runs-on: ubuntu-24.04
-    needs: [image]
+    # `panel` is only an ordering dependency here: it decides whether the panel seam
+    # assertion below runs at all. Job NAME and key are unchanged, so the future
+    # branch-protection required list is unaffected.
+    needs: [image, panel]
     steps:
       - uses: actions/checkout@v4
 
@@ -409,6 +489,32 @@ jobs:
             echo "::error::healthz must include a \"service\" identity field for LB/host probing"
             exit 1
           }
+
+      # B1 seam, end-to-end: the image is built from this repo, its `web` stage runs the real
+      # vite build into internal/web/dist, `go build` embeds that directory, and the gateway
+      # serves it. So a GET / against the running container is the only check that proves the
+      # whole chain — a panel job green + a docker job green proves nothing by themselves.
+      # A placeholder page cannot reference a content-hashed bundle, which is exactly what
+      # this asserts (positive form, so it does not couple to any specific copy text).
+      # Gated on the panel job having produced real output, so it is inert until B1 lands and
+      # strictly blocking afterwards: one variable at a time.
+      - name: Assert served panel is the built bundle
+        if: needs.panel.outputs.dist == 'true'
+        run: |
+          set -e
+          html=$(curl -fsS "http://127.0.0.1:${LISTEN_PORT}/")
+          echo "${html}" | head -30
+          echo "${html}" | grep -Eq '/assets/[A-Za-z0-9._-]+\.js' || {
+            echo "::error::GET / did not reference a built asset bundle — the embedded panel is the placeholder, not B1's build output"
+            exit 1
+          }
+          css=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${LISTEN_PORT}/$(echo "${html}" | grep -Eo '/assets/[A-Za-z0-9._-]+\.css' | head -1)")
+          echo "asset css probe: http=${css}"
+          test "${css}" = "200" || {
+            echo "::error::index.html references an /assets/*.css that the server does not serve"
+            exit 1
+          }
+          echo "panel seam verified: built bundle served from go:embed inside the production image"
 
       - name: Assert graceful shutdown within stop grace period
         run: |
@@ -489,7 +595,17 @@ jobs:
           set -e
           go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}
           GOSEC="$(go env GOPATH)/bin/gosec"
-          "$GOSEC" --version
+          # gosec's --version is stamped only in its release pipeline, so a source install
+          # prints "Version: dev" and proves nothing about which commit scanned this repo.
+          # The module version embedded by `go install pkg@version` does, so that is what we
+          # assert. A silent pin miss here is the same failure class as the go1.27 false green.
+          "$GOSEC" --version || true
+          got=$(go version -m "$GOSEC" | awk '$1=="mod"{print $3}')
+          echo "gosec embedded module version: ${got:-none} (pinned ${{ env.GOSEC_VERSION }})"
+          if [ "${got}" != "${{ env.GOSEC_VERSION }}" ]; then
+            echo "::error::gosec on PATH is ${got:-unknown}, expected ${{ env.GOSEC_VERSION }}"
+            exit 1
+          fi
           "$GOSEC" -severity high -fmt=text ./...
 
       # Pinned, not @latest: the tool's own go.mod requires a Go >= its declared minimum, so
@@ -501,8 +617,15 @@ jobs:
         run: |
           set -e
           go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
-          "$(go env GOPATH)/bin/govulncheck" -version
-          "$(go env GOPATH)/bin/govulncheck" ./...
+          GVC="$(go env GOPATH)/bin/govulncheck"
+          "$GVC" -version
+          got=$(go version -m "$GVC" | awk '$1=="mod"{print $3}')
+          echo "govulncheck embedded module version: ${got:-none} (pinned ${{ env.GOVULNCHECK_VERSION }})"
+          if [ "${got}" != "${{ env.GOVULNCHECK_VERSION }}" ]; then
+            echo "::error::govulncheck on PATH is ${got:-unknown}, expected ${{ env.GOVULNCHECK_VERSION }}"
+            exit 1
+          fi
+          "$GVC" ./...
 
       # Fails the job if ANY scan failed, and names them so the red is attributable
       # to a specific line (secret / static / dependency) at a glance.

@@ -613,5 +613,44 @@ PM seq=809 裁定六项版本决策、seq=814 传达主人 seq=812「都按照�
 5. **1.24.13 便携链保留**（主人 seq=751「保留」）：不删，它是本轮唯一能复现"旧 CI 结论"的对照链；升 1.26.9 后它降级为历史对照用途。
 6. **云端首绿仍未取**：B0 工件在本地 commit，等主人自主 push 后才拿得到 security job 的新链首绿与 govulncheck 钉版首跑；本轮不提 push 请求。
 
+## 9.17 B1（panel build 管道）devops 半边：产物落点 / 搬运点 / 断言点三点一致
+
+fronted 在 `ab2529a`（base `2131d30`，10 文件 / +535 −2，全在 `web-panel/`）落了 vite 构建管道，点名两条接缝交 devops：panel build 必须排在 go build 之前、以及 esbuild `postinstall` 的 allow-scripts 口径。
+
+### 9.17-a 先记一笔竞态（这条值得留档，因为它差点变成"两边都改、两边都绿"）
+
+我按「断言与搬运都直读 `${EMBED_DIR}`」的方向（记为 A）落过码，而 fronted 在同一窗口实测后主张仓库既有文档约定是「产物落 `web-panel/dist`、搬运方进 embed」（方向 B），并**先报后改**（seq=868），PM 于 seq=870 裁 **B**：唯一真源=仓库文档约定，`vite outDir='dist'` + `emptyOutDir:false` 保留，搬运与断言归 devops 半边。
+
+- 我的 A 向改动**从未 commit**（`git status` 当时只有 4 个未提交文件），因此不存在需要回退的坐标，回执已按 PM 指令给 fronted：她**不需要**把 `outDir` 改回 `../internal/web/dist`，她的 `a860150`（tip，`outDir: 'dist'` + `build:embed` 本机等价物）就是最终形态。
+- 裁 B 的实质理由（我认同并据此重写）：三点路径一致性比"少一跳"更贵。B 下 `Dockerfile`、`release.yml`、`.gitignore:37` 三处既有文档同一口径；A 需要同时改这三处且任一处漏改的表现**仍然是绿**。
+- 教训固化：**跨写者的路径口径必须先在群内钉死再落码**；我在收到她举报前已写完 A，只是因为「本地 commit、攒够再报」的既有纪律才没形成双改撞车。
+
+### 9.17-b B 口径下的四处静默假绿（逐条实测，非推演）
+
+1. **`ci.yml` panel job 的断言是永真式**。原形：`built` 在 build 步内部用 `find dist | head -1` 算出，而下一步「Assert build output is non-empty」与 upload 的 `if` **都挂在同一个 `built` 上** ⇒ 断言只在"已经判定有产物"时才执行，永远不可能失败；判false时两个 `if` 一起跳过，job 绿着结束且**断言零次执行**。现拆成 `Probe panel bundle`（`declared` 由 `package.json.scripts.build` 决定，`real` 由 `find "${PANEL_DIR}/dist" -type f ! -name .gitkeep | wc -l` 决定）+ 独立 `Assert the panel bundle is real`：**声明了 build 脚本却零真实文件 = 红**；未声明 = notice（B1 合入前不误红，合入后自动变硬门，一次只动一个变量）。两棵树实测：main `545460d` → `declared=false real=0 built=false`（惰性）；B1 tip `a860150` worktree → `declared=true real=3 built=true`（`index.html` + `assets/index-*.js` + `assets/index-*.css`）。
+2. **`.gitkeep` 被当成产物**。`find dist -type f` 与 `ls -A dist` 都不排除 `.gitkeep`，而 `.gitignore:37` 明确为 `web-panel/dist/.gitkeep` 预留了反向规则 ⇒ 一旦该占位文件存在，"有产物"判据就成立，占位页一路绿到线上。四处判据（ci probe、Dockerfile、Makefile、以及新增的两处目的地断言）统一改为 **`-type f ! -name .gitkeep`**。
+3. **`ci.yml` 的 `build` job 从来没消费过 panel 产物**，而 `release.yml` 消费了（`:161` Restore panel dist）。⇒ CI 四变体二进制与发布产物不是同一个东西，CI 绿只证明"能编译出带占位页的 exe"。现 `needs: [lint, test, panel]` + `Restore panel dist into the embed dir` + `Assert the bundle landed in the embed dir`（目的地计数，不是来源计数）。**为什么搬运之后还要断言**：`go:embed all:dist` 对只含 `.gitkeep` 的目录照样编译成功，"上传绿 / 下载空"（artifact 名拼错、来源被 `if` 跳过）不会在任何步骤留下红。mover 与空源两条分支本地实测：`cp -R dist/. embed/` 后目的地计 2 个真文件且 `.gitkeep` 存活；源为空时计数 0 ⇒ 走红分支。同步给 `release.yml` 补同一条目的地断言（对称，非新语义）。
+4. **`smoke` 从未断言 `GET /`**。healthz 与 panel 无关，前端上线只验后端等于没验。新增 `Assert served panel is the built bundle`：HTML 必须引用 `/assets/<hash>.js`，并对该 CSS 发一次探测要求 `200`；整步 `if: needs.panel.outputs.dist == 'true'`，`needs: [image, panel]`。断言形态取**正向特征**（内容哈希资源）而非固定文案，因此不锁 fronted 的字句；实测正向命中 B1 真实 `index.html`、负向对占位页字符串不命中 ⇒ 占位页必然被抓。
+
+另修 `Makefile` 的 `panel` 目标（本机同接缝）：旧形 `head -1` 判据 + `rm -rf $(EMBED_DIR)` —— 后者会**删掉 tracked 的 `internal/web/dist/.gitkeep`**（占位符一旦被删，embed 语义就变，且工作树平白出现删除记录）。现改为计数判据 + `cp -R dist/. embed/` 非破坏搬运 + 目的地断言。`.dockerignore` 补 `web-panel/dist`：`COPY web-panel/ ./` 会把宿主机陈旧的 `web-panel/dist` 带进 stage，而 `emptyOutDir: false` 让陈旧哈希资源与新资源**并存** ⇒ 镜像里 embed 出死资源，四处判据仍全绿；stage 必须是它自己搬运内容的唯一生产者（顺带补 `web-panel/coverage`、`.vite`）。
+
+`Dockerfile` 侧按 B 保持原铺平布局与 `COPY --from=web /src/dist` 搬运件不动（PM 明确「`:57` 现形即为搬运件」），只把 `if [ -z "$(ls -A dist)" ]` 换成 `real` 计数 + `declared` 交叉判据：**声明了脚本却无件 = `exit 1`**，无脚本时才允许写显式占位页。三分支以逐行等价 shell 实测：A 无脚本→占位；B 有脚本无产物→exit 1；C 有产物→嵌入。
+
+**验证边界（如实登记）**：本机 **无 docker 运行时、无 make**，所以上述两处只做到「脚本体逐行等价实测 + 路径语义实测」，`docker build` 与 `make panel` 的真跑属云端/主人机器首绿取证面，我不在此声称。
+
+### 9.17-c 工具版本自证：`--version` 不可信，`go version -m` 才是权威
+
+`gosec --version` 在源码安装链上印的是 `Version: dev / Git tag: (空)` —— 它只认 release 流水线的 ldflags。⇒ CI 里光跑 `--version` 无法证明钉版生效。现三处（lint 的 golangci、security 的 gosec / govulncheck）统一加：
+
+```sh
+got=$(go version -m "$BIN" | awk '$1=="mod"{print $3}')   # 与 env 钉版逐字相等才继续，否则红
+```
+
+本机对既存三枚二进制实测：`github.com/securego/gosec/v2 v2.29.0`、`golang.org/x/vuln v1.9.0`、`github.com/golangci/golangci-lint/v2 v2.14.0`，全部与 `ci.yml` 钉版逐字相等；`Makefile` 的 `scan` 目标同口径回显，本地与云端结论可比。`panel` job 另加 `Panel toolchain & supply-chain self-report`（`node -v` / `npm -v` / `npm ls vite esbuild` / `ignore-scripts` 取值）——**esbuild allow-scripts 口径就此拍板：CI 不传 `--ignore-scripts`**，esbuild 平台包必须跑 postinstall 才落地，压脚本会得到一个"绿但构建坏"的 panel job；可复现性由 lockfile（`cache-dependency-path` 钉 `package-lock.json`）+ `npm ci` 拒漂移 + 本步回显三件承担。fronted 报的本机 `esbuild@0.28.2 postinstall 未被 allowScripts 覆盖` 警告不改变这一结论：那是本机 npm 策略，runner 默认放行，且首绿日志会自证 `ignore-scripts=false`。
+
+### 9.17-d 一次我自己的坑（记下来防重犯）
+
+`b0six.sh` 首次跑出 `Files : 0 / Lines : 0 / Issues : 0` 且 golangci 报 `go: executable file not found` —— 原因是我把 Windows 的 `;` 分隔符写进了 bash 的 `PATH`。这是**同一族故障的本地复现**：加载器找不到 `go` 时 gosec 不报错，只安静印零。改用 `cygpath` 生成 `:` 分隔 PATH 后，六面全部按 §9.16-c 口径重跑通过（gofmt 0/30、vet/build/test exit 0、`config verify` exit 0、lint 恰 4 条、gosec `Nosec 2 / Issues 0`、`No vulnerabilities found`、`actionlint` exit 0）。教训：**任何"零发现"结论都要先看有没有载入错误行**，本轮已在 `ci.yml` 注释与 Makefile 注释里把这条写成硬口径。
+
 
 

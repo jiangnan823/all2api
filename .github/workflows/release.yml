@@ -165,6 +165,21 @@ jobs:
           name: panel-dist
           path: ${{ env.EMBED_DIR }}
 
+      # Symmetric with ci.yml's build job: go:embed compiles happily against a directory that
+      # only holds .gitkeep, so a "green restore, empty destination" would ship placeholder
+      # binaries. Assert at the destination instead of assuming the mover worked.
+      - name: Assert the bundle landed in the embed dir
+        if: ${{ needs.panel.outputs.dist == 'true' }}
+        run: |
+          set -e
+          n=$(find "${EMBED_DIR}" -type f ! -name .gitkeep | wc -l)
+          echo "real files in ${EMBED_DIR} after restore: ${n}"
+          find "${EMBED_DIR}" -type f ! -name .gitkeep | sort | head -20
+          if [ "${n}" -eq 0 ]; then
+            echo "::error::panel job reported a bundle but ${EMBED_DIR} received nothing — release binaries would embed the placeholder"
+            exit 1
+          fi
+
       - name: Ensure embed dir is buildable (no panel bundle yet)
         if: ${{ needs.panel.outputs.dist != 'true' }}
         run: mkdir -p ${{ env.EMBED_DIR }} && touch ${{ env.EMBED_DIR }}/.gitkeep
