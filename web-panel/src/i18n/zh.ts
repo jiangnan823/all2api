@@ -633,7 +633,9 @@ export const CONNECT = {
   COL_ID: '模型 ID',
   COL_NAME: '模型名称',
   COPY_MODEL: '点击复制模型名称',
+} as const;
 
+/**
  * 浏览器登录文案（M8，WorkBuddy 添加向导新增 tab）。**独立新增命名空间**，
  * 不改动上方任何冻结段；端点由后端并行批交付（login-start / login-poll），
  * {error} 信封原文逐字展示，不回显凭证。
