@@ -119,7 +119,9 @@ func matchesResultFilter(result, filter string) bool {
 }
 
 // intPtr maps the ledger's -1-unknown onto the wire null.
-func intPtr(v int) *int {
+// nonNegativePtr: 未知（-1/负数哨兵）序列化为 null，非负保留。与 panel_data.go
+// 的 intPtr（直通取址）语义不同，故独立命名。
+func nonNegativePtr(v int) *int {
 	if v < 0 {
 		return nil
 	}
@@ -142,8 +144,8 @@ func rowWire(e usage.RequestEntry) requestRow {
 		Platform:         e.Platform,
 		AccountID:        e.AccountID,
 		LatencyMS:        e.Latency.Milliseconds(),
-		PromptTokens:     intPtr(e.PromptTokens),
-		CompletionTokens: intPtr(e.CompletionTokens),
+		PromptTokens:     nonNegativePtr(e.PromptTokens),
+		CompletionTokens: nonNegativePtr(e.CompletionTokens),
 		RequestID:        strPtr(e.RequestID),
 	}
 }
