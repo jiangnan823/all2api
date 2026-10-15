@@ -9,7 +9,7 @@
 //   - active report           POST {billing}/v2/report (event array)
 //   - cat travel cycle        GET/POST {chat}/activity/growth/buddy/travel/{status,depart,claim}
 //   - credit task surface     GET/POST {chat}/v2/activity/growth/tasks[/accept],
-//                             POST {web}/activity/growth/tasks/{code}/claim (growth.go)
+//     POST {web}/activity/growth/tasks/{code}/claim (growth.go)
 //   - balance query           POST {billing}/v2/billing/meter/get-user-resource
 //   - token keepalive         the M3a refresh chain (refresh.go), reused as-is
 //
