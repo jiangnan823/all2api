@@ -1,25 +1,32 @@
 // credentials.go implements the M3 credential plane: workbuddy auth files on
 // disk → in-memory CredentialStore → pool account registration, plus the
-// atomic auth-file write-back after a token rotation.
+// atomic auth-file write-back after a token rotation. M4 extends the same
+// store with the qoder platform: a static PAT in auth_dir/qoder-pat.txt
+// (one line, "pt-"-prefixed) registers one qoder pool account keyed by a
+// stable PAT fingerprint. Unlike the workbuddy JWT+refresh pair, a PAT has
+// no refresh semantics and no expiry — pool ExpiresAt stays zero and Select
+// never excludes the account for staleness.
 //
 // Security red lines (task contract):
 //   - credential material lives ONLY in this store's unexported fields and in
 //     the auth files themselves. pool.Account carries no secrets; nothing here
 //     ever logs, serializes, or state-files a token. credentials_test.go pins
 //     this with substring assertions over the pool snapshot, the store and a
-//     state-shaped document.
+//     state-shaped document — including the qoder PAT leak assertion.
 //   - tests never touch the real auth dir: everything runs against t.TempDir()
-//     replicas of the documented file shape
-//     {"account":{"enterpriseId","nickname","uid"},"auth":{"accessToken",
-//     "domain","expiresAt","realm","refreshToken"}}.
+//     replicas of the documented file shapes.
 //
 // The workbuddy-typed bridge (CredentialSource + refresh sink + sender
 // wiring) lives in credentials_wire.go, compiled under the same build tags as
-// the workbuddy platform; qoder/trae-only builds get the no-op stub in
-// credentials_wire_stub.go.
+// the workbuddy platform; the qoder bridge (PAT source + sender wiring +
+// quota credit seeding) lives in credentials_wire_qoder.go under the qoder
+// platform tags. Builds without a platform get no-op stubs
+// (credentials_wire_stub.go / credentials_wire_qoder_stub.go).
 package host
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,16 +43,24 @@ import (
 // (pool.Account.Platform value).
 const WorkbuddyPlatform = "workbuddy"
 
-// auth file naming: workbuddy-<uid>.json.
+// QoderPlatform is the platform identifier the qoder PAT registers under.
+const QoderPlatform = "qoder"
+
+// auth file naming: workbuddy-<uid>.json plus the qoder PAT file.
 const (
 	authFilePrefix = "workbuddy-"
 	authFileSuffix = ".json"
+	qoderPatFile   = "qoder-pat.txt"
+	qoderPatPrefix = "pt-"
 )
 
 // fileCred is one loaded credential snapshot plus the auth-file path for
 // write-back. Unexported on purpose: json.Marshal of the store yields "{}",
 // so credential material cannot leak through any serialization path (pinned
-// by TestStateSerializationNeverCarriesTokens).
+// by TestStateSerializationNeverCarriesTokens and the qoder PAT leak
+// assertion). Qoder entries reuse the shape: AccessToken carries the static
+// PAT, UID the PAT fingerprint, ExpiresAt the zero time, Path empty (static
+// PATs are never rotated, so there is no write-back).
 type fileCred struct {
 	AccessToken  string
 	RefreshToken string
@@ -91,17 +106,33 @@ func (s *CredentialStore) Count() int {
 	return len(s.entries)
 }
 
-// accountIdentities snapshots the stored (platform, uid) pairs as secret-free
-// pool.Account values — the credit-seed walk (and any future per-account
-// batch) iterates the store without ever touching credential material.
+// accountIdentities snapshots the stored workbuddy (platform, uid) pairs as
+// secret-free pool.Account values — the credit-seed walk (and any future
+// per-account batch) iterates the store without ever touching credential
+// material. Workbuddy-only by contract: the workbuddy billing endpoints
+// behind SeedCredits cannot serve other platforms' credentials.
 func (s *CredentialStore) accountIdentities() []pool.Account {
+	return s.identitiesByPlatform(WorkbuddyPlatform)
+}
+
+// identitiesByPlatform snapshots the stored (platform, uid) pairs of one
+// platform as secret-free pool.Account values, unordered. Store keys are
+// exactly "<platform>/<accountID>".
+func (s *CredentialStore) identitiesByPlatform(platform string) []pool.Account {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]pool.Account, 0, len(s.entries))
-	for _, c := range s.entries {
-		out = append(out, pool.Account{ID: c.UID, Platform: WorkbuddyPlatform})
+	for key := range s.entries {
+		if keyPlatform, uid, found := strings.Cut(key, "/"); found && keyPlatform == platform {
+			out = append(out, pool.Account{ID: uid, Platform: platform})
+		}
 	}
 	return out
+}
+
+// CountPlatform returns the number of stored credentials for one platform.
+func (s *CredentialStore) CountPlatform(platform string) int {
+	return len(s.identitiesByPlatform(platform))
 }
 
 // put replaces the credential for one account (load-time and rotation-time).
@@ -120,13 +151,14 @@ func (s *CredentialStore) lookup(key string) (fileCred, bool) {
 	return c, ok
 }
 
-// LoadAuthDir scans dir for workbuddy-*.json auth files and registers every
+// LoadAuthDir scans dir for workbuddy-*.json auth files plus the qoder PAT
+// file (qoder-pat.txt, one "pt-"-prefixed line) and registers every
 // well-formed account: a secret-free pool.Account (Account has no token
 // fields by design) plus the credential in the store. A malformed file is
 // skipped and logged by name — never fatal to the batch. A missing directory
 // loads zero accounts and returns nil, so callers decide whether that is
 // worth an info line instead of a fatal. The returned count is the number of
-// auth files successfully loaded.
+// loaded credentials across platforms.
 func (s *CredentialStore) LoadAuthDir(dir string) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -164,7 +196,50 @@ func (s *CredentialStore) LoadAuthDir(dir string) (int, error) {
 		}
 		loaded++
 	}
+
+	// Qoder platform: one static PAT file. Registration failure is one log
+	// line — the gateway starts with zero qoder accounts, never a fatal.
+	if n := s.loadQoderPAT(dir); n > 0 {
+		loaded += n
+	}
 	return loaded, nil
+}
+
+// loadQoderPAT loads auth_dir/qoder-pat.txt (one "pt-"-prefixed line) and
+// registers the qoder pool account. The account ID is the first 8 hex chars
+// of the PAT's SHA-256 fingerprint — stable across restarts, secret-free.
+// A PAT carries no expiry: pool ExpiresAt stays zero and Select never
+// excludes the account for staleness. Returns 1 on success, 0 otherwise.
+func (s *CredentialStore) loadQoderPAT(dir string) int {
+	raw, err := os.ReadFile(filepath.Join(dir, qoderPatFile))
+	if err != nil {
+		return 0
+	}
+	pat := strings.TrimSpace(string(raw))
+	if pat == "" {
+		fmt.Printf("credentials: skip %s: empty\n", qoderPatFile)
+		return 0
+	}
+	if !strings.HasPrefix(pat, qoderPatPrefix) {
+		fmt.Printf("credentials: skip %s: not a %q-prefixed PAT\n", qoderPatFile, qoderPatPrefix)
+		return 0
+	}
+	cred := fileCred{AccessToken: pat, UID: patFingerprint(pat)}
+	s.put(credKey(QoderPlatform, cred.UID), cred)
+	if s.pool != nil {
+		s.pool.AddAccount(&pool.Account{
+			ID:       cred.UID,
+			Platform: QoderPlatform,
+			Status:   "active",
+		})
+	}
+	return 1
+}
+
+// patFingerprint derives the stable, secret-free account id from a PAT.
+func patFingerprint(pat string) string {
+	sum := sha256.Sum256([]byte(pat))
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 // authFileDoc mirrors the on-disk auth file shape exactly:

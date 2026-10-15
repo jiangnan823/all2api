@@ -81,23 +81,30 @@ func main() {
 	// recover endpoint acts on this host — see internal/api/recover.go.
 	gwHost := host.New(cfg)
 
-	// M3 credential plane: load workbuddy auth files into the in-memory
-	// credential store (pool accounts registered; secrets stay out of the
-	// pool and out of every log/state surface), then wire the store into the
-	// workbuddy sender as credential source + refresh sink. A missing or
-	// empty auth dir is not fatal — the gateway starts with zero workbuddy
+	// M3/M4 credential plane: load workbuddy auth files and the qoder PAT
+	// file into the in-memory credential store (pool accounts registered;
+	// secrets stay out of the pool and out of every log/state surface), then
+	// wire the store into each platform sender as credential source. A
+	// missing or empty auth dir is not fatal — the gateway starts with zero
 	// credentials and sends answer auth_expired per account.
 	creds := host.NewCredentialStore(gwHost.Pool)
-	loadedCreds, credErr := creds.LoadAuthDir(cfg.AuthDir)
-	if credErr != nil {
+	if _, credErr := creds.LoadAuthDir(cfg.AuthDir); credErr != nil {
 		fmt.Printf("credentials: load auth dir %s: %v\n", cfg.AuthDir, credErr)
 	}
 	if _, statErr := os.Stat(cfg.AuthDir); os.IsNotExist(statErr) {
-		fmt.Printf("credentials: auth dir %s not present; starting with 0 workbuddy credential(s)\n", cfg.AuthDir)
+		fmt.Printf("credentials: auth dir %s not present; starting with 0 credentials\n", cfg.AuthDir)
 	}
-	fmt.Printf("Loaded %d workbuddy credential(s) from %s\n", loadedCreds, cfg.AuthDir)
+	fmt.Printf("Loaded %d workbuddy credential(s) from %s\n", creds.CountPlatform(host.WorkbuddyPlatform), cfg.AuthDir)
+	qoderLoaded := creds.CountPlatform(host.QoderPlatform)
+	if qoderLoaded == 0 {
+		fmt.Printf("credentials: no qoder-pat.txt in %s; starting with 0 qoder account(s)\n", cfg.AuthDir)
+	}
+	fmt.Printf("Loaded %d qoder credential(s) from %s\n", qoderLoaded, cfg.AuthDir)
 	if creds.WireWorkbuddySender() == 1 {
 		fmt.Printf("WorkBuddy credential source + refresh sink wired\n")
+	}
+	if creds.WireQoderSender() == 1 {
+		fmt.Printf("Qoder PAT credential source wired\n")
 	}
 	gwHost.Creds = creds
 
@@ -108,6 +115,10 @@ func main() {
 	// below the floor until the next restart or an earned reward).
 	seeded, seedFailed := creds.SeedCredits()
 	fmt.Printf("Credit seeding: %d account(s) seeded, %d failed (billing get-user-resource)\n", seeded, seedFailed)
+	// M4 qoder credit seeding: same loop over the OpenAPI quota usage
+	// endpoint (also bootstraps each PAT's session once, warming the cache).
+	qoderSeeded, qoderSeedFailed := creds.SeedQoderCredits()
+	fmt.Printf("Qoder credit seeding: %d account(s) seeded, %d failed (OpenAPI quota usage)\n", qoderSeeded, qoderSeedFailed)
 
 	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
 	// Upstream sends resolve per request from adapters implementing
