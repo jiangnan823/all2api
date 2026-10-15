@@ -15,10 +15,10 @@ expect.extend(toHaveNoViolations);
 /** 旧→新（契约：logs 旧到新）。error/info/警告级/未知级各覆盖一条。 */
 const LOGS_WIRE = {
   logs: [
-    { ts: 1760000000, level: 'info', line: '网关启动 listen=127.0.0.1:7800' },
-    { ts: 1760000060, level: 'error', line: 'upstream 503 trae' },
-    { ts: 1760000120, level: 'warn', line: '账号冷却 60s' },
-    { ts: 1760000180, level: 'debug', line: 'pick account wb-1' },
+    { level: 'info', msg: '网关启动 listen=127.0.0.1:7800', ts: { unix: 1760000000, local: '2026-10-15 12:00:00' } },
+    { level: 'error', msg: 'upstream 503 trae', ts: { unix: 1760000060, local: '2026-10-15 12:01:00' } },
+    { level: 'warn', msg: '账号冷却 60s', ts: { unix: 1760000120, local: '2026-10-15 12:02:00' } },
+    { level: 'debug', msg: 'pick account wb-1', ts: { unix: 1760000180, local: '2026-10-15 12:03:00' } },
   ],
 };
 
@@ -127,7 +127,7 @@ describe('日志屏 — 错误态 / 空态 / 轮询', () => {
 
   it('line 缺失的畸形条目整条丢弃，不渲染空行', async () => {
     installFetch({
-      '/api/logs?limit=200': { body: { logs: [{ ts: 1, level: 'info', line: 'ok' }, { ts: 2, level: 'info' }, 'junk'] } },
+      '/api/logs?limit=200': { body: { logs: [{ msg: 'ok', level: 'info', ts: { unix: 1 } }, { ts: 2, level: 'info' }, 'junk'] } },
     });
     render(<LogsScreen />);
     await screen.findByText('ok');
@@ -141,8 +141,8 @@ describe('日志屏 — 错误态 / 空态 / 轮询', () => {
       const url = String(args[0]);
       if (url !== '/api/logs?limit=200') throw new Error(`unexpected fetch: ${url}`);
       round += 1;
-      if (round === 1) return { ok: true, status: 200, json: async () => ({ logs: [{ ts: 100, level: 'error', line: 'first' }] }) };
-      return { ok: true, status: 200, json: async () => ({ logs: [{ ts: 100, level: 'error', line: 'first' }, { ts: 200, level: 'info', line: 'second' }] }) };
+      if (round === 1) return { ok: true, status: 200, json: async () => ({ logs: [{ msg: 'first', level: 'error', ts: { unix: 100 } }] }) };
+      return { ok: true, status: 200, json: async () => ({ logs: [{ msg: 'first', level: 'error', ts: { unix: 100 } }, { msg: 'second', level: 'info', ts: { unix: 200 } }] }) };
     });
     vi.stubGlobal('fetch', fn);
     const { act } = await import('@testing-library/react');

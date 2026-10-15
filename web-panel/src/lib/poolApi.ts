@@ -139,12 +139,14 @@ export function parseLogsSnapshot(body: unknown): LogsSnapshot {
   const logs: LogEntry[] = [];
   for (const item of rawList) {
     if (!isObject(item)) continue;
-    const line = typeof item['line'] === 'string' ? item['line'] : null;
-    if (line === null) continue;
+    // M5a wire：{level, msg, ts:{unix, local}}。msg 缺失丢条目；ts 取 unix 秒。
+    const msg = typeof item['msg'] === 'string' ? item['msg'] : null;
+    if (msg === null) continue;
+    const tsObj = isObject(item['ts']) ? item['ts'] : {};
     logs.push({
-      ts: numOrNull(item['ts']),
+      ts: numOrNull(tsObj['unix']),
       level: typeof item['level'] === 'string' && item['level'] !== '' ? item['level'] : 'other',
-      line,
+      line: msg,
     });
   }
   return { logs };
