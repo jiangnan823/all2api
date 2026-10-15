@@ -43,12 +43,15 @@ type AdapterLookup interface {
 type Router struct {
 	host   *host.Host
 	lookup AdapterLookup
+	// locks is the M9b (model, account) 429 registry; all its methods are
+	// nil-receiver safe, so a zero-value Router means "no model locks".
+	locks *ModelLockRegistry
 }
 
 // Register wires POST /v1/chat/completions and POST /v1/responses onto mux.
 // Non-POST methods are answered 405 by the ServeMux method patterns.
 func Register(mux *http.ServeMux, h *host.Host, lookup AdapterLookup) {
-	rt := &Router{host: h, lookup: lookup}
+	rt := &Router{host: h, lookup: lookup, locks: DefaultModelLocks}
 	mux.HandleFunc("POST /v1/chat/completions", rt.handleChatCompletions)
 	mux.HandleFunc("POST /v1/responses", rt.handleResponses)
 }
@@ -313,6 +316,16 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			return
 		}
 		leased = append(leased, acct.ID)
+		// M9b model-level lock: a (model, account) pair recently observed 429
+		// is skipped without burning a send. The account stays leased for this
+		// request (the "each account at most once" bound is unchanged) and the
+		// deferred drain below releases it, so other models keep using the
+		// account immediately after this request. If every pooled account is
+		// locked for this model, Select runs dry and the client gets the
+		// honest no_available_account 503.
+		if rt.locks.Locked(req.Model, platform, acct.ID) {
+			continue
+		}
 		ledger.AccountID = usage.ShortID(acct.ID)
 		// Observation plane (M6a): the attempt is in flight from here
 		// until its completion; every outcome path below pairs one
@@ -327,20 +340,20 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			if !committed {
 				// Outright stream-start failure: same retry path as SendChat.
 				lastErr = streamErr
-				rt.recordSendOutcome(platform, acct.ID, 0, streamErr)
+				rt.recordSendOutcome(req.Model, platform, acct.ID, 0, streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 				continue
 			}
 			switch {
 			case streamErr == nil:
 				ledger.Result = usage.ResultSuccess
-				rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
+				rt.recordSendOutcome(req.Model, platform, acct.ID, http.StatusOK, nil)
 				rt.finishAttempt(platform, acct.ID, "success")
 			case errors.Is(streamErr, context.Canceled):
 				// Client disconnect mid-stream: the upstream outcome stays
 				// unobserved — recorded as interrupted, not as a failure.
 				ledger.Result = usage.ResultInterrupted
-				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
+				rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(streamErr), streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 			default:
 				// Mid-stream failure: the classification of the upstream error
@@ -348,7 +361,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 				// keyed on the upstream status, not on the wire status that
 				// stays committed at 200.
 				ledger.Result = usage.ResultStreamError
-				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
+				rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(streamErr), streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 			}
 			return
@@ -359,13 +372,13 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			ledger.Result = usage.ResultSuccess
 			ledger.RequestID = resp.ID
 			ledger.PromptTokens, ledger.CompletionTokens = usage.TokensFromAdapterUsage(resp.Usage)
-			rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
+			rt.recordSendOutcome(req.Model, platform, acct.ID, http.StatusOK, nil)
 			rt.finishAttempt(platform, acct.ID, "success")
 			writeJSON(w, http.StatusOK, resp)
 			return
 		}
 		lastErr = err
-		rt.recordSendOutcome(platform, acct.ID, upstreamStatus(err), err)
+		rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(err), err)
 		rt.finishAttempt(platform, acct.ID, healthStatus(err))
 	}
 }
@@ -389,16 +402,23 @@ func (rt *Router) finishAttempt(platform, accountID, status string) {
 	rt.host.Pool.UpdateHealth(platform, accountID, status, 0)
 }
 
-// recordSendOutcome feeds one send result into the platform's circuit breaker.
-// The breaker is authoritative for open/half-open thresholds (429 exponential
-// backoff, 404 short cooldown, 402 hard cooldown, 5xx/0 consecutive-failure
-// trip, 2xx–3xx success closes a half-open probe) — the router translates, it
-// never re-derives thresholds. statusCode 0 is reserved for "no upstream
-// exchange happened" (transport error); a cancelled client context reports
-// nothing at all, since the upstream outcome was never observed.
-func (rt *Router) recordSendOutcome(platform string, accountID string, statusCode int, err error) {
+// recordSendOutcome feeds one send result into the platform's circuit breaker
+// and, for 429s, into the M9b model-lock registry. The breaker is
+// authoritative for open/half-open thresholds (429 exponential backoff, 404
+// short cooldown, 402 hard cooldown, 5xx/0 consecutive-failure trip, 2xx–3xx
+// success closes a half-open probe) — the router translates, it never
+// re-derives thresholds. statusCode 0 is reserved for "no upstream exchange
+// happened" (transport error); a cancelled client context reports nothing at
+// all, since the upstream outcome was never observed. The model-lock booking
+// classifies the error itself rather than statusCode, so the stream-start
+// path (which reports 0) still lands a lock on a classified 429; it runs
+// before the breaker lookup so breaker-less platforms book locks too.
+func (rt *Router) recordSendOutcome(model, platform, accountID string, statusCode int, err error) {
 	if err != nil && errors.Is(err, context.Canceled) {
 		return
+	}
+	if st := upstreamStatus(err); st == http.StatusTooManyRequests {
+		rt.locks.NoteRateLimited(model, platform, accountID, retryHintFromError(err))
 	}
 	br, ok := rt.host.Breaker(platform)
 	if !ok {

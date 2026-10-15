@@ -12,6 +12,7 @@ import (
 	"all2api/internal/adapter"
 	"all2api/internal/config"
 	"all2api/internal/host"
+	"all2api/internal/router"
 )
 
 // Register wires the M1 queue-③/④ routes (plus the wiring-batch recover
@@ -28,6 +29,7 @@ func Register(mux *http.ServeMux, h *host.Host) {
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))
 	mux.HandleFunc("/api/requests", withAPIKey(handleRequests))
 	mux.HandleFunc("/api/usage", withAPIKey(handleUsage))
+	mux.HandleFunc("/api/model-locks", withAPIKey(handleModelLocks(h, router.DefaultModelLocks))) // M9b 模型锁池
 	registerAccountActions(mux, h)
 	if h != nil {
 		mux.HandleFunc("POST /api/accounts/{id}/recover", withAPIKey(handleRecover(h)))
