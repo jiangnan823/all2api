@@ -847,5 +847,9 @@ lease 修复的第一版是「每次发送后立刻释放」，嵌入重试循�
 
 两个 zip 在 `dist/`：标准包 `all2api-56763ef-windows-amd64.zip` 与**本机定制包** `all2api-56763ef-windows-amd64-personal.zip`（install.ps1 新增 `auths-seed/` 预置：仅在 auths\ 为空时复制，绝不覆盖更新 token；定制包 seed 为 panel 项目 10-14 晚刷出的最新 4 凭证）。沙箱全链实测（装→种子→启动→真实调用）：**连发三发全 200**（核心回归）＋**18 秒/3465 chunks/800KB 长流式带 [DONE] 完整送达**（WriteTimeout 修复的判定证据）＋卸载保数据/purge 删净（早前已验）。
 
+### 9.25-e gitleaks 误报与处置（`3bb8070`，CI run `38685520962` 十 job 全绿）
+
+首推后 `security / scans` 红在 gitleaks：命中 `internal/platform/qoder/protocol.go:111` 的 `defaultSecret`（COSY 协议签名常量，base64 解为公开短语，官方客户端逐字携带、vhub 同款明文，非部署凭证）。**真误报**，但命中在历史 commit 里，全历史扫描会持续报。处置两级：仓库级 `.gitleaks.toml` 精确豁免该常量值（对全历史生效）+ 源码行内 `gitleaks:allow` 标记（对未来行扫描生效）；默认规则集其余全开，与仓内 `#nosec G101` 窄豁免风格一致。重推后 security 绿，全 run 绿。
+
 
 
