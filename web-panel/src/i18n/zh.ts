@@ -633,4 +633,25 @@ export const CONNECT = {
   COL_ID: '模型 ID',
   COL_NAME: '模型名称',
   COPY_MODEL: '点击复制模型名称',
+
+ * 浏览器登录文案（M8，WorkBuddy 添加向导新增 tab）。**独立新增命名空间**，
+ * 不改动上方任何冻结段；端点由后端并行批交付（login-start / login-poll），
+ * {error} 信封原文逐字展示，不回显凭证。
+ */
+export const LOGIN = {
+  TAB_BROWSER: '浏览器登录',
+  TAB_PASTE: '粘贴凭证 JSON',
+  START: '生成登录链接',
+  STARTING: '正在生成…',
+  RESTART: '重新生成链接',
+  OPEN_PAGE: '打开登录页',
+  COPY_LINK: '复制链接',
+  COPIED: '已复制',
+  LINK_HINT:
+    '点击「生成登录链接」后，在浏览器打开登录页并完成 WorkBuddy 登录；网关会自动轮询换取凭证并加入账号池（链接 15 分钟内有效，无需手动粘贴任何内容）。',
+  WAITING: '已生成登录链接，等待你在浏览器完成登录…（每 3 秒自动查询）',
+  DONE_PREFIX: '登录成功，账号已添加：',
+  EXPIRED: '登录状态已过期或已被使用，请重新生成链接再登录。',
+  ERROR_PREFIX: '登录失败：',
+  FINISH: '完成',
 } as const;

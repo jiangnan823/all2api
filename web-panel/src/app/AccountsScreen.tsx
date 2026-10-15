@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ACCOUNTS, GROWTH } from '../i18n/zh';
+import { ACCOUNTS, GROWTH, LOGIN } from '../i18n/zh';
 import { GrowthTasksModal } from '../components/GrowthTasksModal';
 import {
   ACCOUNTS_POLL_MS,
@@ -14,6 +14,8 @@ import {
   type AccountEntry,
   type AccountsSnapshot,
 } from '../lib/poolApi';
+import { LOGIN_POLL_MS, pollWorkbuddyLogin, startWorkbuddyLogin } from '../lib/loginApi';
+import { ApiError } from '../lib/panelApi';
 
 /**
  * 账号池屏（M6b，向 wb2api 看齐的富列表格）：状态卡行（总数/可用/冷却中/禁用/积分合计，等宽数字）
@@ -21,6 +23,7 @@ import {
  * 到期/冷却至/最近成功=相对时间/行内操作=任务(M7b 成长任务弹层)|暂停选号|恢复选号+删除）+ 手动刷新 + 30s 轮询。
  * 行内操作走 POST /api/accounts/{platform}:{id}/{pause|resume|remove}，删除前 confirm（文案含
  * 「凭证文件将被删除」）；{error} 信封逐字上抛展示。全部内存态，不落 storage。
+ * M8：添加向导双 tab——workbuddy 新增「浏览器登录」（设备授权流）与「粘贴凭证 JSON」并列。
  */
 type LoadState =
   | { phase: 'loading' }
@@ -333,6 +336,15 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
             {ACCOUNTS.ADD_OPEN}
           </button>
         )}
+        {filter !== 'trae' && wizardOpen && filter !== undefined && (
+          <AddAccountPanel
+            platform={filter}
+            onAdded={() => {
+              setWizardOpen(false);
+              void load();
+            }}
+          />
+        )}
         {filter === 'trae' ? null : null}
         <button type="button" className="btn" onClick={() => void load()}>
           {ACCOUNTS.REFRESH}
@@ -451,14 +463,15 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
 }
 
 /**
- * 添加账号面板（v1.2 §1a，主人裁定：添加账号是面板内一等操作）：
- * - workbuddy：粘贴官方桌面端凭证 JSON 原文（account.uid/nickname + auth.accessToken/refreshToken…）
+ * 添加账号面板（v1.2 §1a，主人裁定：添加账号是面板内一等操作；M8 起向导化）：
+ * - workbuddy：双 tab——「浏览器登录」（设备授权流，默认）与「粘贴凭证 JSON」（P0 直通）
  * - qoder：粘贴 PAT（pt-…）
- * 校验与落盘在后端（POST /api/accounts/{platform}）；成功后回调刷新账号池；
- * 字段校验错误（400 + {error}）逐字显示，不静默兜底。
+ * 校验与落盘在后端；成功后回调刷新账号池；字段校验错误（400 + {error}）逐字显示，不静默兜底。
  */
 function AddAccountPanel(props: { platform: 'workbuddy' | 'qoder' | 'trae'; onAdded: () => void }) {
   const { platform } = props;
+  // M8：workbuddy 双 tab（浏览器登录为主口）；qoder 保持单表单。
+  const [tab, setTab] = useState<'login' | 'paste'>('login');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -491,9 +504,9 @@ function AddAccountPanel(props: { platform: 'workbuddy' | 'qoder' | 'trae'; onAd
     );
   }
 
-  return (
-    <div className="add-account" role="form" aria-label={ACCOUNTS.ADD_TITLE}>
-      <h3 className="add-account__title">{ACCOUNTS.ADD_TITLE}</h3>
+  // 粘贴 tab 内容（workbuddy JSON / qoder PAT 共用骨架；错误与成功提示逐字上抛）。
+  const pasteBody = (
+    <>
       {platform === 'workbuddy' && (
         <>
           <p className="add-account__hint">
@@ -541,6 +554,213 @@ function AddAccountPanel(props: { platform: 'workbuddy' | 'qoder' | 'trae'; onAd
           {error}
         </p>
       )}
+    </>
+  );
+
+  if (platform === 'qoder') {
+    return (
+      <div className="add-account" role="form" aria-label={ACCOUNTS.ADD_TITLE}>
+        <h3 className="add-account__title">{ACCOUNTS.ADD_TITLE}</h3>
+        {pasteBody}
+      </div>
+    );
+  }
+
+  // workbuddy：双 tab。两个 tab 都保持挂载（hidden 切换可见性）——浏览器登录的
+  // 3s 轮询不因用户切去看粘贴 tab 而中断，完成后自动刷新账号池。
+  return (
+    <div className="add-account" role="form" aria-label={ACCOUNTS.ADD_TITLE}>
+      <h3 className="add-account__title">{ACCOUNTS.ADD_TITLE}</h3>
+      <div className="row" role="tablist" aria-label={ACCOUNTS.ADD_TITLE}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'login'}
+          className="btn"
+          onClick={() => setTab('login')}
+        >
+          {LOGIN.TAB_BROWSER}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'paste'}
+          className="btn"
+          onClick={() => setTab('paste')}
+        >
+          {LOGIN.TAB_PASTE}
+        </button>
+      </div>
+      <div hidden={tab !== 'login'}>
+        <BrowserLoginTab onAdded={props.onAdded} />
+      </div>
+      <div hidden={tab !== 'paste'}>{pasteBody}</div>
     </div>
+  );
+}
+
+/**
+ * 浏览器登录 tab（M8 设备授权流）：生成链接 → 打开/复制 → 每 3s 自动轮询
+ * （单飞：上一发未返回不发下一发）→ 完成提示账号昵称；过期/失败态如实展示并可重新生成。
+ * 轮询间的瞬态传输故障（网络错误/5xx）不终止等待——登录会话有 15 分钟 TTL 兜底；
+ * 语义性失败（4xx / {status:"error"} / 形状异常）才落到失败态。
+ * 全部内存态，不落 storage；凭证材料只经后端，本组件不接触。
+ */
+type LoginFlow =
+  | { phase: 'idle' }
+  | { phase: 'starting' }
+  | { phase: 'waiting'; state: string; url: string }
+  | { phase: 'done'; uid: string; nickname: string }
+  | { phase: 'expired' }
+  | { phase: 'error'; message: string };
+
+function BrowserLoginTab(props: { onAdded: () => void }) {
+  const { onAdded } = props;
+  const [flow, setFlow] = useState<LoginFlow>({ phase: 'idle' });
+  const [copied, setCopied] = useState(false);
+  const inFlightRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+  const copiedTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearInterval(timerRef.current);
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  const start = async () => {
+    setFlow({ phase: 'starting' });
+    try {
+      const res = await startWorkbuddyLogin();
+      setFlow({ phase: 'waiting', state: res.state, url: res.loginUrl });
+    } catch (err) {
+      setFlow({ phase: 'error', message: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  // 轮询循环：仅在 waiting 相位活跃；flow 变更即重建（pending 不 setFlow，节奏稳定）。
+  useEffect(() => {
+    if (flow.phase !== 'waiting') return undefined;
+    const state = flow.state;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped || inFlightRef.current) return;
+      inFlightRef.current = true;
+      try {
+        const res = await pollWorkbuddyLogin(state);
+        if (stopped) return;
+        if (res.status === 'pending') return; // 继续等
+        if (res.status === 'done') {
+          setFlow({ phase: 'done', uid: res.uid, nickname: res.nickname });
+          return;
+        }
+        if (res.status === 'expired') setFlow({ phase: 'expired' });
+        else setFlow({ phase: 'error', message: res.error });
+      } catch (err) {
+        if (stopped) return;
+        // 瞬态传输故障不杀等待：面板↔网关同源，TTL 是最终兜底。
+        const status = err instanceof ApiError ? err.status : undefined;
+        if (status === undefined || (status >= 500 && status <= 599)) return;
+        setFlow({ phase: 'error', message: err instanceof Error ? err.message : String(err) });
+      } finally {
+        inFlightRef.current = false;
+      }
+    };
+    void tick();
+    timerRef.current = window.setInterval(() => void tick(), LOGIN_POLL_MS);
+    return () => {
+      stopped = true;
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [flow]);
+
+  const copyLink = () => {
+    if (flow.phase !== 'waiting') return;
+    navigator.clipboard
+      ?.writeText(flow.url)
+      .then(() => {
+        setCopied(true);
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => setCopied(false));
+  };
+
+  const openPage = () => {
+    if (flow.phase === 'waiting') window.open(flow.url, '_blank', 'noopener');
+  };
+
+  return (
+    <>
+      <p className="add-account__hint">{LOGIN.LINK_HINT}</p>
+      {(flow.phase === 'idle' || flow.phase === 'starting') && (
+        <div className="row">
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={flow.phase === 'starting'}
+            onClick={() => void start()}
+          >
+            {flow.phase === 'starting' ? LOGIN.STARTING : LOGIN.START}
+          </button>
+        </div>
+      )}
+      {flow.phase === 'waiting' && (
+        <>
+          <div className="row">
+            <a href={flow.url} target="_blank" rel="noopener noreferrer" className="pool-note">
+              {flow.url}
+            </a>
+          </div>
+          <div className="row">
+            <button type="button" className="btn" onClick={openPage}>
+              {LOGIN.OPEN_PAGE}
+            </button>
+            <button type="button" className="btn" onClick={copyLink}>
+              {copied ? LOGIN.COPIED : LOGIN.COPY_LINK}
+            </button>
+            <button type="button" className="btn" onClick={() => void start()}>
+              {LOGIN.RESTART}
+            </button>
+          </div>
+          <p className="add-account__hint" role="status">
+            {LOGIN.WAITING}
+          </p>
+        </>
+      )}
+      {flow.phase === 'done' && (
+        <>
+          <p className="add-account__ok" role="status">
+            {LOGIN.DONE_PREFIX} {flow.nickname !== '' ? flow.nickname : flow.uid}
+            {flow.nickname !== '' ? `（${flow.uid}）` : ''}
+          </p>
+          <div className="row">
+            <button type="button" className="btn btn--primary" onClick={onAdded}>
+              {LOGIN.FINISH}
+            </button>
+            <button type="button" className="btn" onClick={() => void start()}>
+              {LOGIN.RESTART}
+            </button>
+          </div>
+        </>
+      )}
+      {(flow.phase === 'expired' || flow.phase === 'error') && (
+        <>
+          <p className="add-account__error" role="alert">
+            {flow.phase === 'expired' ? LOGIN.EXPIRED : `${LOGIN.ERROR_PREFIX}${flow.message}`}
+          </p>
+          <div className="row">
+            <button type="button" className="btn btn--primary" onClick={() => void start()}>
+              {LOGIN.RESTART}
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 }
