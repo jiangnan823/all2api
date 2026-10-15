@@ -17,6 +17,7 @@ import (
 	"all2api/internal/api"
 	"all2api/internal/config"
 	"all2api/internal/host"
+	"all2api/internal/observability"
 	// Assembly layer for build-tag-based platform registration.
 	// -tags full → all platforms; -tags workbuddy → WorkBuddy only; etc.
 	_ "all2api/internal/platforms"
@@ -68,6 +69,13 @@ func main() {
 		addr = ":7800"
 	}
 
+	// M5a panel-log ring: operational lines wired this round (startup banner,
+	// credit seeding, schedule RunStats, recover outcomes) land in both
+	// stdout and the in-process ring behind GET /api/logs. Attached before
+	// the first banner so the startup lines are captured.
+	panelRing := observability.NewRing(observability.DefaultRingCapacity)
+	observability.AttachRing(panelRing)
+
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -91,21 +99,29 @@ func main() {
 	creds := host.NewCredentialStore(gwHost.Pool)
 	if _, credErr := creds.LoadAuthDir(cfg.AuthDir); credErr != nil {
 		fmt.Printf("credentials: load auth dir %s: %v\n", cfg.AuthDir, credErr)
+		observability.Error("credentials load auth dir failed", "dir", cfg.AuthDir, "error", credErr.Error())
 	}
 	if _, statErr := os.Stat(cfg.AuthDir); os.IsNotExist(statErr) {
 		fmt.Printf("credentials: auth dir %s not present; starting with 0 credentials\n", cfg.AuthDir)
+		observability.Info("credentials auth dir not present", "dir", cfg.AuthDir)
 	}
-	fmt.Printf("Loaded %d workbuddy credential(s) from %s\n", creds.CountPlatform(host.WorkbuddyPlatform), cfg.AuthDir)
+	wbLoaded := creds.CountPlatform(host.WorkbuddyPlatform)
+	fmt.Printf("Loaded %d workbuddy credential(s) from %s\n", wbLoaded, cfg.AuthDir)
+	observability.Info("loaded credentials", "platform", host.WorkbuddyPlatform, "count", wbLoaded, "dir", cfg.AuthDir)
 	qoderLoaded := creds.CountPlatform(host.QoderPlatform)
 	if qoderLoaded == 0 {
 		fmt.Printf("credentials: no qoder-pat.txt in %s; starting with 0 qoder account(s)\n", cfg.AuthDir)
+		observability.Info("no qoder PAT file", "dir", cfg.AuthDir)
 	}
 	fmt.Printf("Loaded %d qoder credential(s) from %s\n", qoderLoaded, cfg.AuthDir)
+	observability.Info("loaded credentials", "platform", host.QoderPlatform, "count", qoderLoaded, "dir", cfg.AuthDir)
 	if creds.WireWorkbuddySender() == 1 {
 		fmt.Printf("WorkBuddy credential source + refresh sink wired\n")
+		observability.Info("workbuddy credential source wired")
 	}
 	if creds.WireQoderSender() == 1 {
 		fmt.Printf("Qoder PAT credential source wired\n")
+		observability.Info("qoder credential source wired")
 	}
 	gwHost.Creds = creds
 
@@ -113,13 +129,19 @@ func main() {
 	// with Credit=0 and the default credit_floor would block them all on the
 	// request path. One billing get-user-resource call per account (4 in
 	// parallel, best-effort — a failure is one log line and the account stays
-	// below the floor until the next restart or an earned reward).
+	// below the floor until the next restart or an earned reward). The
+	// per-account lines inside SeedCredits/SeedQoderCredits go through
+	// observability directly (host side), so the ring carries them too.
 	seeded, seedFailed := creds.SeedCredits()
 	fmt.Printf("Credit seeding: %d account(s) seeded, %d failed (billing get-user-resource)\n", seeded, seedFailed)
+	observability.Info("credit seeding done", "platform", host.WorkbuddyPlatform,
+		"seeded", seeded, "failed", seedFailed)
 	// M4 qoder credit seeding: same loop over the OpenAPI quota usage
 	// endpoint (also bootstraps each PAT's session once, warming the cache).
 	qoderSeeded, qoderSeedFailed := creds.SeedQoderCredits()
 	fmt.Printf("Qoder credit seeding: %d account(s) seeded, %d failed (OpenAPI quota usage)\n", qoderSeeded, qoderSeedFailed)
+	observability.Info("credit seeding done", "platform", host.QoderPlatform,
+		"seeded", qoderSeeded, "failed", qoderSeedFailed)
 
 	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
 	// Upstream sends resolve per request from adapters implementing
@@ -130,27 +152,11 @@ func main() {
 	// Panel API surface (G3 consent gate + config delivery + recover wiring).
 	api.Register(mux, gwHost)
 
-	// Embedded panel with runtime __ALL2API_BASE__ injection (G5) — M1 queue ②.
-	// Registered last: "/" is the SPA fallback catch-all, specific patterns win.
-	mux.Handle("/", web.NewPanelHandler())
-
-	fmt.Printf("All2API gateway v%s (%s) listening on %s\n", version, commit, addr)
-	fmt.Printf("Registered adapters:\n")
-	senders := 0
-	for _, a := range adapter.Default.GetAll() {
-		fmt.Printf("  - %s (capabilities: 0x%x)\n", a.Name(), a.Capabilities().Value)
-		if _, ok := a.(adapter.Sender); ok {
-			senders++
-		}
-	}
-	fmt.Printf("Upstream senders registered: %d\n", senders)
-
-	// Scheduled tasks (M2 batch ②, upstream real since M3b): assemble the
-	// schedule.Deps seam onto the shared host pool and start the cron loop.
-	// host.NewScheduleUpstream resolves per-account credentials from the store
-	// and drives the documented endpoints (check-in / active report / cat
-	// travel / token refresh); a nil store would degrade ops to explicit
-	// per-account errors, and creds is always non-nil here.
+	// M5a read-only panel data exits (accounts/tasks/models/logs). The task
+	// list comes from the scheduler (built below, before its Start), last-run
+	// stats from the StatsMemory wired into Deps.ReportStats, and logs from
+	// panelRing.
+	statsMem := schedule.NewStatsMemory()
 	schedDeps := &schedule.Deps{
 		Source:          host.NewScheduleSource(gwHost.Pool),
 		Upstream:        host.NewScheduleUpstream(creds),
@@ -162,16 +168,25 @@ func main() {
 			TokenKeepalive: cfg.Schedule.TokenKeepalive,
 		},
 		// ReportStats is called inline per finished batch (including aborted
-		// ones) and must not block: log via the same stdout banner channel the
-		// rest of main uses. (observability.Info is currently a no-op sink —
-		// logWith discards keysAndValues before touching the writer — so it
-		// would silently drop these counters; noted as an M2 gap.)
-		ReportStats: func(s schedule.RunStats) {
+		// ones) and must not block: the StatsMemory recorder keeps the latest
+		// RunStats per task for GET /api/tasks (M5a), then keeps the stdout
+		// banner the rest of main uses. The extra observability line also
+		// lands the counters in the panel ring (logWith now really writes —
+		// the M2 no-op-sink gap is closed in the same batch).
+		ReportStats: statsMem.Recorder(func(s schedule.RunStats) {
 			fmt.Printf("schedule: task=%s total=%d success=%d failed=%d skipped=%d\n",
 				s.Task, s.Total, s.Success, s.Failed, s.Skipped)
-		},
+			observability.Info("schedule run", "task", s.Task, "total", s.Total,
+				"success", s.Success, "failed", s.Failed, "skipped", s.Skipped)
+		}),
 	}
 
+	// Scheduled tasks (M2 batch ②, upstream real since M3b): assemble the
+	// schedule.Deps seam onto the shared host pool and start the cron loop.
+	// host.NewScheduleUpstream resolves per-account credentials from the store
+	// and drives the documented endpoints (check-in / active report / cat
+	// travel / token refresh); a nil store would degrade ops to explicit
+	// per-account errors, and creds is always non-nil here.
 	appCtx, appCancel := context.WithCancel(context.Background())
 	defer appCancel()
 
@@ -180,13 +195,36 @@ func main() {
 		sched.AddTask(task)
 	}
 	schedule.RegisterDefaultHandlers(appCtx, sched, schedDeps)
+
+	api.RegisterPanelData(mux, gwHost, sched, statsMem, panelRing)
+
+	// Embedded panel with runtime __ALL2API_BASE__ injection (G5) — M1 queue ②.
+	// Registered last: "/" is the SPA fallback catch-all, specific patterns win.
+	mux.Handle("/", web.NewPanelHandler())
+
+	fmt.Printf("All2API gateway v%s (%s) listening on %s\n", version, commit, addr)
+	observability.Info("gateway listening", "version", version, "commit", commit, "addr", addr)
+	fmt.Printf("Registered adapters:\n")
+	senders := 0
+	for _, a := range adapter.Default.GetAll() {
+		fmt.Printf("  - %s (capabilities: 0x%x)\n", a.Name(), a.Capabilities().Value)
+		observability.Info("adapter registered", "name", a.Name(), "capabilities", fmt.Sprintf("0x%x", a.Capabilities().Value))
+		if _, ok := a.(adapter.Sender); ok {
+			senders++
+		}
+	}
+	fmt.Printf("Upstream senders registered: %d\n", senders)
+	observability.Info("upstream senders registered", "count", senders)
+
 	if err := sched.Start(); err != nil {
 		fmt.Printf("Scheduler error: %v\n", err)
+		observability.Error("scheduler start failed", "error", err.Error())
 		os.Exit(1)
 	}
 	fmt.Printf("Scheduled tasks registered:\n")
 	for _, t := range sched.GetTasks() {
 		fmt.Printf("  - %s (cron: %s, enabled: %v)\n", t.Name, t.CronSpec, t.Enabled)
+		observability.Info("scheduled task registered", "task", t.Name, "cron", t.CronSpec, "enabled", t.Enabled)
 	}
 
 	server := &http.Server{
