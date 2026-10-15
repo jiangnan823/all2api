@@ -509,11 +509,17 @@ func (c *TaskClient) TravelCycle(ctx context.Context, cred *Credential) (int64, 
 
 // GetUserResource posts {billing}/v2/billing/meter/get-user-resource with the
 // empty object body and reads the credits balance: data.Response.Data.Accounts
-// filtered to CapacityUnit=="credits", reading CycleCapacityRemain (report §2,
-// the xiaofan6ya fetch_balance shape). The first credits row wins — the
-// documented shape is one wallet per account. A reply missing any path
-// element is an explicit error, never an invented 0: seeding a fabricated 0
-// would park the account below the credit floor silently.
+// filtered to CapacityUnit=="credits", SUMMED over every package row.
+//
+// Live evidence (2026-10-15, owner account with 32 packages): the wallet is
+// NOT one row — an account holds a monthly pack plus many bonus packs, and
+// the first credits row can be an exhausted monthly allowance (CycleCapacity-
+// Remain 0 while other packs hold thousands). "First row wins" read 0 for an
+// account the official app shows ≈5,300 credits. The honest roll-up is the
+// sum of CycleCapacityRemain over all credits rows; non-numeric rows are
+// skipped rather than aborting the sum (a single malformed pack must not hide
+// the rest of the balance). An absent/empty Accounts array stays an explicit
+// error — never an invented 0.
 func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (int64, error) {
 	body, err := c.do(ctx, cred, http.MethodPost, pathGetUserResource, []byte("{}"), true)
 	if err != nil {
@@ -531,6 +537,8 @@ func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (int
 	if !ok {
 		return 0, errors.New("workbuddy: user-resource reply missing data.Response.Data.Accounts array")
 	}
+	var total int64
+	rows := 0
 	for _, row := range accounts {
 		m, ok := row.(map[string]any)
 		if !ok {
@@ -540,17 +548,22 @@ func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (int
 		if !strings.EqualFold(strings.TrimSpace(unit), "credits") {
 			continue // token/compute wallets are not the credit balance
 		}
-		n, ok := numberOf(m["CycleCapacityRemain"])
-		if !ok {
-			return 0, errors.New("workbuddy: credits account row carries no numeric CycleCapacityRemain")
+		rows++
+		if n, ok := numberOf(m["CycleCapacityRemain"]); ok {
+			credits, ok := creditsFrom(n)
+			if !ok {
+				continue // out-of-range pack: skip, don't poison the sum
+			}
+			total += credits
 		}
-		credits, ok := creditsFrom(n)
-		if !ok {
-			return 0, fmt.Errorf("workbuddy: credits row CycleCapacityRemain out of range: %v", n)
-		}
-		return credits, nil
+		// Precise decimal variants (CapacityRemainPrecise family) exist but
+		// carry fractional dust; the integer cycle sum is the display truth
+		// the panel and the credit floor both consume.
 	}
-	return 0, errors.New("workbuddy: user-resource reply has no CapacityUnit=credits account row")
+	if rows == 0 {
+		return 0, errors.New("workbuddy: user-resource reply has no CapacityUnit=credits account row")
+	}
+	return total, nil
 }
 
 // Refresh rotates the account credential through the M3a refresh chain
