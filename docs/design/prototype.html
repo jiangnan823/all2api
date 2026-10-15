@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>all2api 管理面板 — 交互原型 v1.0</title>
+<title>all2api 管理面板 — 交互原型 v1.1（分平台管理 + 添加账号向导）</title>
 <style>
-/* 冷石墨基调（与参考实现同族的仪表盘语言，非营销页）：分层底色 + 单一靛蓝强调 */
+/* 冷石墨基调（仪表盘语言，非营销页）：分层底色 + 单一靛蓝强调 */
 :root{
-  --bg:#0c0e14; --surface:#14171f; --surface2:#1a1e28; --raise:#202531; --line:#262c3a;
+  --bg:#0c0e14; --surface:#14171f; --surface2:#1a1e28; --raise:#202531; --line:#262c3a; --line-soft:#1e232e;
   --ink:#e8ebf2; --ink2:#a8b0c2; --ink3:#6b7488;
   --accent:#5b7cfa; --accent-soft:rgba(91,124,250,.14);
   --ok:#3ddc97; --ok-soft:rgba(61,220,151,.12);
@@ -17,83 +17,85 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
-.proto-nav{display:flex;gap:6px;align-items:center;padding:10px 16px;background:#08090d;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+.proto-nav{display:flex;gap:6px;align-items:center;padding:10px 16px;background:#08090d;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
 .proto-nav b{color:var(--accent);margin-right:12px;font-size:13px}
 .proto-nav button{padding:6px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:6px;cursor:pointer;font-size:12px}
 .proto-nav button.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .proto-nav .hint{margin-left:auto;color:var(--ink3);font-size:12px}
-/* 壳：左栏 + 顶栏 + 内容 */
 .shell{display:flex;min-height:calc(100vh - 45px)}
-.rail{width:180px;background:var(--surface);border-right:1px solid var(--line);padding:16px 10px;flex-shrink:0}
-.rail .logo{font-weight:700;color:var(--ink);padding:4px 10px 16px;font-size:15px}
+.rail{width:172px;background:var(--surface);border-right:1px solid var(--line);padding:16px 10px;flex-shrink:0}
+.rail .logo{font-weight:700;color:var(--ink);padding:4px 10px 14px;font-size:15px}
 .rail a{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:13.5px;margin-bottom:2px;cursor:pointer;border:1px solid transparent}
 .rail a:hover{background:var(--surface2)}
 .rail a.on{background:var(--accent-soft);color:var(--accent);border-color:rgba(91,124,250,.3)}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar{display:flex;align-items:center;gap:10px;padding:10px 22px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
 .topbar h1{font-size:15px;font-weight:600}
+.plat{display:flex;gap:6px;margin-left:18px}
+.plat button{display:flex;gap:6px;align-items:center;padding:5px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--ink2);cursor:pointer;font-size:13px}
+.plat button.on{background:var(--accent-soft);border-color:rgba(91,124,250,.4);color:var(--accent)}
+.plat .dot{width:7px;height:7px;border-radius:50%}
+.plat .d-ok{background:var(--ok)} .plat .d-off{background:var(--ink3)}
 .pill{margin-left:auto;display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;font-size:12.5px;border:1px solid var(--line)}
 .pill .dot{width:8px;height:8px;border-radius:50%}
 .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.ok .dot{background:var(--ok)}
 .pill.off{background:var(--bad-soft);color:var(--bad)} .pill.off .dot{background:var(--bad)}
-.pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.warn .dot{background:var(--warn)}
-.content{padding:22px;overflow:auto;flex:1}
+.content{padding:20px 22px;overflow:auto;flex:1}
 h2{font-size:16px;margin-bottom:4px}
-.sub{color:var(--ink3);font-size:12.5px;margin-bottom:18px}
-/* 状态卡行 */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.card .v{font-size:24px;font-family:var(--mono);font-weight:600}
+.sub{color:var(--ink3);font-size:12.5px;margin-bottom:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.card .v{font-size:23px;font-family:var(--mono);font-weight:600}
 .card .k{color:var(--ink3);font-size:12px;margin-top:2px}
 .card.warn .v{color:var(--warn)} .card.bad .v{color:var(--bad)} .card.ok .v{color:var(--ok)}
-/* 表格 */
 .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{color:var(--ink3);font-weight:500;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:12.5px}
-td{padding:10px 14px;border-bottom:1px solid var(--line-soft, #1e232e);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
 tr:last-child td{border-bottom:none}
 .mono{font-family:var(--mono);font-size:12.5px}
-/* 徽标 */
 .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px}
 .b-ok{background:var(--ok-soft);color:var(--ok)} .b-warn{background:var(--warn-soft);color:var(--warn)}
 .b-bad{background:var(--bad-soft);color:var(--bad)} .b-dim{background:var(--surface2);color:var(--ink3)}
-/* 卡片块（任务/连接） */
 .blk{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
 .blk h3{font-size:14px;margin-bottom:6px}
 .blk .meta{color:var(--ink3);font-size:12.5px;font-family:var(--mono)}
 .blk .desc{color:var(--ink2);font-size:12.5px;margin:4px 0 10px}
-.row{display:flex;gap:8px;flex-wrap:wrap}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .btn{padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);cursor:pointer;font-size:12.5px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .note{border:1px dashed var(--line);border-radius:10px;padding:14px 16px;color:var(--ink2);font-size:13px;background:var(--surface)}
 .note b{color:var(--ink)}
 .guide{background:var(--accent-soft);border:1px solid rgba(91,124,250,.3)}
-.log{background:#0a0c11;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.8;max-height:420px;overflow:auto}
+.log{background:#0a0c11;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.8;max-height:380px;overflow:auto}
 .log .t{color:var(--ink3)} .log .e{color:var(--bad)} .log .i{color:var(--ink2)}
-.filters{display:flex;gap:8px;margin-bottom:10px}
+.filters{display:flex;gap:8px;margin-bottom:10px;align-items:center}
 .filters button{padding:4px 12px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-size:12px;cursor:pointer}
 .filters button.on{background:var(--accent-soft);color:var(--accent);border-color:rgba(91,124,250,.35)}
 .hidden{display:none!important}
 .section{display:none} .section.on{display:block}
-.statebar{display:flex;gap:8px;margin:-8px 0 16px;color:var(--ink3);font-size:12px;align-items:center}
-.statebar span{color:var(--ink3)}
 select,option{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:12.5px}
 .banner{display:flex;gap:10px;align-items:center;background:var(--warn-soft);border:1px solid rgba(245,181,68,.3);color:var(--warn);border-radius:10px;padding:10px 16px;font-size:13px;margin-bottom:16px}
 .copy{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px}
 .formrow{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .formrow label{width:150px;color:var(--ink2);font-size:13px;flex-shrink:0}
-.formrow input[type=text],.formrow input[type=password]{flex:1;max-width:340px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--ink);font-size:13px;font-family:var(--mono)}
+.formrow input[type=text],.formrow input[type=password],.formrow textarea{flex:1;max-width:420px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--ink);font-size:13px;font-family:var(--mono)}
+.formrow textarea{min-height:110px;max-width:520px}
 .tag{font-size:11px;padding:1px 8px;border-radius:8px;background:var(--surface2);color:var(--ink3);margin-left:6px}
+.wizard{max-width:640px}
+.stepnum{color:var(--accent);font-family:var(--mono);margin-right:6px}
+.err{color:var(--bad);font-size:12.5px;margin-top:6px}
+.statebar{display:flex;gap:8px;align-items:center;color:var(--ink3);font-size:12px}
 </style>
 </head>
 <body>
 <div class="proto-nav">
-  <b>原型 v1.0</b>
+  <b>原型 v1.1</b>
   <button data-s="state" class="active">场景：正常</button>
-  <button data-s="empty">场景：空池（新装）</button>
+  <button data-s="empty">场景：qoder 空池</button>
   <button data-s="offline">场景：离线/401</button>
-  <span class="hint">每个屏的内容随上方场景切换 · 灰按钮 = 按边界矩阵不做</span>
+  <span class="hint">v1.1：按平台分面板管理 + 面板内添加账号向导 · 灰按钮 = 按边界矩阵不做</span>
 </div>
 
 <div class="shell">
@@ -109,109 +111,138 @@ select,option{background:var(--surface);color:var(--ink);border:1px solid var(--
   <div class="main">
     <div class="topbar">
       <h1 id="ttl">账号池</h1>
+      <div class="plat">
+        <button class="on" data-p="workbuddy"><span class="dot d-ok"></span>WorkBuddy</button>
+        <button data-p="qoder"><span class="dot d-ok"></span>Qoder</button>
+        <button data-p="trae"><span class="dot d-off"></span>Trae（未启用）</button>
+      </div>
       <span id="pill" class="pill ok"><span class="dot"></span><span id="pill-t">已连接</span><span id="pill-d" style="color:var(--ink3)">偏差 +0.3s</span></span>
       <button class="btn">明/暗</button>
     </div>
     <div class="content">
 
-    <!-- ============ 账号池 ============ -->
+    <!-- ============ 账号池（随平台） ============ -->
     <div class="section on" id="s-accounts">
-      <p class="sub">账号池是网关的额度来源。凭证文件放 auths\ 目录，重启自动发现；token 到期自动刷新，无需照看。</p>
+      <p class="sub" id="acc-sub">WorkBuddy 平台的账号池。凭证到期自动刷新，无需照看。</p>
       <div class="banner hidden" id="c5banner">当前没有可服务的账号 —— 请求会返回 503 no_available_account，直到有账号恢复可用。</div>
-      <div class="cards">
+      <div class="cards" id="cards">
         <div class="card ok"><div class="v" data-m="total">4</div><div class="k">账号总数</div></div>
         <div class="card"><div class="v" data-m="active">1</div><div class="k">可用</div></div>
         <div class="card warn"><div class="v" data-m="cooling">2</div><div class="k">冷却中</div></div>
         <div class="card bad"><div class="v" data-m="disabled">1</div><div class="k">凭证失效</div></div>
         <div class="card"><div class="v mono" data-m="credit">150</div><div class="k">积分合计</div></div>
       </div>
-      <div class="tablewrap">
+      <div class="tablewrap" id="acctable">
         <table>
-          <thead><tr><th>平台</th><th>账号</th><th>状态</th><th>积分</th><th>健康度</th><th>凭证到期</th><th>冷却至</th><th></th></tr></thead>
+          <thead><tr><th>账号</th><th>状态</th><th>积分</th><th>健康度</th><th>凭证到期</th><th>冷却至</th><th></th></tr></thead>
           <tbody data-m="rows">
-            <tr><td>workbuddy</td><td class="mono">…5365a3d3 <button class="copy">复制</button></td><td><span class="badge b-ok">可用</span></td><td class="mono">150</td><td class="mono">1.00</td><td class="mono">11-11 22:00</td><td>—</td><td><button class="btn" title="重置冷却与熔断">恢复</button></td></tr>
-            <tr><td>workbuddy</td><td class="mono">…0110a4f7 <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.62</td><td class="mono">11-11 22:00</td><td class="mono">14:32:05</td><td><button class="btn">恢复</button></td></tr>
-            <tr><td>workbuddy</td><td class="mono">…24fae70e <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.70</td><td class="mono">11-11 22:00</td><td class="mono">14:35:12</td><td><button class="btn">恢复</button></td></tr>
-            <tr><td>workbuddy</td><td class="mono">…cde1d6dd <button class="copy">复制</button></td><td><span class="badge b-bad">凭证失效</span></td><td class="mono">0</td><td class="mono">0.00</td><td class="mono">—</td><td>—</td><td><button class="btn" disabled title="refresh 已失败，需更换 auths\ 中的凭证文件后重启">已失效</button></td></tr>
+            <tr><td class="mono">…5365a3d3 <button class="copy">复制</button></td><td><span class="badge b-ok">可用</span></td><td class="mono">150</td><td class="mono">1.00</td><td class="mono">11-11 22:00</td><td>—</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
+            <tr><td class="mono">…0110a4f7 <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.62</td><td class="mono">11-11 22:00</td><td class="mono">14:32:05</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
+            <tr><td class="mono">…24fae70e <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.70</td><td class="mono">11-11 22:00</td><td class="mono">14:35:12</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
+            <tr><td class="mono">…cde1d6dd <button class="copy">复制</button></td><td><span class="badge b-bad">凭证失效</span></td><td class="mono">0</td><td class="mono">0.00</td><td class="mono">—</td><td>—</td><td class="row"><button class="btn" disabled title="refresh 已失败，请重新添加账号">已失效</button><button class="btn">删除</button></td></tr>
           </tbody>
         </table>
       </div>
-      <p class="sub" style="margin-top:10px">恢复 = 手动重置该账号的冷却与熔断（凭证失效不适用）。</p>
-      <!-- 空池场景 -->
-      <div class="note guide hidden" data-empty>
-        <b>账号池是空的。</b> 账号以凭证文件为事实源：把 <span class="mono">workbuddy-*.json</span> 放入网关运行目录的 <span class="mono">auths\</span> 文件夹后重启 all2api，即可自动发现并播种积分。<br>面板不做账号增删编辑（文件即账号）。
+      <div class="row" style="margin-top:14px"><button class="btn primary" id="addbtn" onclick="openWizard()">＋ 添加账号</button></div>
+      <p class="sub" style="margin-top:10px">恢复 = 手动重置该账号的冷却与熔断；删除 = 移除凭证文件与池内记录（需确认）。</p>
+      <!-- 空池（qoder 场景） -->
+      <div class="note guide hidden" id="emptyguide">
+        <b>Qoder 平台还没有账号。</b> 点击下方「添加账号」，粘贴 Qoder 客户端生成的 Personal Access Token（pt-…）即可，保存后立即生效，无需重启。
+      </div>
+      <!-- 添加账号向导（按平台分化） -->
+      <div class="blk wizard hidden" id="wizard">
+        <h3 id="wiz-title">添加 WorkBuddy 账号</h3>
+        <div id="wiz-wb">
+          <div class="desc"><span class="stepnum">方式 A（推荐）</span>从官方桌面端复制凭证 JSON：<br>打开 <span class="mono">%LOCALAPPDATA%\CodeBuddyExtension\Data\Public\auth\</span> 下对应的 <span class="mono">*.info</span> 文件，全选复制其 JSON 内容，粘贴到下面：</div>
+          <textarea placeholder='{ "account": {...}, "auth": { "accessToken": "...", "refreshToken": "...", ... } }' style="width:100%"></textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn primary">保存并热生效</button>
+            <button class="btn" onclick="closeWizard()">取消</button>
+          </div>
+          <div class="err hidden" id="wb-err">JSON 无法解析或缺少 accessToken / refreshToken 字段</div>
+          <div class="desc" style="margin-top:18px"><span class="stepnum">方式 B（P1）</span>设备授权流：面板生成登录链接 → 浏览器登录 → 粘贴回调链接。<span class="badge b-dim">下一版</span></div>
+        </div>
+        <div id="wiz-qo" class="hidden">
+          <div class="desc">打开 Qoder 客户端 → 设置/账号 → 生成 Personal Access Token（形如 <span class="mono">pt-xxxxxxxx</span>），粘贴到下面：</div>
+          <div class="formrow"><input type="text" placeholder="pt-xxxxxxxx..."></div>
+          <div class="row"><button class="btn primary">保存并热生效</button><button class="btn" onclick="closeWizard()">取消</button></div>
+          <div class="err hidden">PAT 必须以 pt- 开头</div>
+          <div class="desc" style="margin-top:10px">重复粘贴会替换现有 PAT（需确认）；Token 无过期，失效时在账号池显示"凭证失效"。</div>
+        </div>
+        <div id="wiz-tr" class="hidden">
+          <div class="note">Trae 平台尚未接入网关，暂不支持添加账号。<span class="badge b-dim">P2</span></div>
+          <button class="btn" onclick="closeWizard()" style="margin-top:10px">关闭</button>
+        </div>
       </div>
     </div>
 
-    <!-- ============ 任务 ============ -->
+    <!-- ============ 任务（随平台） ============ -->
     <div class="section" id="s-tasks">
-      <p class="sub">四个定时任务由调度器自动执行（cron 可在配置页修改）。面板只读展示，不提供手动触发（避免与调度器双写）。</p>
-      <div class="blk"><h3>每日签到 <span class="badge b-ok">启用</span></h3><div class="desc">定时向上游签到领积分；重复签到自动幂等跳过。</div><div class="meta">cron: 0 9,21 * * *　·　最近运行 10-15 09:00　·　4 账号：成功 3 / 失败 1</div></div>
-      <div class="blk"><h3>活跃上报 <span class="badge b-ok">启用</span></h3><div class="desc">每日活跃信号，维持账号连续登录状态。</div><div class="meta">cron: 0 10 * * *　·　最近运行 10-15 10:00　·　4 账号：成功 4 / 失败 0</div></div>
-      <div class="blk"><h3>猫猫旅行 <span class="badge b-ok">启用</span></h3><div class="desc">派出 → 领奖闭环；奖励积分自动入池。</div><div class="meta">cron: 0 9,21 * * *　·　最近运行 10-15 09:00　·　成功 3 / 失败 1 / 跳过 0</div></div>
-      <div class="blk"><h3>Token 保活 <span class="badge b-ok">启用</span></h3><div class="desc">刷新 access/refresh token 并回写凭证文件，有效期前移。</div><div class="meta">cron: 0 22 * * *　·　尚未运行</div></div>
-      <div class="note" data-empty hidden>安装后任务按 cron 到点自动运行，运行前这里显示"尚未运行"。调度不依赖面板打开。</div>
+      <p class="sub" id="task-sub">WorkBuddy 平台的定时任务，由调度器自动执行（cron 在配置页修改）。面板只读展示。</p>
+      <div id="tasks-wb">
+        <div class="blk"><h3>每日签到 <span class="badge b-ok">启用</span></h3><div class="desc">定时向上游签到领积分；重复签到自动幂等跳过。</div><div class="meta">cron: 0 9,21 * * *　·　最近运行 10-15 09:00　·　成功 3 / 失败 1</div></div>
+        <div class="blk"><h3>活跃上报 <span class="badge b-ok">启用</span></h3><div class="desc">每日活跃信号，维持账号连续登录状态。</div><div class="meta">cron: 0 10 * * *　·　最近运行 10-15 10:00　·　成功 4 / 失败 0</div></div>
+        <div class="blk"><h3>猫猫旅行 <span class="badge b-ok">启用</span></h3><div class="desc">派出 → 领奖闭环；奖励积分自动入池。</div><div class="meta">cron: 0 9,21 * * *　·　成功 3 / 失败 1 / 跳过 0</div></div>
+        <div class="blk"><h3>Token 保活 <span class="badge b-ok">启用</span></h3><div class="desc">刷新 access/refresh token 并回写凭证文件。</div><div class="meta">cron: 0 22 * * *　·　尚未运行</div></div>
+      </div>
+      <div id="tasks-other" class="hidden"><div class="note">Qoder / Trae 平台当前没有定时任务面。<span class="badge b-dim">随平台能力开放</span></div></div>
     </div>
 
-    <!-- ============ 模型 ============ -->
+    <!-- ============ 模型（随平台） ============ -->
     <div class="section" id="s-models">
-      <p class="sub">本地模型目录（静态表 + 配置的 ModelMap）。<span class="badge b-dim">上游实时目录查询未接入</span></p>
-      <div class="filters"><select><option>全部平台</option><option>workbuddy</option><option>qoder</option></select></div>
+      <p class="sub" id="model-sub">WorkBuddy 平台的本地模型目录。<span class="badge b-dim">上游实时目录查询未接入</span></p>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>平台</th><th>模型名（路由可用）</th><th>来源</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td>workbuddy</td><td class="mono">deepseek-v4-flash</td><td><span class="badge b-dim">默认</span></td><td>实测可用；裸名自动路由首选</td></tr>
-            <tr><td>qoder</td><td class="mono">GLM-5.3</td><td><span class="badge b-dim">本地目录</span></td><td>需配置 qoder PAT</td></tr>
+          <thead><tr><th>模型名（路由可用）</th><th>来源</th><th>说明</th></tr></thead>
+          <tbody id="model-rows">
+            <tr><td class="mono">deepseek-v4-flash</td><td><span class="badge b-dim">默认</span></td><td>实测可用；裸名自动路由首选</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- ============ 连接 ============ -->
+    <!-- ============ 连接（全局） ============ -->
     <div class="section" id="s-connect">
       <p class="sub">任何 OpenAI 兼容客户端按下面三件接入。</p>
       <div class="blk"><h3>Base URL</h3><div class="meta" style="font-size:14px">http://localhost:7800/v1 <button class="copy">复制</button></div><div class="desc">与本面板同源同端口；端口在配置页修改。</div></div>
-      <div class="blk"><h3>API Key</h3><div class="desc">当前：<span class="badge b-ok">已配置（保存于 config.json）</span> —— 改 key 请到配置页，改后立即生效（含本面板）。</div></div>
-      <div class="blk"><h3>模型</h3><div class="meta">deepseek-v4-flash · GLM-5.3 …</div><div class="desc">裸模型名自动路由到有额度的平台；也可用 <span class="mono">平台/模型名</span> 指定。完整清单见模型页。</div></div>
-      <div class="note">客户端示例（Cherry Studio / Claude Code / Codex CLI）：Base URL 填上面地址，API Key 填配置页的值，模型任选上表。</div>
+      <div class="blk"><h3>API Key</h3><div class="desc">当前：<span class="badge b-ok">已配置</span> —— 改 key 请到配置页。</div></div>
+      <div class="blk"><h3>模型</h3><div class="meta">deepseek-v4-flash · GLM-5.3 …</div><div class="desc">裸模型名自动路由到有额度的平台；完整清单见模型页（切平台查看）。</div></div>
     </div>
 
-    <!-- ============ 配置 ============ -->
+    <!-- ============ 配置（全局） ============ -->
     <div class="section" id="s-config">
       <p class="sub">改动保存后写入 config.json；标"重启生效"的字段在进程重启后起作用。</p>
       <div class="blk"><h3>服务</h3>
         <div class="formrow"><label>监听地址</label><input type="text" value=":7800"><span class="tag">重启生效</span></div>
         <div class="formrow"><label>API 密钥</label><input type="password" value="sk-****"><span class="tag">重启生效</span></div>
-        <div class="formrow"><label>外部访问地址</label><input type="text" value=""><span class="tag">选填</span></div>
+      </div>
+      <div class="blk"><h3>平台开关</h3>
+        <div class="formrow"><label>WorkBuddy</label><button class="btn">已启用（点此停用）</button></div>
+        <div class="formrow"><label>Qoder</label><button class="btn">已启用（点此停用）</button></div>
+        <div class="formrow"><label>Trae</label><button class="btn primary">未启用（点此启用）</button></div>
       </div>
       <div class="blk"><h3>账号池</h3>
         <div class="formrow"><label>积分下限</label><input type="text" value="1"><span class="tag">低于此值的账号不参与选号</span></div>
         <div class="formrow"><label>最大重试</label><input type="text" value="3"></div>
-        <div class="formrow"><label>冷却时长(秒)</label><input type="text" value="60"></div>
       </div>
-      <div class="blk"><h3>定时任务</h3>
+      <div class="blk"><h3>定时任务（WorkBuddy）</h3>
         <div class="formrow"><label>签到 cron</label><input type="text" value="0 9,21 * * *"></div>
         <div class="formrow"><label>活跃上报 cron</label><input type="text" value="0 10 * * *"></div>
         <div class="formrow"><label>保活 cron</label><input type="text" value="0 22 * * *"></div>
       </div>
-      <div class="blk"><h3>指纹重写 <span class="badge b-warn">危险区</span></h3>
-        <div class="formrow"><label>请求指纹重写</label><button class="btn">开启（需逐字确认）</button></div>
-      </div>
       <div class="row"><button class="btn primary">保存全部改动</button><button class="btn">放弃本地改动</button></div>
     </div>
 
-    <!-- ============ 日志 ============ -->
+    <!-- ============ 日志（全局） ============ -->
     <div class="section" id="s-logs">
       <p class="sub">进程内环形缓冲（最近 500 行），10 秒自动滚动刷新。</p>
-      <div class="filters"><button class="on">全部</button><button>info</button><button>error</button><button class="btn" style="margin-left:auto">自动滚动：开</button></div>
+      <div class="filters"><button class="on">全部</button><button>info</button><button>error</button><select><option>全部平台</option><option>workbuddy</option><option>qoder</option></select><button class="btn" style="margin-left:auto">自动滚动：开</button></div>
       <div class="log">
         <div class="i"><span class="t">14:30:01</span> [workbuddy] token refresh ok (…5365a3d3), expires 11-11 22:00</div>
         <div class="i"><span class="t">14:30:01</span> schedule: task=signin total=4 success=3 failed=1 skipped=0</div>
-        <div class="e"><span class="t">14:30:02</span> signin …cde1d6dd: auth_expired — credential file needs replacement</div>
+        <div class="e"><span class="t">14:30:02</span> signin …cde1d6dd: auth_expired — credential needs re-add</div>
         <div class="i"><span class="t">14:31:10</span> POST /v1/chat/completions 200 deepseek-v4-flash 1.2s (…5365a3d3)</div>
-        <div class="e"><span class="t">14:31:44</span> POST /v1/chat/completions 503 no_available_account — all accounts cooling/insufficient</div>
-        <div class="i"><span class="t">14:32:00</span> breaker(workbuddy): half-open probe scheduled</div>
+        <div class="i"><span class="t">14:32:00</span> [qoder] PAT account f38775c2 registered (hot)</div>
       </div>
     </div>
 
@@ -220,21 +251,52 @@ select,option{background:var(--surface);color:var(--ink);border:1px solid var(--
 </div>
 
 <script>
+// 平台数据（演示）
+const PLAT = {
+  workbuddy: { sub:'WorkBuddy 平台的账号池。凭证到期自动刷新，无需照看。',
+    m:{total:4,active:1,cooling:2,disabled:1,credit:150}, hasRows:true, taskSub:'WorkBuddy 平台的定时任务，由调度器自动执行（cron 在配置页修改）。面板只读展示。', wbTasks:true,
+    modelSub:'WorkBuddy 平台的本地模型目录。', modelRow:'<tr><td class="mono">deepseek-v4-flash</td><td><span class="badge b-dim">默认</span></td><td>实测可用；裸名自动路由首选</td></tr>' },
+  qoder: { sub:'Qoder 平台的账号池。PAT 无过期；失效时账号显示"凭证失效"。',
+    m:{total:0,active:0,cooling:0,disabled:0,credit:0}, hasRows:false, taskSub:'Qoder 平台当前没有定时任务面。', wbTasks:false,
+    modelSub:'Qoder 平台的本地模型目录。', modelRow:'<tr><td class="mono">GLM-5.3</td><td><span class="badge b-dim">本地目录</span></td><td>需先添加 PAT 账号</td></tr><tr><td class="mono">GLM-5-turbo</td><td><span class="badge b-dim">本地目录</span></td><td>—</td></tr>' },
+  trae: { sub:'Trae 平台尚未接入网关。', m:{total:0,active:0,cooling:0,disabled:0,credit:0}, hasRows:false, taskSub:'Trae 平台尚未接入。', wbTasks:false,
+    modelSub:'Trae 平台尚未接入。', modelRow:'' },
+};
+let curPlat='workbuddy';
+document.querySelectorAll('.plat button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.plat button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); curPlat=b.dataset.p; applyPlat();
+});
+function applyPlat(){
+  const p=PLAT[curPlat];
+  document.getElementById('acc-sub').textContent=p.sub;
+  document.getElementById('task-sub').textContent=p.taskSub;
+  document.getElementById('model-sub').textContent=p.modelSub+' ';
+  document.querySelectorAll('[data-m]').forEach(el=>{const k=el.getAttribute('data-m'); if(k in p.m) el.textContent=p.m[k];});
+  document.getElementById('acctable').classList.toggle('hidden',!p.hasRows);
+  document.getElementById('emptyguide').classList.toggle('hidden',!(curPlat==='qoder'&&scene==='empty'));
+  document.getElementById('c5banner').classList.toggle('hidden',!(curPlat==='qoder'&&scene==='empty'));
+  document.getElementById('tasks-wb').classList.toggle('hidden',!p.wbTasks);
+  document.getElementById('tasks-other').classList.toggle('hidden',p.wbTasks);
+  document.getElementById('model-rows').innerHTML=p.modelRow;
+  document.getElementById('wiz-title').textContent = curPlat==='workbuddy'?'添加 WorkBuddy 账号':curPlat==='qoder'?'添加 Qoder 账号':'添加 Trae 账号';
+  document.getElementById('wiz-wb').classList.toggle('hidden',curPlat!=='workbuddy');
+  document.getElementById('wiz-qo').classList.toggle('hidden',curPlat!=='qoder');
+  document.getElementById('wiz-tr').classList.toggle('hidden',curPlat!=='trae');
+}
+function openWizard(){ document.getElementById('wizard').classList.remove('hidden'); document.getElementById('wizard').scrollIntoView({behavior:'smooth'}); }
+function closeWizard(){ document.getElementById('wizard').classList.add('hidden'); }
 // 场景切换
+let scene='state';
 const scenes = {
-  state:   ()=>{ pill('ok','已连接','偏差 +0.3s'); metrics(4,1,2,1,'150'); guide(false); banner(false); rows(true); emptyTask(false); },
-  empty:   ()=>{ pill('warn','已连接','账号池为空'); metrics(0,0,0,0,'0');   guide(true);  banner(true);  rows(false); emptyTask(true); },
-  offline: ()=>{ pill('off','离线','无法连接 127.0.0.1:7800'); }
+  state:   ()=>{ scene='state'; pill('ok','已连接','偏差 +0.3s'); guide(false); banner(false); rows(true); },
+  empty:   ()=>{ scene='empty'; pill('warn','已连接','账号池为空'); applyPlat(); if(curPlat!=='qoder'){document.querySelector('.plat button[data-p=qoder]').click();} },
+  offline: ()=>{ scene='offline'; pill('off','离线','无法连接 127.0.0.1:7800'); }
 };
 function pill(t,x,d){ const p=document.getElementById('pill'); p.className='pill '+t; document.getElementById('pill-t').textContent=x; document.getElementById('pill-d').textContent=d; }
-function metrics(total,active,cooling,dis,credit){
-  const m={'total':total,'active':active,'cooling':cooling,'disabled':dis,'credit':credit};
-  document.querySelectorAll('[data-m]').forEach(el=>{ const k=el.getAttribute('data-m'); if(k in m) el.textContent=m[k]; });
-}
-function guide(on){ document.querySelector('[data-empty]').classList.toggle('hidden',!on); document.querySelector('.tablewrap').classList.toggle('hidden',on); }
+function guide(on){ document.getElementById('emptyguide').classList.toggle('hidden',!on); document.getElementById('acctable').classList.toggle('hidden',on); }
 function banner(on){ document.getElementById('c5banner').classList.toggle('hidden',!on); }
 function rows(on){ document.querySelectorAll('tbody[data-m="rows"] tr').forEach(r=>r.classList.toggle('hidden',!on)); }
-function emptyTask(on){ document.querySelector('[data-empty]').classList.toggle('hidden',!on); }
 document.querySelectorAll('.proto-nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.proto-nav button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); scenes[b.dataset.s]();
@@ -247,7 +309,6 @@ document.querySelectorAll('.rail a').forEach(a=>a.onclick=()=>{
   a.classList.add('on'); document.getElementById('s-'+a.dataset.n).classList.add('on');
   document.getElementById('ttl').textContent=titles[a.dataset.n];
 });
-// 复制按钮演示
 document.querySelectorAll('.copy').forEach(c=>c.onclick=()=>{c.textContent='已复制';setTimeout(()=>c.textContent='复制',900)});
 </script>
 </body>
