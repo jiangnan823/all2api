@@ -18,10 +18,10 @@
   z-index: var(--z-sticky);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: var(--sp-4);
   height: 100vh;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-4) var(--sp-2);
   background: var(--bg-surface);
   border-right: 1px solid var(--line-border);
 }
@@ -31,6 +31,7 @@
   place-items: center;
   width: 36px;
   height: 36px;
+  margin: 0 auto var(--sp-2);
   border-radius: var(--r-md);
   background: var(--brand);
   /* 与 panel.css .btn--primary 同口径：tokens 无 inverse 档，沿用既有实装的 #fff */
@@ -54,7 +55,7 @@
   align-items: center;
   gap: var(--sp-2);
   min-height: var(--row-h);
-  padding: 0 var(--sp-2);
+  padding: 0 var(--sp-3);
   border-radius: var(--r-md);
   color: var(--text-secondary);
   text-decoration: none;
