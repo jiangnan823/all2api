@@ -41,6 +41,45 @@ func newWBGrowthBackend(creds *host.CredentialStore, opts workbuddy.TaskClientOp
 type wbGrowthBackend struct {
 	creds  *host.CredentialStore
 	client *workbuddy.TaskClient
+	pool   *pool.WeightedRandomSelector
+}
+
+// Checkin runs the daily check-in and lands the reward credit in the pool.
+// The upstream endpoint is idempotent (repeat → already=true, zero gain).
+func (b *wbGrowthBackend) Checkin(ctx context.Context, platform, accountID string) (creditGained int64, already bool, err error) {
+	if platform != "workbuddy" {
+		return 0, false, &growthAccountError{msg: "该平台无成长任务面"}
+	}
+	cred, err := b.resolve(ctx, platform, accountID)
+	if err != nil {
+		return 0, false, err
+	}
+	gained, err := b.client.Signin(ctx, cred)
+	if err != nil {
+		return 0, false, err
+	}
+	if gained > 0 && b.pool != nil {
+		b.pool.ApplyAccountCredit(platform, accountID, gained)
+	}
+	return gained, already, nil
+}
+
+// RefreshBalance re-probes the upstream wallet for one account and writes the
+// fresh remain/total back into the pool (the panel's 余额 button).
+func (b *wbGrowthBackend) RefreshBalance(ctx context.Context, platform, accountID string) (remain, total int64, err error) {
+	cred, err := b.resolve(ctx, platform, accountID)
+	if err != nil {
+		return 0, 0, err
+	}
+	remain, total, err = b.client.GetUserResource(ctx, cred)
+	if err != nil {
+		return 0, 0, err
+	}
+	if b.pool != nil {
+		b.pool.SetAccountCredit(platform, accountID, remain)
+		b.pool.SetAccountCreditTotal(platform, accountID, total)
+	}
+	return remain, total, nil
 }
 
 // resolve maps the path identity onto a stored credential; a lookup miss is

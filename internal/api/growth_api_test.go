@@ -60,6 +60,16 @@ func (f *fakeGrowthBackend) AcceptAll(context.Context, string, string) (int, err
 	return f.acceptN, f.acceptEr
 }
 
+// Checkin / RefreshBalance：快捷操作端点的 fake 实现（未在本文件断言的路径，
+// 返回中性成功以隔离其他用例）。
+func (f *fakeGrowthBackend) Checkin(context.Context, string, string) (int64, bool, error) {
+	return 0, false, nil
+}
+
+func (f *fakeGrowthBackend) RefreshBalance(context.Context, string, string) (int64, int64, error) {
+	return 0, 0, nil
+}
+
 func (f *fakeGrowthBackend) ClaimAuto(context.Context, string, string) (int, int64, error) {
 	f.rec("claim")
 	return f.claimN, f.claimCr, f.claimErr

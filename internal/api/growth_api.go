@@ -70,6 +70,12 @@ type growthBackend interface {
 	// ClaimAuto sweeps every completed-unclaimed task and returns the claim
 	// count plus the credit that landed.
 	ClaimAuto(ctx context.Context, platform, accountID string) (claimed int, creditGained int64, err error)
+	// Checkin runs the daily check-in for one account (upstream idempotent;
+	// creditGained is what landed this call, already=true on the repeat).
+	Checkin(ctx context.Context, platform, accountID string) (creditGained int64, already bool, err error)
+	// RefreshBalance re-probes the upstream wallet and returns remain/total
+	// (both written back into the pool by the implementation).
+	RefreshBalance(ctx context.Context, platform, accountID string) (remain, total int64, err error)
 }
 
 // growthAccountError marks "no usable credential for this account here" —
