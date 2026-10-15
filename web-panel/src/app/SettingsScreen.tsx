@@ -505,9 +505,11 @@ function GenericConfigSections(props: {
  * X-API-Key 内存态输入（M2 第二批）。粘贴即注入 panelApi provider（后续全部 /api/* 请求带头）；
  * 清空 = 开放模式（不带头）。红线：值只存 React 内存态，任何 storage 均不落（M1 决策）；
  * 刷新丢失是预期行为——文案如实说明，不假装持久化。
+ * M8-connect：明文/密文眼睛切换（纯前端显隐，不影响注入 provider 的值本身）。
  */
 function ApiKeySection() {
   const [key, setKey] = useState('');
+  const [show, setShow] = useState(false);
   const apply = (next: string) => {
     setKey(next);
     setApiKeyProvider(() => next);
@@ -517,15 +519,26 @@ function ApiKeySection() {
       <label className="settings-screen__apikey-label" htmlFor="settings-apikey-input">
         {SETTINGS.APIKEY_TITLE}
       </label>
-      <input
-        id="settings-apikey-input"
-        type="password"
-        autoComplete="off"
-        className="settings-screen__apikey-input"
-        placeholder={SETTINGS.APIKEY_PLACEHOLDER}
-        value={key}
-        onChange={(e) => apply(e.target.value)}
-      />
+      <span className="settings-screen__apikey-row">
+        <input
+          id="settings-apikey-input"
+          type={show ? 'text' : 'password'}
+          autoComplete="off"
+          className="settings-screen__apikey-input"
+          placeholder={SETTINGS.APIKEY_PLACEHOLDER}
+          value={key}
+          onChange={(e) => apply(e.target.value)}
+        />
+        <button
+          type="button"
+          className="settings-screen__apikey-eye"
+          onClick={() => setShow((v) => !v)}
+          aria-pressed={show}
+          title={show ? SETTINGS.APIKEY_HIDE : SETTINGS.APIKEY_SHOW}
+        >
+          {show ? SETTINGS.APIKEY_HIDE : SETTINGS.APIKEY_SHOW}
+        </button>
+      </span>
       <p className="settings-screen__apikey-note">{SETTINGS.APIKEY_NOTE}</p>
     </section>
   );

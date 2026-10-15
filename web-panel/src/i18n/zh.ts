@@ -212,6 +212,7 @@ export const NAV = {
   ACCOUNTS: '账号池',
   TASKS: '任务中心',
   MODELS: '模型',
+  CONNECT: '连接',
   CONFIG: '配置',
   LOGS: '运行日志',
 } as const;
@@ -337,6 +338,9 @@ export const SETTINGS = {
   APIKEY_TITLE: '网关 API Key（可选，内存态）',
   APIKEY_PLACEHOLDER: '粘贴网关 api_key（配置为空 = 开放模式，可留空）',
   APIKEY_NOTE: '只保存在当前页面内存中，不会写入浏览器存储；刷新或关闭页面后需重新粘贴。',
+  /* ---- M8-connect：密钥明文/密文切换（只追加，不改上方既有键）---- */
+  APIKEY_SHOW: '显示 API Key',
+  APIKEY_HIDE: '隐藏 API Key',
 } as const;
 
 /** SETTINGS 模板占位符替换（与 consentCheckLabel 同一做法，组件不内联拼串逻辑）。 */
@@ -545,4 +549,40 @@ export const GROWTH = {
   REWARD_CREDIT: '+{n} 分',
   REWARD_ENERGY: '+{n} 能',
   DASH: '—',
+} as const;
+
+/**
+ * 连接屏文案（M8-connect，独立新增命名空间，不改动上方任何冻结段）。
+ * 屏体三块：Base URL（location.origin + '/v1'，纯前端拼装）、API Key 状态
+ * （读 GET /api/config 的 raw.api_key 有无）、可用模型（GET /api/models，后端端点已存在）。
+ * 边界如实：改 key 只能去配置页（本屏不提供编辑）；模型端点失败原样上抛错误态。
+ */
+export const CONNECT = {
+  SUB: '客户端接入三要素：接口地址、API Key、可用模型。本页只读展示，修改 API Key 请到配置页。',
+  LOADING: '正在读取连接信息…',
+  BASEURL_TITLE: '接口地址（Base URL）',
+  BASEURL_HINT: 'OpenAI 兼容端点。把客户端的接口地址改成下面这行即可开始调用。',
+  COPY: '点击复制',
+  COPIED: '已复制',
+  KEY_TITLE: 'API Key 状态',
+  KEY_LOADING: '正在读取网关配置…',
+  KEY_CONFIGURED: '已配置',
+  KEY_CONFIGURED_HINT: '网关已启用 API Key 校验：客户端请求需携带该 Key（X-API-Key 或 Bearer 头）。',
+  KEY_OPEN: '开放模式',
+  KEY_OPEN_HINT: '网关未设置 API Key：同网段内可直接调用。如需校验，请在配置页设置 api_key。',
+  KEY_ERROR_TITLE: 'API Key 状态读取失败',
+  KEY_ERROR_HINT: '面板与网关同源部署。若网关已配置 api_key，请先在配置页粘贴一致的 Key 再重试。',
+  KEY_GOTO_SETTINGS: '去配置页修改',
+  MODELS_TITLE: '可用模型',
+  MODELS_HINT: '客户端的 model 参数填「模型名称」列；目录来自网关本地配置。',
+  MODELS_LOADING: '正在读取模型清单…',
+  MODELS_ERROR_TITLE: '模型清单读取失败',
+  MODELS_ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  MODELS_EMPTY: '模型目录为空。',
+  MODELS_COUNT: '{count} 个模型',
+  COL_PLATFORM: '平台',
+  COL_ID: '模型 ID',
+  COL_NAME: '模型名称',
+  COPY_MODEL: '点击复制模型名称',
 } as const;
