@@ -828,5 +828,24 @@ run `38565902432` 首跑失败在 `lint / vet` 的 **golangci 安装步骤**：`
 
 CI run `38669901501` 全绿，main = `4a9be2b`。**产品全链闭环**：/v1 真实代理（非流式+流式）、面板操作、配置保存、账号池 + 真实余额播种、token 自动刷新回写、调度任务真实化（active_check 已实测 4/4）。**cron 观察点（主人可对照官方 App 验证）**：21:00 签到+猫旅（首跑 depart、21:00 claim 或 traveling 属正常）、22:00 保活（auth 文件 mtime 前移 60d）。遗留登记：report 不记账口径下 growth 连登是否点亮需官方 App 对照（若不点亮，缺口 = chat body 的 `extra_vars.growthEvent` 注入）；签到回复真实奖字段名待今晚 21:00 实测；global 域 billing 无 /v2 首选路径未实现；安装包尚无 tag 触发的自动发版（现在 tag 后 release 产物即含安装件，差一步 `package-windows` 的 zip 整合进 Release assets 可后补）。
 
+## 9.25 双平台就绪 + lease 回归修复 + 打包交付（2026-10-15 下午）
+
+### 9.25-a M4 qoder 平台接入（`61bdd68`，独立七面 + 五变体全绿后合入）
+
+PAT 静态凭证（`auth_dir/qoder-pat.txt`，无 refresh 语义）→ `openapi.qoder.sh` 换链（REST 优先/legacy COSY 回退）→ COSY bearer 三段签名 → Encode 包裹 SSE。协议自主人本机 vhub 项目移植（只读参考，非公开调研）。真实 E2E：**换链 400**——三重判别（真 PAT=假 PAT=header 变体全部同码 400；官方文档对照形状逐字一致；端点活体回信封）⇒ **主人此 PAT 已失效**，需在 Qoder IDE 重新生成（创建时注意有效期设置）。代码就绪，换新 PAT 即用，本项归属主人侧动作。
+
+### 9.25-b 两个真实缺陷修复（本机交付前实测抓出）
+
+1. **`WriteTimeout: 10s` 截断长流**（`2a270be`）：写超时从请求读完起算，任何仍在跑的 SSE 流到点即被掐断——真实客户端长回答的必炸路径。修复：去掉 WriteTimeout（读超时保留 5s，客户端断连走 ctx，停机窗口不受影响）。
+2. **anti-thundering lease 记满 30 秒**（`56763ef`）：租约只由 TTL（30s）释放，**请求完成不释放**——单账号有额度的池在每次请求后的 30 秒内，后续请求全部 `no_available_account` 503（本次"跑不稳"的根因，早上多个诡异现象统一归因于此）。修复：路由在请求结束（defer：成功/失败/断连）统一释放本轮全部已租账号；**重试循环期间保持持租**——这正是"每账号至多试一次"的循环边界。
+
+### 9.25-c ⚠️ 事故记录：我的错误修法把主人电脑打崩（必须留档）
+
+lease 修复的第一版是「每次发送后立刻释放」，嵌入重试循环后形成 **select→fail→release→reselect 死循环**：失败账号立即被重新选中，测试假上游的 callLog 每圈追加，`router.test` 进程膨胀到 **42 GB**，耗尽系统提交内存（页面文件 38400 MB 上限打满），致全系统 fork 失败（Win32 1455/299 连环爆）、主人被迫**硬重启**。次生症状曾被我误判为"环境内存压力"并推迟排查——错上加错。教训入规：**释放/借还类资源修正必须先在循环边界上推演终止性**；测试进程须有 -timeout；"环境问题"判断前先列 top 内存进程证伪。修正版已含两个防重发：循环期持租（终止性由"每账号一次"保证）+ 陈旧 TTL 定时器只能删自己的 token（release-then-retake 不会被旧计时器误放）。
+
+### 9.25-d 交付物与验证边界
+
+两个 zip 在 `dist/`：标准包 `all2api-56763ef-windows-amd64.zip` 与**本机定制包** `all2api-56763ef-windows-amd64-personal.zip`（install.ps1 新增 `auths-seed/` 预置：仅在 auths\ 为空时复制，绝不覆盖更新 token；定制包 seed 为 panel 项目 10-14 晚刷出的最新 4 凭证）。沙箱全链实测（装→种子→启动→真实调用）：**连发三发全 200**（核心回归）＋**18 秒/3465 chunks/800KB 长流式带 [DONE] 完整送达**（WriteTimeout 修复的判定证据）＋卸载保数据/purge 删净（早前已验）。
+
 
 
