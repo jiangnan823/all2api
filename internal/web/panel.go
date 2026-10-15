@@ -99,6 +99,13 @@ func NewPanelHandler() http.Handler {
 			// fs.Stat rejects ".." traversal; anything invalid falls through to the
 			// index fallback, matching SPA-router behavior.
 			if st, statErr := fs.Stat(sub, name); statErr == nil && !st.IsDir() {
+				// Vite emits content-hashed asset names, so a long immutable cache
+				// is safe — but only when the HTML that references them is fresh.
+				// The HTML is no-store (below), and the assets get must-revalidate
+				// so a stale-cached bundle can never pair with a fresh HTML after
+				// an in-place upgrade (live incident 2026-10-15: the browser held
+				// an old stylesheet and the new page rendered unstyled).
+				w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 				files.ServeHTTP(w, r)
 				return
 			}
