@@ -91,6 +91,19 @@ func (s *CredentialStore) Count() int {
 	return len(s.entries)
 }
 
+// accountIdentities snapshots the stored (platform, uid) pairs as secret-free
+// pool.Account values — the credit-seed walk (and any future per-account
+// batch) iterates the store without ever touching credential material.
+func (s *CredentialStore) accountIdentities() []pool.Account {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]pool.Account, 0, len(s.entries))
+	for _, c := range s.entries {
+		out = append(out, pool.Account{ID: c.UID, Platform: WorkbuddyPlatform})
+	}
+	return out
+}
+
 // put replaces the credential for one account (load-time and rotation-time).
 func (s *CredentialStore) put(key string, cred fileCred) {
 	s.mu.Lock()

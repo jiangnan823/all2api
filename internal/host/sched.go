@@ -1,9 +1,9 @@
 // sched.go bridges the scheduled-task handlers (internal/schedule deps.go
 // seam) onto the host's shared account pool, plus the honest no-protocol
-// upstream stub. This is the M2 batch-② assembly surface: cmd/gateway/main.go
-// builds schedule.Deps exclusively through the three constructors here, so
-// swapping in the real platform HTTP client later is a one-line change at the
-// NewScheduleUpstream call site.
+// upstream stub. cmd/gateway/main.go builds schedule.Deps exclusively through
+// the constructors here; since M3b the real upstream is the workbuddy task
+// client assembled in sched_upstream_wire.go (build-tag selected, same split
+// as credentials_wire.go), so the main.go call site stays one line.
 package host
 
 import (
@@ -30,14 +30,16 @@ type poolSource struct {
 }
 
 // taskPlatforms maps a schedule.Task* name onto the platforms that offer it.
-// An unknown taskType conservatively matches no platform (empty batch, not a
-// cross-platform misfire).
+// Today every task is workbuddy-only: the one wired schedule upstream is the
+// workbuddy task client (sched_upstream_wire.go), and offering an account to
+// an upstream that cannot serve it would turn a quiet skip into a per-tick
+// failure+cooldown. qoder/trae join the table when a platform client lands
+// for them. An unknown taskType conservatively matches no platform (empty
+// batch, not a cross-platform misfire).
 func taskPlatforms(taskType string) map[string]bool {
 	switch taskType {
-	case schedule.TaskCatTravel:
-		return map[string]bool{"workbuddy": true}
-	case schedule.TaskSignin, schedule.TaskActiveCheck, schedule.TaskTokenKeepalive:
-		return map[string]bool{"workbuddy": true, "qoder": true, "trae": true}
+	case schedule.TaskSignin, schedule.TaskActiveCheck, schedule.TaskCatTravel, schedule.TaskTokenKeepalive:
+		return map[string]bool{WorkbuddyPlatform: true}
 	default:
 		return nil
 	}
@@ -113,19 +115,24 @@ func (s *poolStore) SetExpiry(_ context.Context, platform, accountID string, at 
 }
 
 // NewScheduleUpstream returns the per-account platform-operation client used
-// by the scheduler. The platform HTTP protocols do not exist in this repo yet
-// (protocol-research batch in flight), so today this is the honest stub:
-// every operation fails with an error wrapping schedule.ErrUnsupportedTask,
-// which the handler batch loop classifies as Skipped — counted quietly per
-// account, no write-back, batch status stays success. No scheduled traffic is
-// faked and no account state is invented.
-//
-// REPLACEMENT POINT: once internal/platforms gains a real per-account client,
-// change the body to construct it (one line) — every signature is already the
-// schedule.Upstream interface, e.g.
-//
-//	return realclient.New(cfg)
-func NewScheduleUpstream() schedule.Upstream {
+// by the scheduler. Under the workbuddy-capable builds this is the real task
+// client (newScheduleUpstream in sched_upstream_wire.go): it resolves each
+// account's credential from the store and drives the four documented endpoint
+// families (check-in / active report / cat travel / token refresh), folding
+// adapter failure reasons onto the handler sentinels. qoder/trae-only builds
+// get the honest stub. A nil store keeps the constructor usable — the ops
+// then fail with explicit "no credential store wired" errors instead of
+// panicking.
+func NewScheduleUpstream(creds *CredentialStore) schedule.Upstream {
+	return newScheduleUpstream(creds)
+}
+
+// NewScheduleStubUpstream returns the honest no-protocol upstream: every
+// operation fails with an error wrapping schedule.ErrUnsupportedTask, which
+// the handler batch loop classifies as Skipped — counted quietly per account,
+// no write-back, batch status stays success. This is the qoder/trae-only
+// build's production upstream and the tests' skip-semantics fixture.
+func NewScheduleStubUpstream() schedule.Upstream {
 	return stubUpstream{}
 }
 

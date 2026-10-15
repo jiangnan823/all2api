@@ -290,6 +290,16 @@ func (s *WeightedRandomSelector) ApplyAccountCredit(platform, accountID string, 
 	})
 }
 
+// SetAccountCredit overwrites a pooled account's credit with an absolute
+// value. The credit-plane seeding path (startup balance query) uses this
+// form; task rewards keep the additive ApplyAccountCredit and the request
+// path deducts via Round. Returns false when the account is unknown.
+func (s *WeightedRandomSelector) SetAccountCredit(platform, accountID string, credit int64) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.Credit = credit
+	})
+}
+
 // SetAccountStatus writes a lifecycle status ("active"/"cooling"/"disabled").
 // Returns false when the account is unknown.
 func (s *WeightedRandomSelector) SetAccountStatus(platform, accountID, status string) bool {
