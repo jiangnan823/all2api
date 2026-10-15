@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ACCOUNTS } from '../i18n/zh';
+import { ACCOUNTS, GROWTH } from '../i18n/zh';
+import { GrowthTasksModal } from '../components/GrowthTasksModal';
 import {
   ACCOUNTS_POLL_MS,
   addQoderAccount,
@@ -17,7 +18,7 @@ import {
 /**
  * 账号池屏（M6b，向 wb2api 看齐的富列表格）：状态卡行（总数/可用/冷却中/禁用/积分合计，等宽数字）
  * + 账号表格（平台/账号=昵称+短码可复制/状态徽标/积分=剩余/总额+进度条/成功 失败/在途/健康度/
- * 到期/冷却至/最近成功=相对时间/行内操作=暂停选号|恢复选号+删除）+ 手动刷新 + 30s 轮询。
+ * 到期/冷却至/最近成功=相对时间/行内操作=任务(M7b 成长任务弹层)|暂停选号|恢复选号+删除）+ 手动刷新 + 30s 轮询。
  * 行内操作走 POST /api/accounts/{platform}:{id}/{pause|resume|remove}，删除前 confirm（文案含
  * 「凭证文件将被删除」）；{error} 信封逐字上抛展示。全部内存态，不落 storage。
  */
@@ -156,8 +157,9 @@ function AccountRow(props: {
   showPlatform: boolean;
   busy: boolean;
   onAction: (action: AccountAction, entry: AccountEntry) => void;
+  onTasks: (entry: AccountEntry) => void;
 }) {
-  const { entry: a, showPlatform, busy, onAction } = props;
+  const { entry: a, showPlatform, busy, onAction, onTasks } = props;
   return (
     <tr>
       {showPlatform ? <td>{a.platform}</td> : null}
@@ -182,16 +184,24 @@ function AccountRow(props: {
       <td className="pool-table__num">{fmtUnix(a.expiresAt, ACCOUNTS.DASH)}</td>
       <td className="pool-table__num">{cooldownLabel(a.cooldownEnd)}</td>
       <td className="pool-table__num">{relativeTime(a.lastSuccess) ?? ACCOUNTS.DASH}</td>
-      <AccountActions entry={a} busy={busy} onAction={onAction} />
+      <AccountActions entry={a} busy={busy} onAction={onAction} onTasks={onTasks} />
     </tr>
   );
 }
 
-/** 行内操作（M6b）：暂停选号/恢复选号按 paused 切换 + 删除（删除确认在容器层统一拦）。 */
-function AccountActions(props: { entry: AccountEntry; busy: boolean; onAction: (action: AccountAction, entry: AccountEntry) => void }) {
-  const { entry: a, busy, onAction } = props;
+/** 行内操作（M6b + M7b）：任务(成长任务弹层) + 暂停/恢复选号 + 删除（删除确认在容器层统一拦）。 */
+function AccountActions(props: {
+  entry: AccountEntry;
+  busy: boolean;
+  onAction: (action: AccountAction, entry: AccountEntry) => void;
+  onTasks: (entry: AccountEntry) => void;
+}) {
+  const { entry: a, busy, onAction, onTasks } = props;
   return (
     <td className="pool-acts">
+      <button type="button" className="pool-act" onClick={() => onTasks(a)}>
+        {GROWTH.BTN_OPEN}
+      </button>
       {a.paused ? (
         <button
           type="button"
@@ -233,6 +243,10 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
   // M6b 行内操作：同账号按钮在请求期间禁用；{error} 信封原文展示（不翻译不包装）
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // M7b 成长任务弹层：行内「任务」按钮的目标账号（弹层自身拉数据，池子轮询不干扰）
+  const [growthTarget, setGrowthTarget] = useState<{ platform: string; id: string; nickname: string | null } | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -417,11 +431,21 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
                 showPlatform={!filter}
                 busy={busyKey === `${a.platform}:${a.id}`}
                 onAction={(action, entry) => void runAction(action, entry)}
+                onTasks={(entry) => setGrowthTarget({ platform: entry.platform, id: entry.id, nickname: entry.nickname })}
               />
             ))}
           </tbody>
         </table>
       </div>
+
+      {growthTarget !== null && (
+        <GrowthTasksModal
+          platform={growthTarget.platform}
+          id={growthTarget.id}
+          nickname={growthTarget.nickname}
+          onClose={() => setGrowthTarget(null)}
+        />
+      )}
     </div>
   );
 }

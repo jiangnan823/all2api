@@ -159,10 +159,13 @@ describe('§1.2 遮罩 token 定稿（UI UE seq=478 第四点）', () => {
     expect(dark).toMatch(/--scrim:\s*rgba\(0,\s*0,\s*0,\s*0?\.65\)/);
   });
 
-  it('遮罩不复用为禁用态/只读态覆盖层：scrim 只挂在危险确认弹窗上', () => {
-    const panel = rawAll.find((f) => f.rel === 'styles/panel.css')?.text ?? '';
-    const users = [...panel.matchAll(/([^{}]+)\{[^}]*var\(--scrim\)/gs)].map((m) => m[1].trim());
-    expect(users).toEqual(['.danger-action__scrim']);
+  it('遮罩不复用为禁用态/只读态覆盖层：scrim 只挂在模态弹窗上（危险确认 / M7b 成长任务）', () => {
+    // 先剥注释再取选择器：注释里提到 scrim 不算使用；段注释紧贴规则时不得污染选择器捕获
+    const panel = stripComments(rawAll.find((f) => f.rel === 'styles/panel.css')?.text ?? '');
+    const users = [...panel.matchAll(/([^{}\s][^{}]*)\{[^}]*var\(--scrim\)/gs)].map((m) => m[1].trim());
+    // M7b 成长任务弹层与危险确认同属模态对话框（遮罩+居中卡+焦点陷阱），准入白名单；
+    // 禁用态/只读态等非模态覆盖层仍然一律不得使用 scrim。
+    expect(users.sort()).toEqual(['.danger-action__scrim', '.growth-scrim']);
   });
 });
 
