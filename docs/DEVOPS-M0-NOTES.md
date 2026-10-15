@@ -807,5 +807,26 @@ run `38565902432` 首跑失败在 `lint / vet` 的 **golangci 安装步骤**：`
 
 产品闭环达成：网关现在是**真正能用的 OpenAI 兼容代理**（4 账号池 + 自动刷新 + 面板操作）。CI run `38603899453` 十 job 全绿。遗留：M3b 调度 Upstream 接真（签到/活跃/猫旅/保活走真实端点，store 已备好凭证源）；credit 播种策略（结算接口或保活带回）；安装包进 CI release 流水线（现为本机构建）。
 
+## 9.24 M3b 调度接真 + credit 播种 + Windows 安装包进 release（2026-10-15 上午，真实上游全部验证）
+
+### 9.24-a M3b（`038b00e`，独立七面复验全绿后合入，另有真实 E2E 修复 `4a9be2b`）
+
+四任务调度 Upstream 从诚实桩换为真实端点实现（全部照协议报告 §7 实证形状，单 agent 垂直交付 + 七面 + 四 tag 变体自验）：signin → `POST {billing}/v2/billing/meter/daily-checkin`（10001/14001"已签到"按措辞幂等成功）；active_check → `POST {billing}/v2/report`；cat_travel → chat 域 `travel/status|depart|claim` 一步状态机；token_keepalive → 复用 M3a refresh 链（单飞 + 回写）。**credit 播种**：启动时 4 路并行 `get-user-resource`，按 `CapacityUnit=="credits"` 过滤 `CycleCapacityRemain` 绝对写回，缺 data 显式报错不造 0。账号批次收窄 workbuddy-only。
+
+### 9.24-b 真实 E2E 四个发现（每个都当场处置）
+
+1. **credit 播种真实生效**：启动横幅 `4 account(s) seeded, 0 failed`——3 号 0 credits（wb2api 耗尽）+ **1 号 150 credits 真实余额**，billing 域鉴权与响应解析对真实端点成立。
+2. **active_check 首跑 4/4 失败（10:00 cron 真实触发）**：真实 `/v2/report` 拒绝最小 `{eventCode,userId}` 事件。修复 `4a9be2b`：照 wb_research 参考实现（其注释明写"勿用最小字段集，防上游加严"）发**完整 36 字段 chat_request_send 形状**（零值字段全带、synthetic conversationId、userId=uid）。临时把 `task_cron` 拨到 +2 分钟实测：**4/4 success**。教训入规：**协议报告标注" N 字段"的形状按全字段实现，最小子集只当测试断言的从严项**。
+3. **0-credit 账号静默返空**：耗尽账号对 chat 请求回 HTTP 200 + `content:""` + `completion_tokens:0`（非错误），重试链不推进——**这正是 `credit_floor` 的设计用途**，设 ≥1 即隔离（本机 E2E 配置从 0 改 1 后空响应消失）。**运维建议：有余额播种的前提下 credit_floor 保持默认 100**。
+4. **瞬时上游故障自愈观察**：一批请求遇 `platform_down`（透传分类）→ 账号冷却 → `no_available_account` → 60s 后同请求 200 真实内容。熔断/冷却/恢复链在真实环境按设计运转。
+
+### 9.24-c release 流水线（`40fdee3`）
+
+两个修复：(1) `release.yml` 的 `GO_VERSION` 1.24 → **1.26.9**——B0 钉版漏了这条工作流，go.mod 要求 ≥1.26.0 一直在靠 runner auto-toolchain 兜底，违背"构建与认证同版本"裁定；(2) Windows zip 腿从裸 exe 升级为**安装体验**：staging 注入 `scripts/win/` 安装/卸载件 + 首次运行 config 模板（本地打包脚本同轮重构为从 `scripts/win/` 复制——本地与 CI 单一事实源，零漂移）。脚本沙箱实测保留（装→healthz 200→卸载保数据→purge 删净；后续一次"purge 失败"是 pwsh `-File` 拒绝混合分隔符路径 + 测试脚本自身清理顺序污染，非产品缺陷，真实用户走 `.bat` 的 `%~dp0` 纯路径）。
+
+### 9.24-d 状态
+
+CI run `38669901501` 全绿，main = `4a9be2b`。**产品全链闭环**：/v1 真实代理（非流式+流式）、面板操作、配置保存、账号池 + 真实余额播种、token 自动刷新回写、调度任务真实化（active_check 已实测 4/4）。**cron 观察点（主人可对照官方 App 验证）**：21:00 签到+猫旅（首跑 depart、21:00 claim 或 traveling 属正常）、22:00 保活（auth 文件 mtime 前移 60d）。遗留登记：report 不记账口径下 growth 连登是否点亮需官方 App 对照（若不点亮，缺口 = chat body 的 `extra_vars.growthEvent` 注入）；签到回复真实奖字段名待今晚 21:00 实测；global 域 billing 无 /v2 首选路径未实现；安装包尚无 tag 触发的自动发版（现在 tag 后 release 产物即含安装件，差一步 `package-windows` 的 zip 整合进 Release assets 可后补）。
+
 
 
