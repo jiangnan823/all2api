@@ -15,6 +15,11 @@ all2api — Windows 安装说明
   把 workbuddy-*.json 放到安装目录的 auths\ 子目录（没有就新建），
   重启 all2api 后自动加载；token 过期会自动刷新并回写该文件。
 
+账号凭证（本机专用包）
+  如果安装包里带有 auths-seed\ 目录（为特定机器定制的包），
+  install 会自动把它里面的凭证复制到安装目录 auths\（仅在 auths\ 为空时，绝不覆盖更新的 token）。
+  否则请手动把 workbuddy-*.json 放进安装目录的 auths\ 后启动。
+
 卸载
   双击 uninstall.bat。
   默认保留你的数据（config.json、auths\ 凭证、data\ 状态）；

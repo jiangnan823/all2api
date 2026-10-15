@@ -25,6 +25,23 @@ if (-not (Test-Path (Join-Path $InstallDir "config.json"))) {
   Copy-Item (Join-Path $src "config.example.json") (Join-Path $InstallDir "config.json")
   Write-Host "== first install: config.json created from example (edit listen/api_key there)"
 }
+# Pre-seeded credentials (optional): a package built for one machine may carry
+# an `auths-seed\` folder next to the installer. Its files are copied into
+# auths\ only when that folder holds nothing yet, so re-installs and later
+# refreshes never overwrite newer tokens.
+$seed = Join-Path $src "auths-seed"
+if (Test-Path $seed) {
+  $authsDir = Join-Path $InstallDir "auths"
+  $existing = @(Get-ChildItem $authsDir -File -ErrorAction SilentlyContinue)
+  if ($existing.Count -eq 0) {
+    New-Item -ItemType Directory -Force -Path $authsDir | Out-Null
+    Copy-Item (Join-Path $seed "*") $authsDir -Force
+    $n = @(Get-ChildItem $authsDir -File).Count
+    Write-Host "== seeded $n credential file(s) into $authsDir"
+  } else {
+    Write-Host "== auths\ already holds $($existing.Count) file(s) — credential seed skipped (never overwrites newer tokens)"
+  }
+}
 if (-not $NoShortcuts) {
   $ws = New-Object -ComObject WScript.Shell
   $smDir = Join-Path ([Environment]::GetFolderPath("Programs")) "all2api"
