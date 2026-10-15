@@ -56,7 +56,7 @@ func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats
 	registerAccountWrite(mux, h)
 	registerGrowth(mux, h)
 	registerPackages(mux, h) // M9a: credits-expiry packages endpoints
-	registerLogin(mux, h) // M8: browser device-authorization login endpoints
+	registerLogin(mux, h)    // M8: browser device-authorization login endpoints
 }
 
 // TaskSource is the read-only scheduler view panel_data needs (schedule
