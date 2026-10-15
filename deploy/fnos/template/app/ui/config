@@ -5,7 +5,7 @@
       "icon": "images/icon_64.png",
       "type": "name",
       "protocol": "http",
-      "remote_port": "7863",
+      "remote_port": "7800",
       "portal": ""
     }
   }

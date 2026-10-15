@@ -93,13 +93,13 @@ docker-smoke: docker ## run the container and assert /healthz (M0 acceptance)
 	@mkdir -p auths data
 	@test -f config.json || cp config.example.json config.json
 	docker rm -f $(BINARY)-smoke 2>/dev/null || true
-	docker run -d --name $(BINARY)-smoke -p 7863:7863 \
+	docker run -d --name $(BINARY)-smoke -p 7800:7800 \
 	  -v $$PWD/config.json:/app/config.json:ro \
 	  -v $$PWD/auths:/app/auths -v $$PWD/data:/app/data \
 	  -e TZ=Asia/Shanghai $(BINARY):dev
 	@i=0; while [ $$i -lt 30 ]; do \
 	  s=$$(docker inspect --format '{{.State.Health.Status}}' $(BINARY)-smoke 2>/dev/null || echo unknown); \
-	  h=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7863/healthz || echo 000); \
+	  h=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7800/healthz || echo 000); \
 	  echo "attempt $$i: health=$$s http=$$h"; \
 	  if [ "$$s" = "healthy" ] && [ "$$h" = "200" ]; then docker rm -f $(BINARY)-smoke >/dev/null; echo "SMOKE OK"; exit 0; fi; \
 	  i=$$(($$i+1)); sleep 2; \

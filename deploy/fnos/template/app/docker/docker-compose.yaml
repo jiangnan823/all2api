@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
     ports:
-      - "${ALL2API_PORT:-7863}:7863"
+      - "${ALL2API_PORT:-7800}:7800"
 
     environment:
       TZ: Asia/Shanghai

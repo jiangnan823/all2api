@@ -49,7 +49,7 @@ env:
   PANEL_DIR: web-panel
   EMBED_DIR: internal/web/dist
   HEALTH_PATH: /healthz
-  LISTEN_PORT: "7863"
+  LISTEN_PORT: "7800"
 
 jobs:
   # All jobs pin `ubuntu-24.04` instead of `ubuntu-latest`: latest migrates to Ubuntu 26
@@ -443,7 +443,7 @@ jobs:
           mkdir -p auths data
           cat > config.json <<'EOF'
           {
-            "listen": ":7863",
+            "listen": ":7800",
             "api_key": "",
             "auth_dir": "./auths",
             "state_file": "./data/state.json"
@@ -454,7 +454,7 @@ jobs:
         run: |
           set -e
           docker run -d --name smoke \
-            -p 7863:7863 \
+            -p 7800:7800 \
             -v "$PWD/config.json:/app/config.json:ro" \
             -v "$PWD/auths:/app/auths" \
             -v "$PWD/data:/app/data" \

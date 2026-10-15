@@ -13,7 +13,7 @@
 set -euo pipefail
 
 APP_NAME="all2api"
-PORT="${SERVICE_PORT:-7863}"
+PORT="${SERVICE_PORT:-7800}"
 
 PKGVAR="${TRIM_PKGVAR:-/var/packages/${APP_NAME}/data}"
 PKGSRV="${TRIM_PKGSRVDIR:-$(cd "$(dirname "$0")/.." && pwd)}"

@@ -49,11 +49,11 @@ FPK_VERSION=0.1.0 FPK_IMAGE_TAG=v0.1.0 bash deploy/fnos/package-fpk.sh --emit-di
 
 1. **面板与 API 同源同端口**（面板是 `go:embed` 进二进制的，不是独立站点）。
    所以默认 Base URL = `location.origin + "/v1"`，这条在所有形态下都成立。
-2. **端口号不可假设 7863**：
+2. **端口号不可假设 7800**：
    - Docker/Compose：用户可改 `ports`
    - exe：用户改 `config.json` 的 `listen`
-   - fpk：manifest 声明 `service_port=7863`，但**应用中心可能重映射**
-   → 因此 UI 里任何"7863"都只能是示例值，不能是拼接逻辑的一部分。
+   - fpk：manifest 声明 `service_port=7800`，但**应用中心可能重映射**
+   → 因此 UI 里任何"7800"都只能是示例值，不能是拼接逻辑的一部分。
 3. **反代子路径**：fnOS 应用中心入口是以子路径方式打开面板的（`portal` 控制）。
    两种解法，我推荐 (b)：
    - (a) 前端用 `import.meta.env.BASE_URL` 推 base path —— 需要构建期知道前缀，fpk 做不到

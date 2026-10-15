@@ -851,5 +851,16 @@ lease 修复的第一版是「每次发送后立刻释放」，嵌入重试循�
 
 首推后 `security / scans` 红在 gitleaks：命中 `internal/platform/qoder/protocol.go:111` 的 `defaultSecret`（COSY 协议签名常量，base64 解为公开短语，官方客户端逐字携带、vhub 同款明文，非部署凭证）。**真误报**，但命中在历史 commit 里，全历史扫描会持续报。处置两级：仓库级 `.gitleaks.toml` 精确豁免该常量值（对全历史生效）+ 源码行内 `gitleaks:allow` 标记（对未来行扫描生效）；默认规则集其余全开，与仓内 `#nosec G101` 窄豁免风格一致。重推后 security 绿，全 run 绿。
 
+## 9.26 默认端口 :7863 → :7800（主人裁定，全仓落地）
+
+主人要求默认端口改 7800（避开与在跑第三方代理的 7863 冲突），此前只落实了"可改端口入口"而未改默认值，本批全仓替换。触点（功能性引用全部清零，`grep 7863` 余量仅历史档案与 .qoder 会话归档）：
+
+- **Go**：`config.defaults()` Listen `:7800`；`main.go` 裸默认回退 `:7800`；**healthcheck 子命令改为跟随配置 listen 端口**（读 resolveConfigPath→config.Load→SplitHostPort，探针固定打 127.0.0.1，加 5s 超时）——修掉"改了端口 Docker HEALTHCHECK 即失效"的真 bug；`config_save_test` 的默认值断言改为对照 `config.Defaults()` 而非字面量。
+- **配置/部署**：`config.example.json`、`docker-compose.yml`（ports 7800:7800）、`Dockerfile`（EXPOSE 7800 + 注释）、`Makefile` docker-smoke；fnos 模板四处（manifest `service_port`、ui/config `remote_port`、app compose、cmd/main `SERVICE_PORT` 回退）与 fnos README 示例。
+- **CI**：`ci.yml` `LISTEN_PORT` env + smoke 最小配置 + `-p`；`release.yml` Release 说明里的示例命令。
+- **安装器/脚本**：`all2api.iss`（FinishedLabel/防火墙规则/任务描述）、`install.ps1`（防火墙+提示文本）、zip 包 README。
+- **面板测试**：settings 用例值同步 7800。
+- 门禁：七包 test 全绿 + golangci 0 + gosec 0 + actionlint OK。产物重建（zip 双版本 + Inno setup 双版本），沙箱重验（7800 起服 + healthcheck 子命令 + 装/卸）。
+
 
 

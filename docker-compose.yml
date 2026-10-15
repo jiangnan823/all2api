@@ -7,7 +7,7 @@
 #   # nonroot (uid 65532) must own the bind mounts, or state writes fail:
 #   sudo chown -R 65532:65532 auths data
 #   docker compose up -d
-#   curl -fsS localhost:7863/healthz
+#   curl -fsS localhost:7800/healthz
 #
 # Image: ghcr.io/jiangnan823/all2api (linux/amd64 + linux/arm64)
 # Local build instead of registry:
@@ -21,7 +21,7 @@ services:
     pull_policy: missing
 
     ports:
-      - "7863:7863"
+      - "7800:7800"
 
     environment:
       TZ: Asia/Shanghai

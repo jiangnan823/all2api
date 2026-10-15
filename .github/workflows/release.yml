@@ -467,7 +467,7 @@ jobs:
 
             ### Images
             ```
-            docker run -d --name all2api -p 7863:7863 \
+            docker run -d --name all2api -p 7800:7800 \
               -e TZ=Asia/Shanghai \
               -v ./auths:/app/auths -v ./data:/app/data \
               -v ./config.json:/app/config.json:ro \

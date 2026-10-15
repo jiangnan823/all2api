@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -64,7 +65,7 @@ func main() {
 	start := time.Now()
 	addr := cfg.Listen
 	if addr == "" {
-		addr = ":7863"
+		addr = ":7800"
 	}
 
 	mux := http.NewServeMux()
@@ -263,9 +264,26 @@ func resolveConfigPath() string {
 }
 
 // runHealthcheck performs an HTTP GET on /healthz and exits based on status.
-// Used by Docker HEALTHCHECK, fpk cmd/main status, and CI smoke tests.
+// Used by Docker HEALTHCHECK, fpk cmd/main status, and CI smoke tests. The
+// port follows the resolved config's listen value (default :7800), so a
+// gateway on a custom port stays healthcheck-able; the probe always dials
+// loopback regardless of the listen host. A missing config file keeps the
+// default probe.
 func runHealthcheck() {
-	resp, err := http.Get("http://localhost:7863/healthz")
+	target := "http://127.0.0.1:7800/healthz"
+	if err := config.Load(resolveConfigPath()); err == nil {
+		if _, port, err := net.SplitHostPort(config.Shared.Get().Listen); err == nil {
+			target = "http://127.0.0.1:" + port + "/healthz"
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		fmt.Printf("healthcheck failed: %v\n", err)
+		os.Exit(1)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Printf("healthcheck failed: %v\n", err)
 		os.Exit(1)

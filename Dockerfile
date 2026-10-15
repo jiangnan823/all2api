@@ -14,7 +14,7 @@
 #   binary            all2api
 #   panel source      web-panel/            (vite build -> web-panel/dist; this file moves it)
 #   panel embed dir   internal/web/dist     (backend: //go:embed all:dist)
-#   listen            :7863
+#   listen            :7800
 #   health endpoint   /healthz
 #
 # Requires backend to implement two things or this image will fail the health gate:
@@ -105,7 +105,7 @@ COPY config.example.json /app/config.example.json
 # Runtime layout matches config: auth_dir=/app/auths, state_file=/app/data/state.json
 WORKDIR /app
 VOLUME ["/app/auths", "/app/data"]
-EXPOSE 7863
+EXPOSE 7800
 
 ENV TZ=Asia/Shanghai \
     ALL2API_CONFIG=/app/config.json \

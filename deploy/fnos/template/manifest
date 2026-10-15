@@ -4,7 +4,7 @@ version="0.1.0"
 display_name="all2api"
 desc="多平台免费额度 AI 网关：WorkBuddy / Qoder / Trae 统一 OpenAI 兼容入口，带账号池、熔断、签到任务与 Web 管理面板"
 platform="x86"
-service_port="7863"
+service_port="7800"
 url="https://github.com/jiangnan823/all2api"
 install_uid="root"
 install_gid="root"
@@ -18,7 +18,7 @@ start_on_boot="yes"
 # 1. platform: 飞牛应用中心以 x86_64 为主。arm64 机型需另出 platform="arm" 包，
 #    CI 的 linux/arm64 镜像可直接复用，不要在同一包里混塞两种架构。
 # 2. service_port: 声明后 fnOS 是否做端口重映射，社区实测不一致。
-#    => 面板与 /connect 的 Base URL 必须运行时计算，禁止写死 7863（见 README）。
+#    => 面板与 /connect 的 Base URL 必须运行时计算，禁止写死 7800（见 README）。
 # 3. run_uid=root 是 docker compose 的硬性要求，也是本 fpk 唯一的权限放大点；
 #    已在 config/privilege 中显式声明，不要在别处再扩权。
 # 4. version 必须 X.Y.Z 三段，两段会被应用中心拒收。

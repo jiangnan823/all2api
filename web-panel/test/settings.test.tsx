@@ -273,7 +273,7 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
   it('通用组进 dirty 跟踪：改字段点亮 dirty 汇总（含组内装饰点），与按源改动合并计数', async () => {
     await renderReady();
     const listen = document.querySelector('input[name="listen"]') as HTMLInputElement;
-    fireEvent.change(listen, { target: { value: '0.0.0.0:7863' } });
+    fireEvent.change(listen, { target: { value: '0.0.0.0:7800' } });
     expect(screen.getByText(settingsLine(SETTINGS.DIRTY_SUMMARY, { count: 1 }))).toBeTruthy();
     expect(document.querySelector('fieldset[data-group="gateway"] .settings-screen__dirty-dot')).not.toBeNull();
     // 再改一个按源字段 → 合并计数 2

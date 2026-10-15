@@ -477,8 +477,10 @@ func TestWriteConfigFileAtomicCreatesDirectory(t *testing.T) {
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatalf("written file must be valid JSON: %v (%s)", err, raw)
 	}
-	if back.Listen != ":7863" {
-		t.Fatalf("defaults must round-trip through the file, got listen=%q", back.Listen)
+	// Compare against the live default rather than a literal so a default-port
+	// change does not silently invalidate this round-trip assertion.
+	if want := config.Defaults().Listen; back.Listen != want {
+		t.Fatalf("defaults must round-trip through the file, got listen=%q want %q", back.Listen, want)
 	}
 	// No temp litter.
 	entries, _ := os.ReadDir(filepath.Dir(path))

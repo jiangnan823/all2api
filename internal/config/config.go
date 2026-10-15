@@ -140,7 +140,7 @@ func Defaults() Config {
 
 func defaults() Config {
 	return Config{
-		Listen:        ":7863",
+		Listen:        ":7800",
 		AuthDir:       "./auths",
 		StateFile:     "./data/state.json",
 		NoticeVersion: "1",

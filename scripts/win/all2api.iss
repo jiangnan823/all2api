@@ -64,7 +64,7 @@ SelectTasksLabel2=请选择安装时要执行的其他任务，然后点击“�
 ReadyLabel1=安装程序已准备好开始安装 [name]。
 ReadyLabel2a=点击“安装”开始安装；要检查或更改设置，点击“上一步”。
 FinishedHeadingLabel=[name] 安装完成
-FinishedLabel=安装完成。可通过“开始”菜单或桌面快捷方式启动 all2api。%n%n首次使用：浏览器打开 http://localhost:7863
+FinishedLabel=安装完成。可通过“开始”菜单或桌面快捷方式启动 all2api。%n%n首次使用：浏览器打开 http://localhost:7800
 ConfirmUninstall=确定要卸载 %1 吗？%n%n您的账号凭证（auths\）、配置（config.json）和数据（data\）将保留，不会删除。
 PrivilegesRequiredOverrideTitle=选择安装模式
 PrivilegesRequiredOverrideInstruction=请选择 all2api 的安装模式。
@@ -86,7 +86,7 @@ ButtonNo=否(&N)
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: checkedonce
 Name: "autostart"; Description: "登录时自动启动 all2api"; Flags: unchecked
-Name: "firewall"; Description: "在 Windows 防火墙放行 TCP 7863 入站（需管理员）"; Flags: unchecked
+Name: "firewall"; Description: "在 Windows 防火墙放行 TCP 7800 入站（需管理员）"; Flags: unchecked
 
 [Files]
 Source: "{#StageDir}\all2api.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -105,7 +105,7 @@ Name: "{userstartup}\all2api"; Filename: "{app}\all2api.exe"; WorkingDir: "{app}
 [Run]
 Filename: "{app}\all2api.exe"; Description: "立即启动 all2api"; Flags: nowait postinstall skipifsilent
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""all2api"""; Flags: runhidden; Tasks: firewall
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""all2api"" dir=in action=allow protocol=TCP localport=7863"; Flags: runhidden; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""all2api"" dir=in action=allow protocol=TCP localport=7800"; Flags: runhidden; Tasks: firewall
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""all2api"""; Flags: runhidden; RunOnceId: "DelFirewallRule"

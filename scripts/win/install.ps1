@@ -65,11 +65,11 @@ if ($Autostart) {
 }
 if ($Firewall) {
   netsh advfirewall firewall delete rule name="all2api" | Out-Null
-  netsh advfirewall firewall add rule name="all2api" dir=in action=allow protocol=TCP localport=7863 | Out-Null
-  Write-Host "== firewall rule added (TCP 7863 inbound)"
+  netsh advfirewall firewall add rule name="all2api" dir=in action=allow protocol=TCP localport=7800 | Out-Null
+  Write-Host "== firewall rule added (TCP 7800 inbound)"
 }
 Write-Host ""
 Write-Host "all2api installed."
-Write-Host "  config:  $InstallDir\config.json  (port = listen, default :7863)"
-Write-Host "  panel:   http://localhost:7863 after starting the gateway"
+Write-Host "  config:  $InstallDir\config.json  (port = listen, default :7800)"
+Write-Host "  panel:   http://localhost:7800 after starting the gateway"
 Write-Host "  start:   run all2api.exe (or the Start Menu shortcut)"

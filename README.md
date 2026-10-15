@@ -31,7 +31,7 @@ Download from [GitHub Releases](https://github.com/jiangnan823/all2api/releases)
 1. Place `config.json` in the same directory as the binary (or mount via Docker):
 ```json
 {
-  "listen": ":7863",
+  "listen": ":7800",
   "api_key": "your-secret-api-key",
   "auth_dir": "./auths",
   "pool": { "credit_floor": 100, "max_retries": 3, "cooldown_sec": 60 },
@@ -45,12 +45,12 @@ Download from [GitHub Releases](https://github.com/jiangnan823/all2api/releases)
 }
 ```
 
-2. Add accounts via the Web admin panel at `http://localhost:7863`.
+2. Add accounts via the Web admin panel at `http://localhost:7800`.
 
 ### Use as OpenAI Client
 
 Set your client configuration:
-- **Base URL**: `http://localhost:7863/v1`
+- **Base URL**: `http://localhost:7800/v1`
 - **API Key**: Whatever you set as `api_key` in config.json
 - **Model**: e.g. `workbuddy/deepseek-v4-flash`, or just `deepseek-v4-flash` (auto-routed)
 
@@ -59,7 +59,7 @@ Works with Cherry Studio, Claude Code, Codex CLI, OpenCode, etc.
 ## Architecture
 
 ```
-Client ──→ all2api (:7863) ──→ Pool Selector ──→ Platform Adapter (W&B/Qoder/Trae)
+Client ──→ all2api (:7800) ──→ Pool Selector ──→ Platform Adapter (W&B/Qoder/Trae)
                     │                                    │
                    Web Panel                            Health / Tasks / Auth
 ```
