@@ -10,3 +10,5 @@ export { consentRequestBody, consentRejectionOf } from '../lib/consent';
 export { throttlePatchToConfigPatch, throttlePath, validateThrottleBudget, budgetDiff, fingerprintRewriteEnabled } from '../lib/throttle';
 export { ModelLocksCard } from "./ModelLocksCard";
 export { PackagesCard } from "./PackagesCard";
+export { GrowthTasksModal } from "./GrowthTasksModal";
+export type { GrowthTasksModalProps } from "./GrowthTasksModal";
