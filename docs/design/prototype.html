@@ -82,6 +82,7 @@ select,option{background:var(--surface);color:var(--ink);border:1px solid var(--
 .formrow label{width:150px;color:var(--ink2);font-size:13px;flex-shrink:0}
 .formrow input[type=text],.formrow input[type=password],.formrow textarea{flex:1;max-width:420px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--ink);font-size:13px;font-family:var(--mono)}
 .formrow textarea{min-height:110px;max-width:520px}
+.bar{height:4px;border-radius:2px;background:var(--surface2);margin-top:4px;width:90px}.bar>i{display:block;height:100%;border-radius:2px;background:var(--accent)}
 .tag{font-size:11px;padding:1px 8px;border-radius:8px;background:var(--surface2);color:var(--ink3);margin-left:6px}
 .wizard{max-width:640px}
 .stepnum{color:var(--accent);font-family:var(--mono);margin-right:6px}
@@ -134,12 +135,12 @@ select,option{background:var(--surface);color:var(--ink);border:1px solid var(--
       </div>
       <div class="tablewrap" id="acctable">
         <table>
-          <thead><tr><th>账号</th><th>状态</th><th>积分</th><th>健康度</th><th>凭证到期</th><th>冷却至</th><th></th></tr></thead>
+          <thead><tr><th>账号</th><th>状态</th><th>积分</th><th>成功 / 失败</th><th>在途</th><th>最近成功</th><th>健康度</th><th>凭证到期</th><th>冷却至</th><th></th></tr></thead>
           <tbody data-m="rows">
-            <tr><td class="mono">…5365a3d3 <button class="copy">复制</button></td><td><span class="badge b-ok">可用</span></td><td class="mono">150</td><td class="mono">1.00</td><td class="mono">11-11 22:00</td><td>—</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
-            <tr><td class="mono">…0110a4f7 <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.62</td><td class="mono">11-11 22:00</td><td class="mono">14:32:05</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
-            <tr><td class="mono">…24fae70e <button class="copy">复制</button></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0</td><td class="mono">0.70</td><td class="mono">11-11 22:00</td><td class="mono">14:35:12</td><td class="row"><button class="btn">恢复</button><button class="btn">删除</button></td></tr>
-            <tr><td class="mono">…cde1d6dd <button class="copy">复制</button></td><td><span class="badge b-bad">凭证失效</span></td><td class="mono">0</td><td class="mono">0.00</td><td class="mono">—</td><td>—</td><td class="row"><button class="btn" disabled title="refresh 已失败，请重新添加账号">已失效</button><button class="btn">删除</button></td></tr>
+            <tr><td><b>40 多岁的年轻小伙</b><div class="mono" style="color:var(--ink3)">…5365a3d3 <button class="copy">复制</button></div></td><td><span class="badge b-ok">可用</span><div style="color:var(--ink3);font-size:11px">429 rate limit</div></td><td class="mono">150 / 150</td><td class="mono">2568 / 0</td><td class="mono">0</td><td class="mono">16 小时前</td><td class="mono">1.00</td><td class="mono">11-11 22:00</td><td>—</td><td class="row"><button class="btn">恢复</button><button class="btn">暂停选号</button><button class="btn">删除</button></td></tr>
+            <tr><td><b>人</b><div class="mono" style="color:var(--ink3)">…0110a4f7 <button class="copy">复制</button></div></td><td><span class="badge b-warn">冷却中</span><div style="color:var(--ink3);font-size:11px">429 rate limit</div></td><td class="mono">0 / 3107</td><td class="mono">848 / 0</td><td class="mono">1</td><td class="mono">29 秒前</td><td class="mono">0.62</td><td class="mono">11-11 22:00</td><td class="mono">14:32:05</td><td class="row"><button class="btn">恢复</button><button class="btn">暂停选号</button><button class="btn">删除</button></td></tr>
+            <tr><td><b>富强民主文明和谐</b><div class="mono" style="color:var(--ink3)">…24fae70e <button class="copy">复制</button></div></td><td><span class="badge b-warn">冷却中</span></td><td class="mono">0 / 3875</td><td class="mono">2529 / 0</td><td class="mono">2</td><td class="mono">9 秒前</td><td class="mono">0.70</td><td class="mono">11-11 22:00</td><td class="mono">14:35:12</td><td class="row"><button class="btn">恢复</button><button class="btn">暂停选号</button><button class="btn">删除</button></td></tr>
+            <tr><td><b>老江</b><div class="mono" style="color:var(--ink3)">…cde1d6dd <button class="copy">复制</button></div></td><td><span class="badge b-bad">凭证失效</span></td><td class="mono">0 / 4716</td><td class="mono">995 / 0</td><td class="mono">0</td><td class="mono">5 分钟前</td><td class="mono">0.00</td><td class="mono">—</td><td>—</td><td class="row"><button class="btn" disabled title="refresh 已失败，请重新添加账号">已失效</button><button class="btn">暂停选号</button><button class="btn">删除</button></td></tr>
           </tbody>
         </table>
       </div>
@@ -185,7 +186,7 @@ select,option{background:var(--surface);color:var(--ink);border:1px solid var(--
         <div class="blk"><h3>猫猫旅行 <span class="badge b-ok">启用</span></h3><div class="desc">派出 → 领奖闭环；奖励积分自动入池。</div><div class="meta">cron: 0 9,21 * * *　·　成功 3 / 失败 1 / 跳过 0</div></div>
         <div class="blk"><h3>Token 保活 <span class="badge b-ok">启用</span></h3><div class="desc">刷新 access/refresh token 并回写凭证文件。</div><div class="meta">cron: 0 22 * * *　·　尚未运行</div></div>
       </div>
-      <div id="tasks-other" class="hidden"><div class="note">Qoder / Trae 平台当前没有定时任务面。<span class="badge b-dim">随平台能力开放</span></div></div>
+      <div id="tasks-other" class="hidden"><div class="note">Qoder：无签到任务（订阅制额度）。Trae：<b>有每日签到送积分</b>（checkin_credits/status|claim，9 点定时+幂等补跑）——随 Trae 平台接入网关后在此显示。<span class="badge b-dim">协议已实证</span></div></div>
     </div>
 
     <!-- ============ 模型（随平台） ============ -->
@@ -257,8 +258,8 @@ const PLAT = {
     m:{total:4,active:1,cooling:2,disabled:1,credit:150}, hasRows:true, taskSub:'WorkBuddy 平台的定时任务，由调度器自动执行（cron 在配置页修改）。面板只读展示。', wbTasks:true,
     modelSub:'WorkBuddy 平台的本地模型目录。', modelRow:'<tr><td class="mono">deepseek-v4-flash</td><td><span class="badge b-dim">默认</span></td><td>实测可用；裸名自动路由首选</td></tr>' },
   qoder: { sub:'Qoder 平台的账号池。PAT 无过期；失效时账号显示"凭证失效"。',
-    m:{total:0,active:0,cooling:0,disabled:0,credit:0}, hasRows:false, taskSub:'Qoder 平台当前没有定时任务面。', wbTasks:false,
-    modelSub:'Qoder 平台的本地模型目录。', modelRow:'<tr><td class="mono">GLM-5.3</td><td><span class="badge b-dim">本地目录</span></td><td>需先添加 PAT 账号</td></tr><tr><td class="mono">GLM-5-turbo</td><td><span class="badge b-dim">本地目录</span></td><td>—</td></tr>' },
+    m:{total:0,active:0,cooling:0,disabled:0,credit:0}, hasRows:false, taskSub:'Qoder 无签到任务（额度为订阅制，Quota 周期额度）；参考实现中亦无签到端点。', wbTasks:false,
+    modelSub:'Qoder 平台的本地模型目录。', modelRow:'<tr><td class="mono">GLM-5.3</td><td><span class="badge b-dim">本地目录</span></td><td>需先添加 PAT 账号</td></tr>';  },
   trae: { sub:'Trae 平台尚未接入网关。', m:{total:0,active:0,cooling:0,disabled:0,credit:0}, hasRows:false, taskSub:'Trae 平台尚未接入。', wbTasks:false,
     modelSub:'Trae 平台尚未接入。', modelRow:'' },
 };
