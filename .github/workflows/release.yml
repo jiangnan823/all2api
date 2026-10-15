@@ -29,7 +29,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.24"
+  # Patch-pinned to ci.yml's GO_VERSION (B0 ruling): a release built on a different
+  # Go than the gate that certified it ships a different stdlib (and vuln set).
+  GO_VERSION: "1.26.9"
   IMAGE_NAME: ghcr.io/jiangnan823/all2api
   BINARY: all2api
   ENTRYPOINT: ./cmd/gateway
@@ -206,6 +208,14 @@ jobs:
           if [ "${{ matrix.ext }}" = "tar.gz" ]; then
             tar -C staging -czf "dist/${name}.tar.gz" "$name"
           else
+            # Windows ships the installer experience, not a bare zip: the same
+            # install/uninstall payloads scripts/package-windows.ps1 stages locally
+            # (single source under scripts/win/), plus a first-run config template.
+            cp config.example.json staging/"$name"/
+            cp scripts/win/install.ps1 scripts/win/uninstall.ps1 \
+               scripts/win/install.bat scripts/win/uninstall.bat \
+               scripts/win/README-package.txt staging/"$name"/
+            mv staging/"$name"/README-package.txt staging/"$name"/README.txt
             (cd staging && zip -qr "../dist/${name}.zip" "$name")
           fi
 

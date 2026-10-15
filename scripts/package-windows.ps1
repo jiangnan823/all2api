@@ -76,141 +76,15 @@ if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 $stage = "$OutDir/pkg"
 Copy-Item "config.example.json" "$stage/config.example.json" -Force
 
-$ld = '$env:ProgramFiles'
-Write-Host "== writing installer scripts"
-@'
-# install.ps1 — all2api Windows installer.
-# Default install is per-machine (Program Files, needs an elevated prompt);
-# pass -PerUser to install into %LOCALAPPDATA%\Programs\all2api instead.
-# User data (config.json / auths\ / data\) is never overwritten by an upgrade.
-[CmdletBinding()]
-param(
-  [string]$InstallDir = "",
-  [switch]$PerUser,
-  [switch]$Autostart,
-  [switch]$Firewall,
-  [switch]$NoShortcuts
-)
-$ErrorActionPreference = "Stop"
-$src = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $InstallDir) {
-  $InstallDir = if ($PerUser) { Join-Path $env:LOCALAPPDATA "Programs\all2api" } else { Join-Path $env:ProgramFiles "all2api" }
-}
-if (-not $PerUser -and -not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  Write-Warning "Per-machine install without elevation will likely fail; re-run as administrator or pass -PerUser."
-}
-Write-Host "== installing all2api -> $InstallDir"
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item (Join-Path $src "all2api.exe") $InstallDir -Force
-if (-not (Test-Path (Join-Path $InstallDir "config.json"))) {
-  Copy-Item (Join-Path $src "config.example.json") (Join-Path $InstallDir "config.json")
-  Write-Host "== first install: config.json created from example (edit listen/api_key there)"
-}
-if (-not $NoShortcuts) {
-  $ws = New-Object -ComObject WScript.Shell
-  $smDir = Join-Path ([Environment]::GetFolderPath("Programs")) "all2api"
-  New-Item -ItemType Directory -Force -Path $smDir | Out-Null
-  $lnk = $ws.CreateShortcut((Join-Path $smDir "all2api.lnk"))
-  $lnk.TargetPath = Join-Path $InstallDir "all2api.exe"
-  $lnk.WorkingDirectory = $InstallDir
-  $lnk.Save()
-  $dl = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath("DesktopDirectory")) "all2api.lnk"))
-  $dl.TargetPath = $lnk.TargetPath
-  $dl.WorkingDirectory = $InstallDir
-  $dl.Save()
-}
-if ($Autostart) {
-  $ws = New-Object -ComObject WScript.Shell
-  $lnk = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Startup")) "all2api.lnk"))
-  $lnk.TargetPath = Join-Path $InstallDir "all2api.exe"
-  $lnk.WorkingDirectory = $InstallDir
-  $lnk.Save()
-  Write-Host "== autostart shortcut written (runs at logon)"
-}
-if ($Firewall) {
-  netsh advfirewall firewall delete rule name="all2api" | Out-Null
-  netsh advfirewall firewall add rule name="all2api" dir=in action=allow protocol=TCP localport=7863 | Out-Null
-  Write-Host "== firewall rule added (TCP 7863 inbound)"
-}
-Write-Host ""
-Write-Host "all2api installed."
-Write-Host "  config:  $InstallDir\config.json  (port = listen, default :7863)"
-Write-Host "  panel:   http://localhost:7863 after starting the gateway"
-Write-Host "  start:   run all2api.exe (or the Start Menu shortcut)"
-'@ | Set-Content "$stage/install.ps1" -Encoding UTF8
-
-@'
-# uninstall.ps1 — all2api uninstaller.
-# Default: removes the binary, shortcuts and firewall rule but KEEPS your data
-# (config.json / auths\ credentials / data\ state). Pass -Purge to delete those too.
-[CmdletBinding()]
-param(
-  [string]$InstallDir = "",
-  [switch]$PerUser,
-  [switch]$Purge
-)
-$ErrorActionPreference = "Continue"
-if (-not $InstallDir) {
-  $InstallDir = if ($PerUser) { Join-Path $env:LOCALAPPDATA "Programs\all2api" } else { Join-Path $env:ProgramFiles "all2api" }
-}
-Write-Host "== uninstalling all2api from $InstallDir"
-Get-Process all2api -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 500
-$ws = New-Object -ComObject WScript.Shell
-foreach ($dir in @([Environment]::GetFolderPath("Programs"), [Environment]::GetFolderPath("DesktopDirectory"), [Environment]::GetFolderPath("Startup"))) {
-  $p = Join-Path $dir "all2api.lnk"
-  if (Test-Path $p) { Remove-Item $p -Force }
-}
-$smDir = Join-Path ([Environment]::GetFolderPath("Programs")) "all2api"
-if (Test-Path $smDir) { Remove-Item $smDir -Recurse -Force }
-netsh advfirewall firewall delete rule name="all2api" | Out-Null
-$exe = Join-Path $InstallDir "all2api.exe"
-if (Test-Path $exe) { Remove-Item $exe -Force }
-if ($Purge) {
-  if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
-  Write-Host "== purge: install dir removed (credentials and state deleted)"
-} else {
-  Write-Host "== kept user data in $InstallDir (config.json, auths\, data\). Delete the folder manually or re-run with -Purge."
-}
-Write-Host "all2api uninstalled."
-'@ | Set-Content "$stage/uninstall.ps1" -Encoding UTF8
-
-@'
-@echo off
-rem Double-click wrapper: runs install.ps1 next to this file.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*
-pause
-'@ | Set-Content "$stage/install.bat" -Encoding ASCII
-@'
-@echo off
-rem Double-click wrapper: runs uninstall.ps1 next to this file.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1" %*
-pause
-'@ | Set-Content "$stage/uninstall.bat" -Encoding ASCII
-
-@'
-all2api — Windows 安装说明
-==========================
-
-安装
-  双击 install.bat（默认装到 Program Files，需要管理员确认），
-  或在 PowerShell 里执行： .\install.ps1 -PerUser        （装到当前用户目录，无需管理员）
-  可选参数： -Autostart（开机自启）  -Firewall（放行 7863 端口入站）
-
-设置端口
-  方式一：安装目录下的 config.json，改 "listen": ":7863" 为如 ":9000"，重启 all2api 生效。
-  方式二：浏览器打开管理面板 http://localhost:7863 → 设置屏 → gateway 分组 → listen 字段，
-          保存后按提示重启生效（面板保存走 POST /api/config，落盘到同一份 config.json）。
-
-账号凭证
-  把 workbuddy-*.json 放到安装目录的 auths\ 子目录（没有就新建），
-  重启 all2api 后自动加载；token 过期会自动刷新并回写该文件。
-
-卸载
-  双击 uninstall.bat。
-  默认保留你的数据（config.json、auths\ 凭证、data\ 状态）；
-  确认不再需要时用： powershell -File uninstall.ps1 -Purge   （连数据一起删除）
-'@ | Set-Content "$stage/README.txt" -Encoding UTF8
+# Installer payloads live as real files under scripts/win/ — the same files the
+# release workflow stages into the GitHub Release zip, so local and CI packages
+# cannot drift apart.
+Write-Host "== staging installer scripts from scripts/win"
+Copy-Item "scripts/win/install.ps1" "$stage/install.ps1" -Force
+Copy-Item "scripts/win/uninstall.ps1" "$stage/uninstall.ps1" -Force
+Copy-Item "scripts/win/install.bat" "$stage/install.bat" -Force
+Copy-Item "scripts/win/uninstall.bat" "$stage/uninstall.bat" -Force
+Copy-Item "scripts/win/README-package.txt" "$stage/README.txt" -Force
 
 # ---- zip ----
 $zip = "$OutDir/all2api-$version-windows-amd64.zip"
