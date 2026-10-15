@@ -4,7 +4,8 @@ package api
 //
 //   GET /api/accounts — pool snapshot + top-level aggregation
 //   GET /api/tasks    — scheduler task list + per-task last RunStats
-//   GET /api/models   — per-platform model catalogs (local sources only)
+//   GET /api/models   — per-platform model catalogs (workbuddy live upstream
+//                       directory behind a 60s cache, static tables otherwise)
 //   GET /api/logs     — in-process ring buffer of operational log lines
 //
 // All four are guarded by withAPIKey like the rest of /api/*. Wire keys are
@@ -13,17 +14,21 @@ package api
 // reference: the keys are listed in the M5a delivery report for the frontend
 // batch to align against.
 //
-// Honesty markers: /api/models carries source:"local" (the upstream catalog
-// fetch is not implemented); /api/logs serves only what was explicitly wired
-// into the ring this round (credit seeding, schedule RunStats, recover
-// outcomes, startup banner) — it is not a request-access log.
+// Honesty markers: /api/models labels its origin (source:"upstream" for the
+// live workbuddy directory, "local" for the static tables, "mixed" when both
+// contribute — unknown metadata is null, never invented); /api/logs serves
+// only what was explicitly wired into the ring this round (credit seeding,
+// schedule RunStats, recover outcomes, startup banner) — it is not a
+// request-access log.
 //
 // Routes are registered with method-specific patterns, so a non-GET request
 // answers 405 from ServeMux itself; the handlers stay check-free.
 
 import (
+	"context"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"all2api/internal/adapter"
@@ -45,7 +50,7 @@ import (
 func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats *schedule.StatsMemory, ring *observability.Ring) {
 	mux.HandleFunc("GET /api/accounts", withAPIKey(handleAccounts(h)))
 	mux.HandleFunc("GET /api/tasks", withAPIKey(handleTasks(sched, stats)))
-	mux.HandleFunc("GET /api/models", withAPIKey(handleModels))
+	mux.HandleFunc("GET /api/models", withAPIKey(handleModels(h)))
 	mux.HandleFunc("GET /api/logs", withAPIKey(handleLogs(ring)))
 	registerAddAccount(mux, h)
 	registerAccountWrite(mux, h)
@@ -206,27 +211,46 @@ func handleTasks(sched TaskSource, stats *schedule.StatsMemory) http.HandlerFunc
 
 // ---------- GET /api/models ----------
 
-// modelWire is one catalog entry. The keys follow the platform adapters'
-// adapter.ModelInfo wire tags (id/name/context_size/supports_tool/
-// supports_stream/is_free), NOT the newer api-contract.ts ModelInfo — that
-// contract type is not served by any endpoint yet, and renaming here would
-// invent a third vocabulary. provider is the platform the model belongs to.
+// modelWire is one catalog entry. The keys follow the frozen M8 wire:
+// the M5a base (platform/provider/id/name/context_size/supports_tool/
+// supports_stream/is_free) plus model/max_output and the three M8 additions
+// (credit_multiplier/is_default/thinking_tiers). Unknown facts are null —
+// never a fabricated 0/false — so nullable facts are pointer fields.
 type modelWire struct {
 	// Platform mirrors Provider under the name the panel reads; both are sent
 	// so the M5a adapter-wire tags and the M5c panel contract stay aligned.
-	Platform       string `json:"platform"`
-	Provider       string `json:"provider"`
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	ContextSize    int    `json:"context_size"`
-	SupportsTool   bool   `json:"supports_tool"`
-	SupportsStream bool   `json:"supports_stream"`
-	IsFree         bool   `json:"is_free"`
+	Platform string `json:"platform"`
+	Provider string `json:"provider"`
+	ID       string `json:"id"`   // namespaced: "workbuddy/deepseek-v4-flash"
+	Name     string `json:"name"` // display name
+	Model    string `json:"model"`
+
+	ContextSize      *int     `json:"context_size"` // tokens; null = unknown
+	MaxOutput        *int     `json:"max_output"`   // tokens; null = unknown
+	SupportsTool     *bool    `json:"supports_tool"`
+	SupportsStream   *bool    `json:"supports_stream"`
+	IsFree           *bool    `json:"is_free"`
+	CreditMultiplier *float64 `json:"credit_multiplier"` // 积分倍率; null = unknown
+	IsDefault        *bool    `json:"is_default"`        // null = unknown
+	ThinkingTiers    []string `json:"thinking_tiers"`    // 思考档位; null = none declared
 }
 
 type modelsResponse struct {
-	Source string      `json:"source"` // always "local": no upstream catalog fetch
+	// Source labels the catalog origin: "upstream" = live workbuddy directory,
+	// "local" = static tables only, "mixed" = live workbuddy + static qoder.
+	Source string      `json:"source"`
 	Models []modelWire `json:"models"`
+}
+
+// upstreamCatalog is the optional live-catalog seam handleModels consults.
+// Compiled per build tag: the workbuddy variants wire the real upstream
+// directory (models_wire.go); qoder/trae-only builds get a nil constructor
+// (models_wire_stub.go) and the endpoint keeps serving the static tables.
+type upstreamCatalog interface {
+	// fetch returns the live catalog rows; ok=false means the upstream is
+	// unavailable (no credential, transport failure, empty table) and the
+	// caller falls back to the static list with source "local".
+	Fetch(ctx context.Context, refresh bool) (rows []modelWire, ok bool)
 }
 
 // workbuddyDefaultModels is the known-good default model name list for the
@@ -243,67 +267,116 @@ var workbuddyDefaultModels = []string{
 	"hunyuan",
 }
 
-func handleModels(w http.ResponseWriter, r *http.Request) {
-	resp := modelsResponse{Source: "local", Models: []modelWire{}}
+// handleModels serves GET /api/models over the production catalog seam
+// (nil without a credential store — the static tables answer, source local).
+func handleModels(h *host.Host) http.HandlerFunc {
+	var cat upstreamCatalog
+	if h != nil {
+		cat = newModelsCatalog(h)
+	}
+	return modelsEndpointHandler(cat)
+}
 
-	// qoder: static fallback catalog (display-name → qoder key snapshot,
-	// chat.go defaultModelMap) via the adapter's ListModels.
-	if a := adapter.Default.Get("qoder"); a != nil {
-		if infos, err := a.ListModels(r.Context()); err == nil {
-			for _, m := range infos {
-				if m == nil {
-					continue
+// modelsEndpointHandler is the seam-carrying form tests mount over a stubbed
+// catalog (same split as the growth handlers): qoder stays static, the
+// workbuddy half prefers the live upstream directory (?refresh=1 forces a
+// fetch past the 60s cache) and falls back to the static name list on any
+// failure — honestly labeled local.
+func modelsEndpointHandler(cat upstreamCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		refresh := r.URL.Query().Get("refresh") == "1"
+		resp := modelsResponse{Source: "local", Models: []modelWire{}}
+
+		// qoder: static fallback catalog (display-name → qoder key snapshot,
+		// chat.go defaultModelMap) via the adapter's ListModels. Static by
+		// construction — it never flips the source to upstream.
+		if a := adapter.Default.Get("qoder"); a != nil {
+			if infos, err := a.ListModels(r.Context()); err == nil {
+				for _, m := range infos {
+					if m == nil {
+						continue
+					}
+					// The static table only names models and marks streaming;
+					// every other fact stays null (undeclared, not false).
+					stream := m.SupportsStream
+					resp.Models = append(resp.Models, modelWire{
+						Platform:       "qoder",
+						Provider:       "qoder",
+						ID:             m.ID,
+						Name:           m.Name,
+						Model:          strings.TrimPrefix(m.ID, "qoder/"),
+						SupportsStream: &stream,
+					})
 				}
-				resp.Models = append(resp.Models, modelWire{
-					Platform:       "qoder",
-					Provider:       "qoder",
-					ID:             m.ID,
-					Name:           m.Name,
-					ContextSize:    m.ContextSize,
-					SupportsTool:   m.SupportsTool,
-					SupportsStream: m.SupportsStream,
-					IsFree:         m.IsFree,
-				})
 			}
 		}
-	}
 
-	// workbuddy: config model_map (frozen surface, usually empty) first, then
-	// the known default names not already covered by a map entry.
-	known := map[string]bool{}
-	for name := range config.Shared.Get().ModelMap {
-		resp.Models = append(resp.Models, modelWire{
-			Platform: "workbuddy",
-			Provider: "workbuddy",
-			ID:       "workbuddy/" + name,
-			Name:     name,
-		})
-		known[name] = true
-	}
-	for _, name := range workbuddyDefaultModels {
-		if known[name] {
-			continue
+		// workbuddy: live upstream directory first (M8), static name list on
+		// any failure (no credential / transport / parse / empty table).
+		upstreamOK := false
+		if cat != nil {
+			if rows, ok := cat.Fetch(r.Context(), refresh); ok {
+				resp.Models = append(resp.Models, rows...)
+				upstreamOK = true
+			}
 		}
-		resp.Models = append(resp.Models, modelWire{
-			Platform: "workbuddy",
-			Provider: "workbuddy",
-			ID:       "workbuddy/" + name,
-			Name:     name,
-		})
-	}
-
-	// trae: no model catalog is compiled in (its adapter returns an empty
-	// list); nothing is appended rather than a fabricated placeholder.
-
-	// Deterministic delivery order: by provider, then id.
-	sort.Slice(resp.Models, func(i, j int) bool {
-		if resp.Models[i].Provider != resp.Models[j].Provider {
-			return resp.Models[i].Provider < resp.Models[j].Provider
+		if !upstreamOK {
+			// config model_map (frozen surface, usually empty) first, then the
+			// known default names not already covered by a map entry. The
+			// static list carries names only — metadata stays null.
+			known := map[string]bool{}
+			for name := range config.Shared.Get().ModelMap {
+				resp.Models = append(resp.Models, localWorkbuddyRow(name))
+				known[name] = true
+			}
+			for _, name := range workbuddyDefaultModels {
+				if known[name] {
+					continue
+				}
+				resp.Models = append(resp.Models, localWorkbuddyRow(name))
+			}
 		}
-		return resp.Models[i].ID < resp.Models[j].ID
-	})
-	writeJSON(w, http.StatusOK, resp)
+
+		// Source honesty: live workbuddy + static qoder = mixed; live only =
+		// upstream; anything that touched a static table only = local.
+		if upstreamOK {
+			resp.Source = "upstream"
+			for _, m := range resp.Models {
+				if m.Platform == "qoder" {
+					resp.Source = "mixed"
+					break
+				}
+			}
+		}
+
+		// Deterministic delivery order: by provider, then id.
+		sort.Slice(resp.Models, func(i, j int) bool {
+			if resp.Models[i].Provider != resp.Models[j].Provider {
+				return resp.Models[i].Provider < resp.Models[j].Provider
+			}
+			return resp.Models[i].ID < resp.Models[j].ID
+		})
+		writeJSON(w, http.StatusOK, resp)
+	}
 }
+
+// localWorkbuddyRow is one static workbuddy name-list entry: namespaced id,
+// the bare name everywhere else, metadata null (the static list has none).
+func localWorkbuddyRow(name string) modelWire {
+	return modelWire{
+		Platform: "workbuddy",
+		Provider: "workbuddy",
+		ID:       "workbuddy/" + name,
+		Name:     name,
+		Model:    name,
+	}
+}
+
+// boolPtr / intPtr / float64Ptr are the nullable-wire helpers: they give the
+// pointer fields a concrete value so the zero value can keep meaning null.
+func boolPtr(v bool) *bool          { return &v }
+func intPtr(v int) *int             { return &v }
+func float64Ptr(v float64) *float64 { return &v }
 
 // ---------- GET /api/logs ----------
 

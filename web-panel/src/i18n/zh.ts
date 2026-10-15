@@ -461,9 +461,10 @@ export function taskDescription(name: string): string {
 }
 
 /**
- * 模型屏（M5c）。全部为**新增键**。边界如实：目录来自本地配置（workbuddy 已知默认
- * 模型 + ModelMap；qoder 静态快照 13 个），上游实时查询未接入；wb2api 式的积分倍率
- * /思考档位无数据来源，本屏不渲染该两列。
+ * 模型屏（M5c，M8 升级）。M8 新增键：COL_CREDIT / COL_TIERS（wb2api 同款两列）、
+ * SOURCE_UPSTREAM / SOURCE_MIXED（目录来源三态）；NOTE 更新为实时目录语义。
+ * 边界如实：WorkBuddy 实时拉上游目录（网关侧 60s 缓存，refresh=1 强制重拉），
+ * Qoder 保持静态快照；未知一律「—」，不编造。
  */
 export const MODELS = {
   LOADING: '正在读取模型目录…',
@@ -471,10 +472,12 @@ export const MODELS = {
   ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
   RETRY: '重试',
   /** 顶部诚实说明行：目录来源 + 能力字段缺失语义。 */
-  NOTE: '模型目录来自本地配置（含平台默认模型与 ModelMap），上游实时查询未接入；「—」表示目录未声明该能力。',
+  NOTE: '模型目录：WorkBuddy 实时拉取上游（网关侧 60s 缓存，「刷新」强制重拉），Qoder 为静态快照；「—」表示目录未声明该能力。',
   FILTER_LABEL: '平台',
   FILTER_ALL: '全部平台',
   SOURCE_LOCAL: '目录来源：本地配置',
+  SOURCE_UPSTREAM: '目录来源：上游实时',
+  SOURCE_MIXED: '目录来源：上游实时 + 本地静态',
   SOURCE_PREFIX: '目录来源：',
   COUNT: '{count} 个模型',
   REFRESH: '刷新',
@@ -482,6 +485,8 @@ export const MODELS = {
   FILTER_EMPTY: '该平台没有已登记的模型。',
   COL_PLATFORM: '平台',
   COL_MODEL: '模型',
+  COL_CREDIT: '积分倍率',
+  COL_TIERS: '思考档位',
   COL_CONTEXT: '上下文',
   COL_MAX_OUTPUT: '最大输出',
   COL_TOOL: '工具调用',

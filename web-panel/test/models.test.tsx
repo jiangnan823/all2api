@@ -5,9 +5,10 @@ import { ModelsScreen } from '../src/app/ModelsScreen';
 import { MODELS, MODEL_SOURCE_NAMES } from '../src/i18n/zh';
 
 /**
- * 模型屏（M5c）门禁：读 GET /api/models（wire：{source:"local", models:[{platform, model,
- * ...可选能力字段}]}），平台过滤 + 能力表。能力三态如实：字段缺失 = 「—」（未知），
- * 不编造 yes/no；顶部诚实说明目录来自本地配置、上游实时查询未接入。
+ * 模型屏（M5c，M8 升级）门禁：读 GET /api/models（wire：{source:"upstream"|"local"|"mixed",
+ * models:[{platform, model, ...可选能力字段}]}），平台过滤 + 能力表。M8 补齐 wb2api 同款的
+ * 「积分倍率/思考档位」两列（可空显示「—」，档位数组 join）；刷新按钮带 refresh=1 强制
+ * 实时重拉。能力三态如实：字段缺失/null = 「—」（未知），不编造 yes/no。
  * fetch 全程 mock（沿用 settings.test 的 stubGlobal 模式）。
  */
 expect.extend(toHaveNoViolations);
@@ -177,14 +178,16 @@ describe('模型屏 — 平台过滤', () => {
 });
 
 describe('模型屏 — 诚实标注与空态', () => {
-  it('顶部说明行交代目录来源（本地配置 + 上游未接入 + 「—」语义）', async () => {
+  it('顶部说明行交代目录来源（实时拉取语义 + 「—」语义）', async () => {
     await renderReady();
     expect(screen.getByText(MODELS.NOTE)).toBeTruthy();
     expect(screen.getByText(MODELS.SOURCE_LOCAL)).toBeTruthy();
   });
 
-  it('source 非 local 时原样透传展示（不装懂）', async () => {
-    await renderReady({ '/api/models': { body: { source: 'upstream', models: [] } } }, `${MODELS.SOURCE_PREFIX}upstream`);
+  it('source 为 upstream / mixed 时按三态诚实标注（不装懂）', async () => {
+    await renderReady({ '/api/models': { body: { source: 'upstream', models: [] } } }, MODELS.SOURCE_UPSTREAM);
+    await renderReady({ '/api/models': { body: { source: 'mixed', models: [] } } }, MODELS.SOURCE_MIXED);
+    await renderReady({ '/api/models': { body: { source: 'weird', models: [] } } }, `${MODELS.SOURCE_PREFIX}weird`);
   });
 
   it('models 空数组 → 空态文案', async () => {
@@ -192,14 +195,70 @@ describe('模型屏 — 诚实标注与空态', () => {
     expect(screen.getByText(MODELS.EMPTY)).toBeTruthy();
   });
 
-  it('刷新按钮重发 GET /api/models', async () => {
+  it('刷新按钮重发 GET /api/models?refresh=1（强制实时重拉；首载不带 refresh）', async () => {
     const fn = await renderReady();
-    expect(fn.mock.calls).toHaveLength(1);
-    const fn2 = installFetch({ '/api/models': { body: MODELS_WIRE } });
+    expect(fn.mock.calls.map((c) => String(c[0]))).toEqual(['/api/models']);
+    const fn2 = installFetch({ '/api/models?refresh=1': { body: MODELS_WIRE } });
     fireEvent.click(screen.getByRole('button', { name: MODELS.REFRESH }));
     await screen.findByText(MODELS.COUNT.replace('{count}', '19'));
     // apiGet 每次调用都取全局 fetch：第二个请求落在替换后的桩上
-    expect(fn2.mock.calls.map((c) => String(c[0]))).toEqual(['/api/models']);
+    expect(fn2.mock.calls.map((c) => String(c[0]))).toEqual(['/api/models?refresh=1']);
+  });
+});
+
+describe('模型屏 — M8 实时目录列（积分倍率 / 思考档位）', () => {
+  /** 上游实时目录 fixture：一条全字段（wb2api 同款事实），一条全未知。 */
+  const UPSTREAM_WIRE = {
+    source: 'mixed',
+    models: [
+      {
+        platform: 'workbuddy', provider: 'workbuddy', id: 'workbuddy/deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash', model: 'deepseek-v4-flash',
+        context_size: 128000, max_output: 32768,
+        supports_tool: true, supports_stream: true, is_free: null,
+        credit_multiplier: 0.05, is_default: true, thinking_tiers: ['low', 'high'],
+      },
+      { platform: 'workbuddy', provider: 'workbuddy', id: 'workbuddy/mystery', name: 'mystery', model: 'mystery' },
+    ],
+  };
+
+  it('积分倍率数字原样、思考档位数组 join；列序 = 平台/模型/倍率/档位/上下文/最大输出/工具/流式', async () => {
+    await renderReady({ '/api/models': { body: UPSTREAM_WIRE } }, 'deepseek-v4-flash');
+    const head = [...document.querySelectorAll('thead th')].map((th) => th.textContent);
+    expect(head).toEqual([
+      MODELS.COL_PLATFORM, MODELS.COL_MODEL, MODELS.COL_CREDIT, MODELS.COL_TIERS,
+      MODELS.COL_CONTEXT, MODELS.COL_MAX_OUTPUT, MODELS.COL_TOOL, MODELS.COL_STREAM, MODELS.COL_FREE,
+    ]);
+    const row = document.querySelector('tr[data-platform="workbuddy"]')!;
+    expect(row.textContent).toContain('0.05');
+    expect(row.textContent).toContain('low/high');
+    expect(row.textContent).toContain('128,000');
+    expect(row.textContent).toContain('32,768');
+    // 上游展示名（name ≠ model）作为副行
+    expect(row.textContent).toContain('DeepSeek V4 Flash');
+  });
+
+  it('全未知行：倍率/档位/null 能力一律「—」，不编造数字', async () => {
+    await renderReady({ '/api/models': { body: UPSTREAM_WIRE } }, 'mystery');
+    const row = [...document.querySelectorAll('tr[data-platform="workbuddy"]')].find(
+      (r) => r.textContent?.includes('mystery'),
+    )!;
+    expect((row.textContent?.match(/—/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect(row.textContent).not.toContain('0.05');
+  });
+
+  it('档位单元素也原样展示；明确 false 如实（不折叠进未知）', async () => {
+    await renderReady({
+      '/api/models': {
+        body: {
+          source: 'upstream',
+          models: [{ platform: 'workbuddy', model: 'solo', thinking_tiers: ['max'], supports_tool: false }],
+        },
+      },
+    }, 'solo');
+    const row = document.querySelector('tr[data-platform="workbuddy"]')!;
+    expect(row.textContent).toContain('max');
+    expect(row.textContent).toContain('不支持');
   });
 });
 

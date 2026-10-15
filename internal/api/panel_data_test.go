@@ -332,6 +332,10 @@ func TestModelsLocalCatalogs(t *testing.T) {
 		t.Fatalf("source must be the honesty marker %q, got %q", "local", resp.Source)
 	}
 
+	// The qoder static table only exists in builds that compile the qoder
+	// platform (qoder/full/default); trae-only builds answer without it.
+	qoderRegistered := adapter.Default.Get("qoder") != nil
+
 	qoder := 0
 	workbuddy := 0
 	for _, m := range resp.Models {
@@ -351,8 +355,11 @@ func TestModelsLocalCatalogs(t *testing.T) {
 		}
 	}
 	// The qoder static table has 13 entries (chat.go defaultModelMap).
-	if qoder != 13 {
+	if qoderRegistered && qoder != 13 {
 		t.Fatalf("qoder catalog = %d entries, want 13 (static table)", qoder)
+	}
+	if !qoderRegistered && qoder != 0 {
+		t.Fatalf("qoder adapter excluded but catalog = %d entries", qoder)
 	}
 	// workbuddy: model_map entries first (custom-model), defaults deduped
 	// (deepseek-v4-flash appears once even though it is in both the map and
@@ -360,9 +367,151 @@ func TestModelsLocalCatalogs(t *testing.T) {
 	if workbuddy != 7 {
 		t.Fatalf("workbuddy catalog = %d entries, want 7 (map 2 with 1 deduped + 6 defaults): %+v", workbuddy, resp.Models)
 	}
-	// Deterministic order: provider asc, then id asc → qoder block first.
-	if resp.Models[0].Provider != "qoder" {
+	// Deterministic order: provider asc, then id asc → qoder block first
+	// (when this build compiles the qoder platform at all).
+	if qoderRegistered && resp.Models[0].Provider != "qoder" {
 		t.Fatalf("models must be delivered provider-sorted (qoder < workbuddy): %+v", resp.Models[0])
+	}
+}
+
+// fakeModelsCatalog scripts the upstream-catalog seam for handler-level wire
+// tests (no network): rows + ok flag, plus the refresh flag it received.
+type fakeModelsCatalog struct {
+	rows    []modelWire
+	ok      bool
+	fetches int
+	refresh bool
+}
+
+func (f *fakeModelsCatalog) Fetch(_ context.Context, refresh bool) ([]modelWire, bool) {
+	f.fetches++
+	f.refresh = refresh
+	return f.rows, f.ok
+}
+
+// upstreamRows is one fully-populated upstream workbuddy entry (the frozen M8
+// wire example) and one factless entry (everything unknown → null).
+func upstreamRows() []modelWire {
+	return []modelWire{
+		{
+			Platform: "workbuddy", Provider: "workbuddy",
+			ID: "workbuddy/deepseek-v4-flash", Name: "DeepSeek V4 Flash", Model: "deepseek-v4-flash",
+			ContextSize: intPtr(128000), MaxOutput: intPtr(32768),
+			SupportsTool: boolPtr(true), SupportsStream: boolPtr(true), IsFree: nil,
+			CreditMultiplier: float64Ptr(0.05), IsDefault: boolPtr(true),
+			ThinkingTiers: []string{"low", "high"},
+		},
+		{
+			Platform: "workbuddy", Provider: "workbuddy",
+			ID: "workbuddy/mystery", Name: "mystery", Model: "mystery",
+		},
+	}
+}
+
+func TestModelsUpstreamWireAndSource(t *testing.T) {
+	loadM5Config(t, `{"listen":":0"}`)
+	cat := &fakeModelsCatalog{rows: upstreamRows(), ok: true}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/models", withAPIKey(modelsEndpointHandler(cat)))
+
+	rec := panelGet(t, mux, "/api/models")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/models: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	// Source honesty: live workbuddy directory served → never "local". Builds
+	// that also compile the qoder static table answer "mixed"; workbuddy-only
+	// builds answer pure "upstream".
+	wantSource := "upstream"
+	if adapter.Default.Get("qoder") != nil {
+		wantSource = "mixed"
+	}
+	body := rec.Body.String()
+	// Frozen M8 additions ride the wire verbatim; unknown facts stay null.
+	for _, key := range []string{
+		`"source":"` + wantSource + `"`,
+		`"credit_multiplier":0.05`,
+		`"is_default":true`,
+		`"thinking_tiers":["low","high"]`,
+		`"max_output":32768`,
+		`"context_size":128000`,
+		`"model":"deepseek-v4-flash"`,
+		`"is_free":null`, // factless row: unknown stays null, never false
+	} {
+		if !strings.Contains(body, key) {
+			t.Fatalf("wire key %s missing from /api/models body: %s", key, body)
+		}
+	}
+
+	var resp modelsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode models response: %v", err)
+	}
+	var mystery *modelWire
+	for i := range resp.Models {
+		if resp.Models[i].Model == "mystery" {
+			mystery = &resp.Models[i]
+		}
+	}
+	if mystery == nil {
+		t.Fatalf("factless upstream row missing from body: %s", body)
+	}
+	if mystery.ContextSize != nil || mystery.MaxOutput != nil || mystery.SupportsTool != nil ||
+		mystery.IsFree != nil || mystery.CreditMultiplier != nil || mystery.IsDefault != nil ||
+		mystery.ThinkingTiers != nil {
+		t.Fatalf("factless row must be all-null metadata: %+v", mystery)
+	}
+	// Static tables stay local-labeled; only the live workbuddy directory
+	// flips the source (mixed here: qoder's static table contributes too).
+	if resp.Source != wantSource {
+		t.Fatalf("source = %q, want %q (live workbuddy directory)", resp.Source, wantSource)
+	}
+}
+
+func TestModelsRefreshParamReachesSeam(t *testing.T) {
+	loadM5Config(t, `{"listen":":0"}`)
+	cat := &fakeModelsCatalog{rows: upstreamRows(), ok: true}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/models", withAPIKey(modelsEndpointHandler(cat)))
+
+	panelGet(t, mux, "/api/models")
+	if cat.fetches != 1 || cat.refresh {
+		t.Fatalf("default request: fetches=%d refresh=%v, want 1 false", cat.fetches, cat.refresh)
+	}
+	panelGet(t, mux, "/api/models?refresh=1")
+	if cat.fetches != 2 || !cat.refresh {
+		t.Fatalf("refresh=1 request: fetches=%d refresh=%v, want 2 true", cat.fetches, cat.refresh)
+	}
+}
+
+func TestModelsUpstreamFailureFallsBackToLocal(t *testing.T) {
+	loadM5Config(t, `{"listen":":0","model_map":{"custom-model":"workbuddy/custom-model"}}`)
+	cat := &fakeModelsCatalog{ok: false} // upstream unavailable
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/models", withAPIKey(modelsEndpointHandler(cat)))
+
+	rec := panelGet(t, mux, "/api/models")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/models: got %d, want 200", rec.Code)
+	}
+	var resp modelsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode models response: %v", err)
+	}
+	if resp.Source != "local" {
+		t.Fatalf("failed upstream must fall back to source local, got %q", resp.Source)
+	}
+	found := false
+	for _, m := range resp.Models {
+		if m.Provider != "workbuddy" || m.Model != "custom-model" {
+			continue
+		}
+		found = true
+		if m.ContextSize != nil || m.CreditMultiplier != nil || m.ThinkingTiers != nil {
+			t.Fatalf("static name list must stay factless: %+v", m)
+		}
+	}
+	if !found {
+		t.Fatalf("model_map entry missing from fallback body: %s", rec.Body.String())
 	}
 }
 
