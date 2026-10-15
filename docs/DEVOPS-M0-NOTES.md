@@ -908,3 +908,30 @@ lease 修复的第一版是「每次发送后立刻释放」，嵌入重试循�
 ### 9.28-d 交付状态
 
 四产物未重建（主人当前安装版已通过热替换获得全部能力；下次打包自动包含）。growth 任务队列（wb2api 的 15 任务清单+一键领取）已立项为下一批第一项（移植 wb_research 快照的 growth 客户端，"列表+领取"不受聊天注入歧义影响）。请求记录面、用量 KPI 按 parity-audit §11 第三波排队。
+
+
+## 9.29 面板验收循环第二轮：M8 五支并发全落地（2026-10-15 深夜—16 日凌晨）
+
+主人逐屏验收驱动，四支并发全部独立复验后合入，一轮 i18n 冲突（双方 EOF 追加）以双命名空间保留解：
+
+- **M8-models** `ea031e3`：上游模型目录实时拉取（GET {chat}/v2/enterprises/personal/models，企业号换 {eid} 路径），60s TTL 缓存+失败回落静态表；/api/models 新增 credit_multiplier/thinking_tiers/is_default/真实上下文与最大输出（未知=null）；面板模型页补 积分倍率/思考档位 列。**实测 45 行真实目录渲染**（含 workbuddy 上游 + qoder 静态）。
+- **M8-reqlog** `25dbffa`：请求记账环形 1000 + /api/requests（result 筛选）+ /api/usage 聚合 + 路由 dispatch 埋点（五终态折单）+ 前端请求记录表 + 总览 KPI 行。
+- **M8-connect** `2347918`：连接屏三卡（Base URL 复制/API Key 状态/模型清单+复制）+ 密钥眼睛 + 任务 60s 轮询。
+- **M8-login** `8e013f0`：设备授权登录流（login-start/login-poll 状态机 pending/done/expired/error + 15min TTL + 凭证自动落盘入池）+ 向导「浏览器登录」tab（含既有空池死按钮修复）。
+- 集成修复：i18n EOF 冲突双方保留（LOGIN 注释开头被吞 → 补 `/**`）、usage intPtr 与 panel_data 撞名 → nonNegativePtr。
+- 热替换运行时三例教训汇总：**env -i 清空环境会导致 go build 假成功不落盘**（本轮实测复现两次）；**端口持有者未被杀时新进程静默退出**（taskkill //IM 杀的是新实例不是端口持有者）；正确顺序=taskkill → netstat 确认释放 → build → start → curl 验 wire。
+
+### 9.29 面板验收终态（浏览器实测）
+
+- 账号池总览 + 分平台明细：昵称/积分双值进度条（5,438/6,679 等真实值）/成功失败/到期时间全渲染；添加向导就位。
+- 任务中心：4 定时任务 + 3 平台页签。
+- 模型：45 行实时目录（workbuddy 上游 + qoder 静态），倍率/档位列就位。
+- 日志：真实运行日志流 + 请求记录 tab。
+- 连接屏：Base URL/key 状态/模型清单三卡。
+- 配置：元数据驱动 + 时点选择器 + **恢复默认设置**按钮（POST /api/config/restore-defaults，保留连接四项，DangerAction 式确认）。
+
+### 9.29 遗留
+- trae 平台接入（含签到）——P2 排队；
+- 上游 growth「自动完成」类任务的聊天注入消歧——需抓包；
+- 用量 token 流式口径（adapter.StreamChunk 无 Usage 字段）——待上游观测后定；
+- parity-audit 第三波（模型搜索排序、密钥眼睛等 S 项）已随本批落入。
