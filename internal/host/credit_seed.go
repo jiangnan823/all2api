@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"all2api/internal/observability"
 	"all2api/internal/platform/workbuddy"
 	"all2api/internal/pool"
 )
@@ -67,6 +68,7 @@ func (s *CredentialStore) seedCreditsWith(c *workbuddy.TaskClient) (int, int) {
 				failed++
 				mu.Unlock()
 				fmt.Printf("credit seed: %s/%s: %v\n", platform, id, err)
+				observability.Error("credit seed failed", "platform", platform, "account", id, "error", err.Error())
 				return
 			}
 			credits, err := c.GetUserResource(ctx, cred)
@@ -75,6 +77,7 @@ func (s *CredentialStore) seedCreditsWith(c *workbuddy.TaskClient) (int, int) {
 				failed++
 				mu.Unlock()
 				fmt.Printf("credit seed: %s/%s: %v\n", platform, id, err)
+				observability.Error("credit seed failed", "platform", platform, "account", id, "error", err.Error())
 				return
 			}
 			if s.pool == nil || !s.pool.SetAccountCredit(platform, id, credits) {
@@ -82,12 +85,14 @@ func (s *CredentialStore) seedCreditsWith(c *workbuddy.TaskClient) (int, int) {
 				failed++
 				mu.Unlock()
 				fmt.Printf("credit seed: %s/%s not in pool (balance %d discarded)\n", platform, id, credits)
+				observability.Error("credit seed account not in pool", "platform", platform, "account", id, "balance", credits)
 				return
 			}
 			mu.Lock()
 			seeded++
 			mu.Unlock()
 			fmt.Printf("credit seed: %s/%s = %d credits\n", platform, id, credits)
+			observability.Info("credit seed", "platform", platform, "account", id, "credit", credits)
 		}(a.Platform, a.ID)
 	}
 	wg.Wait()

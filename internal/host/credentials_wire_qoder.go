@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"all2api/internal/adapter"
+	"all2api/internal/observability"
 	"all2api/internal/platform/qoder"
 	"all2api/internal/pool"
 )
@@ -125,6 +126,7 @@ func (s *CredentialStore) seedQoderCreditsWith(probe qoderQuotaProber) (int, int
 				failed++
 				mu.Unlock()
 				fmt.Printf("credit seed: %s/%s: %v\n", QoderPlatform, id, err)
+				observability.Error("credit seed failed", "platform", QoderPlatform, "account", id, "error", err.Error())
 				return
 			}
 			if s.pool == nil || !s.pool.SetAccountCredit(QoderPlatform, id, credits) {
@@ -132,12 +134,14 @@ func (s *CredentialStore) seedQoderCreditsWith(probe qoderQuotaProber) (int, int
 				failed++
 				mu.Unlock()
 				fmt.Printf("credit seed: %s/%s not in pool (balance %d discarded)\n", QoderPlatform, id, credits)
+				observability.Error("credit seed account not in pool", "platform", QoderPlatform, "account", id, "balance", credits)
 				return
 			}
 			mu.Lock()
 			seeded++
 			mu.Unlock()
 			fmt.Printf("credit seed: %s/%s = %d credits\n", QoderPlatform, id, credits)
+			observability.Info("credit seed", "platform", QoderPlatform, "account", id, "credit", credits)
 		}(a.ID)
 	}
 	wg.Wait()

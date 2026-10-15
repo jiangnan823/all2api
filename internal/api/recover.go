@@ -19,6 +19,7 @@ import (
 	"all2api/internal/adapter"
 	"all2api/internal/circuit"
 	"all2api/internal/host"
+	"all2api/internal/observability"
 )
 
 type recoverCircuitView struct {
@@ -83,6 +84,9 @@ func handleRecover(h *host.Host) http.HandlerFunc {
 		if hs.Reason != adapter.ReasonOK {
 			// Credential not valid: refuse the recovery and leave the circuit
 			// exactly as it was — resetting here would mask the real problem.
+			// M5a: the refusal is one of the recover wire points in the panel
+			// ring (GET /api/logs); stdout keeps its silence from before.
+			observability.Warn("recover refused", "source", source, "account", accountID, "reason", string(hs.Reason))
 			writeJSON(w, http.StatusConflict, recoverResponse{
 				OK:         false,
 				Source:     source,
@@ -99,6 +103,7 @@ func handleRecover(h *host.Host) http.HandlerFunc {
 		// account stays disabled (pool.RecoverAccount never overrides that).
 		br.Reset()
 		poolRecovered := h.Pool.RecoverAccount(source, accountID)
+		observability.Info("recover ok", "source", source, "account", accountID, "pool_recovered", poolRecovered)
 
 		writeJSON(w, http.StatusOK, recoverResponse{
 			OK:            true,

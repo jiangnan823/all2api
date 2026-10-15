@@ -3,9 +3,12 @@
 package observability
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Level represents log severity levels matching go-log/log standards.
@@ -43,8 +46,11 @@ type Logger struct {
 	level  Level
 	writer io.Writer
 	prefix string
+	ring   *Ring // optional panel-log sink; nil = disabled (see ring.go)
 }
 
+// Default prefixes every line with "all2api" on stdout. main.go also attaches
+// the panel ring (AttachRing) so the wired lines land in GET /api/logs.
 var Default = &Logger{
 	level:  LevelInfo,
 	writer: os.Stdout,
@@ -97,8 +103,47 @@ func logWith(logger *Logger, lvl Level, msg string, keysAndValues ...interface{}
 		logger.mu.Unlock()
 		return
 	}
+	ring := logger.ring
 	logger.mu.Unlock()
 
-	// Simple flat format: [LEVEL] prefix: msg key=val ...
-	_ = keysAndValues // future: structured JSON or key=value format
+	// Flat stdout line: [LEVEL] prefix: msg key=val ...
+	line := formatLine(logger.prefix, lvl, msg, keysAndValues...)
+	logger.mu.Lock()
+	if logger.writer != nil {
+		_, _ = io.WriteString(logger.writer, line)
+	}
+	logger.mu.Unlock()
+
+	// Optional panel-log sink (M5a): append under the ring's own lock, never
+	// the logger's — a slow consumer cannot stall other log calls, and the
+	// ring holds only the formatted message (no writer I/O here).
+	if ring != nil {
+		ring.Append(Entry{TS: time.Now(), Level: lvl, Msg: formatMsg(msg, keysAndValues...)})
+	}
+}
+
+// formatMsg renders msg plus the key=value tail (odd keysAndValues keep an
+// explicit "EV" placeholder for the missing value instead of panicking).
+func formatMsg(msg string, keysAndValues ...interface{}) string {
+	if len(keysAndValues) == 0 {
+		return msg
+	}
+	var b strings.Builder
+	b.WriteString(msg)
+	for i := 0; i < len(keysAndValues); i += 2 {
+		b.WriteByte(' ')
+		fmt.Fprint(&b, keysAndValues[i])
+		b.WriteByte('=')
+		if i+1 < len(keysAndValues) {
+			fmt.Fprint(&b, keysAndValues[i+1])
+		} else {
+			b.WriteString("EV")
+		}
+	}
+	return b.String()
+}
+
+// formatLine renders the full stdout decoration: "[LEVEL] prefix: msg k=v".
+func formatLine(prefix string, lvl Level, msg string, keysAndValues ...interface{}) string {
+	return "[" + lvl.String() + "] " + prefix + ": " + formatMsg(msg, keysAndValues...) + "\n"
 }
