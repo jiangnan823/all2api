@@ -24,7 +24,9 @@
 //     The wording, not the bare code, is the discriminator: 14001 without it
 //     is the chat-domain quota-exhaustion meaning (report §6).
 //   - The balance shape is data.Response.Data.Accounts[] filtered by
-//     CapacityUnit=="credits", reading CycleCapacityRemain (report §2).
+//     CapacityUnit=="credits", reading CycleCapacityRemain (spendable) and
+//     CycleCapacitySize (package capacity, panel credit_total) per row
+//     (report §2).
 //
 // The client is stdlib-only and every endpoint base is injectable, so tests
 // run against httptest stubs only — the suite never contacts the real
@@ -508,36 +510,39 @@ func (c *TaskClient) TravelCycle(ctx context.Context, cred *Credential) (int64, 
 }
 
 // GetUserResource posts {billing}/v2/billing/meter/get-user-resource with the
-// empty object body and reads the credits balance: data.Response.Data.Accounts
-// filtered to CapacityUnit=="credits", SUMMED over every package row.
+// empty object body and reads the credits wallet: data.Response.Data.Accounts
+// filtered to CapacityUnit=="credits", SUMMED over every package row. It
+// returns two sums — remain (CycleCapacityRemain, the spendable balance the
+// credit floor consumes) and total (CycleCapacitySize, the account's full
+// package capacity the panel renders as credit_total).
 //
 // Live evidence (2026-10-15, owner account with 32 packages): the wallet is
 // NOT one row — an account holds a monthly pack plus many bonus packs, and
 // the first credits row can be an exhausted monthly allowance (CycleCapacity-
 // Remain 0 while other packs hold thousands). "First row wins" read 0 for an
 // account the official app shows ≈5,300 credits. The honest roll-up is the
-// sum of CycleCapacityRemain over all credits rows; non-numeric rows are
-// skipped rather than aborting the sum (a single malformed pack must not hide
-// the rest of the balance). An absent/empty Accounts array stays an explicit
-// error — never an invented 0.
-func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (int64, error) {
+// sum over all credits rows; non-numeric rows are skipped rather than
+// aborting the sum (a single malformed pack must not hide the rest of the
+// balance). An absent/empty Accounts array stays an explicit error — never an
+// invented 0.
+func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (remain, total int64, err error) {
 	body, err := c.do(ctx, cred, http.MethodPost, pathGetUserResource, []byte("{}"), true)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	resp, ok := envelopeData(body)["Response"].(map[string]any)
 	if !ok {
-		return 0, errors.New("workbuddy: user-resource reply missing data.Response object")
+		return 0, 0, errors.New("workbuddy: user-resource reply missing data.Response object")
 	}
 	inner, ok := resp["Data"].(map[string]any)
 	if !ok {
-		return 0, errors.New("workbuddy: user-resource reply missing data.Response.Data object")
+		return 0, 0, errors.New("workbuddy: user-resource reply missing data.Response.Data object")
 	}
 	accounts, ok := inner["Accounts"].([]any)
 	if !ok {
-		return 0, errors.New("workbuddy: user-resource reply missing data.Response.Data.Accounts array")
+		return 0, 0, errors.New("workbuddy: user-resource reply missing data.Response.Data.Accounts array")
 	}
-	var total int64
+	var remainSum, totalSum int64
 	rows := 0
 	for _, row := range accounts {
 		m, ok := row.(map[string]any)
@@ -550,20 +555,24 @@ func (c *TaskClient) GetUserResource(ctx context.Context, cred *Credential) (int
 		}
 		rows++
 		if n, ok := numberOf(m["CycleCapacityRemain"]); ok {
-			credits, ok := creditsFrom(n)
-			if !ok {
-				continue // out-of-range pack: skip, don't poison the sum
+			if credits, ok := creditsFrom(n); ok {
+				remainSum += credits
 			}
-			total += credits
+		}
+		if n, ok := numberOf(m["CycleCapacitySize"]); ok {
+			if size, ok := creditsFrom(n); ok {
+				totalSum += size
+			}
 		}
 		// Precise decimal variants (CapacityRemainPrecise family) exist but
-		// carry fractional dust; the integer cycle sum is the display truth
-		// the panel and the credit floor both consume.
+		// carry fractional dust; the integer cycle sums are the display truth
+		// the panel and the credit floor both consume. A row without a size
+		// field contributes to remain only — total stays partial but honest.
 	}
 	if rows == 0 {
-		return 0, errors.New("workbuddy: user-resource reply has no CapacityUnit=credits account row")
+		return 0, 0, errors.New("workbuddy: user-resource reply has no CapacityUnit=credits account row")
 	}
-	return total, nil
+	return remainSum, totalSum, nil
 }
 
 // Refresh rotates the account credential through the M3a refresh chain

@@ -5,7 +5,8 @@
 // credit_floor=100 would filter every one of them out of request-path
 // selection. SeedCredits queries each account's real balance once
 // (POST {billing}/v2/billing/meter/get-user-resource, protocol report §2) and
-// writes the absolute value into the pool.
+// writes the absolute value into the pool together with the package capacity
+// (panel credit_total).
 //
 // Best-effort by contract: a failed account is one log line and stays at 0
 // (blocked below the floor) — no invented balances, never fatal to startup.
@@ -71,7 +72,7 @@ func (s *CredentialStore) seedCreditsWith(c *workbuddy.TaskClient) (int, int) {
 				observability.Error("credit seed failed", "platform", platform, "account", id, "error", err.Error())
 				return
 			}
-			credits, err := c.GetUserResource(ctx, cred)
+			credits, total, err := c.GetUserResource(ctx, cred)
 			if err != nil {
 				mu.Lock()
 				failed++
@@ -88,11 +89,15 @@ func (s *CredentialStore) seedCreditsWith(c *workbuddy.TaskClient) (int, int) {
 				observability.Error("credit seed account not in pool", "platform", platform, "account", id, "balance", credits)
 				return
 			}
+			// The package capacity rides along (panel credit_total); same
+			// account that just accepted the balance, so a miss here can only
+			// mean a concurrent removal — dropping the total is then correct.
+			s.pool.SetAccountCreditTotal(platform, id, total)
 			mu.Lock()
 			seeded++
 			mu.Unlock()
-			fmt.Printf("credit seed: %s/%s = %d credits\n", platform, id, credits)
-			observability.Info("credit seed", "platform", platform, "account", id, "credit", credits)
+			fmt.Printf("credit seed: %s/%s = %d/%d credits\n", platform, id, credits, total)
+			observability.Info("credit seed", "platform", platform, "account", id, "credit", credits, "credit_total", total)
 		}(a.Platform, a.ID)
 	}
 	wg.Wait()

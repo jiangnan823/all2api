@@ -335,7 +335,7 @@ func seedFixture(t *testing.T, u *stubTaskUpstream) (*pool.WeightedRandomSelecto
 func TestSeedCreditsWritesPoolBalances(t *testing.T) {
 	u := &stubTaskUpstream{}
 	sel, store, client := seedFixture(t, u)
-	u.script("/v2/billing/meter/get-user-resource", stubTaskReply{body: `{"code":0,"msg":"ok","data":{"Response":{"Data":{"Accounts":[{"CapacityUnit":"credits","CycleCapacityRemain":250}]}}}}`})
+	u.script("/v2/billing/meter/get-user-resource", stubTaskReply{body: `{"code":0,"msg":"ok","data":{"Response":{"Data":{"Accounts":[{"CapacityUnit":"credits","CycleCapacityRemain":250,"CycleCapacitySize":1000}]}}}}`})
 
 	seeded, failed := store.seedCreditsWith(client)
 	if seeded != 2 || failed != 0 {
@@ -346,6 +346,12 @@ func TestSeedCreditsWritesPoolBalances(t *testing.T) {
 	}
 	if acc := poolAccount(sel, WorkbuddyPlatform, "uid-s2"); acc.Credit != 250 {
 		t.Errorf("uid-s2 credit = %d, want 250", acc.Credit)
+	}
+	// M6a: the package capacity rides along as the panel's credit_total.
+	for _, id := range []string{"uid-s", "uid-s2"} {
+		if acc := poolAccount(sel, WorkbuddyPlatform, id); acc.CreditTotal != 1000 {
+			t.Errorf("%s credit_total = %d, want 1000", id, acc.CreditTotal)
+		}
 	}
 	calls := u.callsFor("/v2/billing/meter/get-user-resource")
 	if len(calls) != 2 {
