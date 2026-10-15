@@ -1511,3 +1511,101 @@ input.add-account__input {
   color: var(--status-danger);
   font-size: var(--fs-sm);
 }
+
+/* ---- M6b 富列 + 行内操作：短码/积分双值进度条/成功失败/在途/最近成功/行内按钮 ---- */
+
+/* 列数增加后的窄屏横向滚动容器 */
+.pool-scroll {
+  overflow-x: auto;
+}
+
+/* 积分列：剩余 / 总额 双值 + 细进度条（pool-card 同族语义色） */
+.pool-credit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 110px;
+}
+
+.pool-credit__of {
+  color: var(--text-tertiary);
+}
+
+.pool-creditbar {
+  display: block;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--heat-0);
+  overflow: hidden;
+}
+
+.pool-creditbar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--status-success);
+}
+
+/* 成功 / 失败列：失败 0 中性灰，失败 >0 才红 */
+.pool-fail {
+  color: var(--text-tertiary);
+}
+
+.pool-fail--bad {
+  color: var(--status-danger);
+}
+
+/* 在途列：>0 高亮（运行中语义色），0 弱化 */
+.pool-num--hl {
+  color: var(--status-running);
+  font-weight: 600;
+}
+
+.pool-num--dim {
+  color: var(--text-tertiary);
+}
+
+/* 行内操作按钮组：紧凑型（row-h=44px 的 .btn 放不进表格行） */
+.pool-acts {
+  white-space: nowrap;
+}
+
+.pool-act {
+  min-height: 26px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.pool-act + .pool-act {
+  margin-left: var(--sp-2);
+}
+
+.pool-act:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.pool-act:disabled {
+  cursor: not-allowed;
+  color: var(--text-tertiary);
+}
+
+.pool-act--primary {
+  color: var(--brand);
+}
+
+.pool-act--danger {
+  color: var(--status-danger);
+}
+
+/* 行内操作失败的错误行（{error} 信封原文，逐字展示） */
+.pool-acterr {
+  margin: 0 0 var(--sp-3);
+  color: var(--status-danger);
+  font-size: var(--fs-sm);
+}

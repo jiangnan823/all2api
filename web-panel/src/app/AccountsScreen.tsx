@@ -5,16 +5,21 @@ import {
   addQoderAccount,
   addWorkbuddyAccount,
   fetchAccounts,
+  pauseAccount,
+  relativeTime,
+  removeAccount,
+  resumeAccount,
   statusTone,
   type AccountEntry,
   type AccountsSnapshot,
 } from '../lib/poolApi';
 
 /**
- * 账号池屏（M5b）：状态卡行（总数/可用/冷却中/禁用/积分合计，等宽数字）+ 账号表格
- * （平台/账号 id 全量显示+点击复制/状态徽色/积分/健康度/到期/冷却至）+ 手动刷新 + 30s 轮询。
- * 数据端点 GET /api/accounts 由后端并行批交付：运行期 404 如实展示错误态，
- * 空池显示引导文案（把 workbuddy-*.json 放入 auths\ 后重启）。全部内存态，不落 storage。
+ * 账号池屏（M6b，向 wb2api 看齐的富列表格）：状态卡行（总数/可用/冷却中/禁用/积分合计，等宽数字）
+ * + 账号表格（平台/账号=昵称+短码可复制/状态徽标/积分=剩余/总额+进度条/成功 失败/在途/健康度/
+ * 到期/冷却至/最近成功=相对时间/行内操作=暂停选号|恢复选号+删除）+ 手动刷新 + 30s 轮询。
+ * 行内操作走 POST /api/accounts/{platform}:{id}/{pause|resume|remove}，删除前 confirm（文案含
+ * 「凭证文件将被删除」）；{error} 信封逐字上抛展示。全部内存态，不落 storage。
  */
 type LoadState =
   | { phase: 'loading' }
@@ -28,15 +33,20 @@ const TONE_CLASS: Record<ReturnType<typeof statusTone>, string> = {
   idle: 'pool-badge--idle',
 };
 
-/** 状态串 → 中文徽标文案（未知值原样显示，不翻译瞎猜）。 */
+/** 状态串 → 中文徽标文案（未知值原样显示，不翻译瞎猜）。disabled 按 M6b 验收口径显示「凭证失效」。 */
 const STATUS_LABEL: Record<string, string> = {
   active: '可用',
   cooling: '冷却中',
-  disabled: '已禁用',
+  disabled: '凭证失效',
 };
 
 function statusLabel(status: string): string {
   return STATUS_LABEL[status.toLowerCase()] ?? status;
+}
+
+/** 账号 ID → 短码副行：前 8 位…后 4 位（≤12 位原样），全量在 title 与复制内容里。 */
+function shortId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
 /** Unix 秒 → 本地展示串；null/0 = 无值（显示 —，不编造时间）。 */
@@ -60,7 +70,10 @@ function cooldownLabel(unix: number | null): string {
   return `${min} 分钟后`;
 }
 
-/** 账号 ID 全量显示 + 点击复制（clipboard API 不可用时如实不提示成功，不假成功）。 */
+/**
+ * 账号 ID 短码 + 点击复制全量（M6b：昵称主显后 id 降为短码副行，全量在 title/复制内容里；
+ * clipboard API 不可用时如实不提示成功，不假成功）。
+ */
 function AccountIdCell(props: { id: string }) {
   const { id } = props;
   const [copied, setCopied] = useState(false);
@@ -89,10 +102,10 @@ function AccountIdCell(props: { id: string }) {
       type="button"
       className="pool-copy"
       onClick={onClick}
-      title={ACCOUNTS.COPY}
+      title={id}
       aria-label={`${ACCOUNTS.COPY}: ${id}`}
     >
-      <code>{id}</code>
+      <code>{shortId(id)}</code>
       {copied && (
         <span className="pool-copy__hint" role="status">
           {ACCOUNTS.COPIED}
@@ -102,8 +115,49 @@ function AccountIdCell(props: { id: string }) {
   );
 }
 
-function AccountRow(props: { entry: AccountEntry; showPlatform: boolean }) {
-  const { entry: a, showPlatform } = props;
+type AccountAction = 'pause' | 'resume' | 'remove';
+
+/** 状态列：paused 判定优先于 status（灰徽「已暂停选号」）；否则按 statusTone 徽色 + 中文文案。 */
+function StatusBadge(props: { entry: AccountEntry }) {
+  const { entry: a } = props;
+  if (a.paused) {
+    return <span className="pool-badge pool-badge--idle">{ACCOUNTS.STATUS_PAUSED}</span>;
+  }
+  return <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{statusLabel(a.status)}</span>;
+}
+
+/**
+ * 积分列（M6b）：「剩余 / 总额」双值 + 细进度条（剩余/总额）。
+ * 总额缺失或为 0（契约：未知/未播种为 0，与缺失同义）、或剩余缺失 → 只显单值不画条；
+ * 百分比钳在 0–100（剩余>总额的服务端异常如实显示数字，条不越界）。
+ */
+function CreditCell(props: { entry: AccountEntry }) {
+  const { credit, creditTotal } = props.entry;
+  const hasTotal = creditTotal !== null && creditTotal > 0;
+  const pct =
+    hasTotal && credit !== null ? Math.max(0, Math.min(100, Math.round((credit / creditTotal) * 100))) : null;
+  return (
+    <div className="pool-credit">
+      <span className="pool-table__num">
+        {credit === null ? ACCOUNTS.DASH : credit.toLocaleString()}
+        {hasTotal && credit !== null && <span className="pool-credit__of"> / {creditTotal.toLocaleString()}</span>}
+      </span>
+      {pct !== null && (
+        <span className="pool-creditbar" title={`剩余 ${credit} / ${creditTotal}（${pct}%）`} aria-hidden="true">
+          <i style={{ width: `${pct}%` }} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AccountRow(props: {
+  entry: AccountEntry;
+  showPlatform: boolean;
+  busy: boolean;
+  onAction: (action: AccountAction, entry: AccountEntry) => void;
+}) {
+  const { entry: a, showPlatform, busy, onAction } = props;
   return (
     <tr>
       {showPlatform ? <td>{a.platform}</td> : null}
@@ -112,13 +166,55 @@ function AccountRow(props: { entry: AccountEntry; showPlatform: boolean }) {
         <AccountIdCell id={a.id} />
       </td>
       <td>
-        <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{statusLabel(a.status)}</span>
+        <StatusBadge entry={a} />
       </td>
-      <td className="pool-table__num">{fmtCredit(a.credit, ACCOUNTS.DASH)}</td>
+      <td>
+        <CreditCell entry={a} />
+      </td>
+      <td className="pool-table__num">
+        {a.success.toLocaleString()} /{' '}
+        <span className={a.fail > 0 ? 'pool-fail pool-fail--bad' : 'pool-fail'}>{a.fail.toLocaleString()}</span>
+      </td>
+      <td className="pool-table__num">
+        {a.inFlight > 0 ? <span className="pool-num--hl">{a.inFlight}</span> : <span className="pool-num--dim">0</span>}
+      </td>
       <td>{a.health ?? ACCOUNTS.DASH}</td>
       <td className="pool-table__num">{fmtUnix(a.expiresAt, ACCOUNTS.DASH)}</td>
       <td className="pool-table__num">{cooldownLabel(a.cooldownEnd)}</td>
+      <td className="pool-table__num">{relativeTime(a.lastSuccess) ?? ACCOUNTS.DASH}</td>
+      <AccountActions entry={a} busy={busy} onAction={onAction} />
     </tr>
+  );
+}
+
+/** 行内操作（M6b）：暂停选号/恢复选号按 paused 切换 + 删除（删除确认在容器层统一拦）。 */
+function AccountActions(props: { entry: AccountEntry; busy: boolean; onAction: (action: AccountAction, entry: AccountEntry) => void }) {
+  const { entry: a, busy, onAction } = props;
+  return (
+    <td className="pool-acts">
+      {a.paused ? (
+        <button
+          type="button"
+          className="pool-act pool-act--primary"
+          disabled={busy}
+          onClick={() => onAction('resume', a)}
+        >
+          {ACCOUNTS.BTN_RESUME}
+        </button>
+      ) : (
+        <button type="button" className="pool-act" disabled={busy} onClick={() => onAction('pause', a)}>
+          {ACCOUNTS.BTN_PAUSE}
+        </button>
+      )}
+      <button
+        type="button"
+        className="pool-act pool-act--danger"
+        disabled={busy}
+        onClick={() => onAction('remove', a)}
+      >
+        {ACCOUNTS.BTN_REMOVE}
+      </button>
+    </td>
   );
 }
 
@@ -134,6 +230,9 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
   const [wizardOpen, setWizardOpen] = useState(false);
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const seqRef = useRef(0);
+  // M6b 行内操作：同账号按钮在请求期间禁用；{error} 信封原文展示（不翻译不包装）
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -146,6 +245,27 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       }
     }
   }, []);
+
+  const runAction = useCallback(
+    async (action: AccountAction, entry: AccountEntry) => {
+      // 删除是不可逆操作（后端删凭证文件），confirm 拦截文案必须说清后果
+      if (action === 'remove' && !window.confirm(ACCOUNTS.CONFIRM_REMOVE)) return;
+      const key = `${entry.platform}:${entry.id}`;
+      setBusyKey(key);
+      setActionError(null);
+      try {
+        if (action === 'pause') await pauseAccount(entry.platform, entry.id);
+        else if (action === 'resume') await resumeAccount(entry.platform, entry.id);
+        else await removeAccount(entry.platform, entry.id);
+        await load(); // 以服务端快照为准重建表格：删除成功即从表格消失
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [load],
+  );
 
   useEffect(() => {
     void load();
@@ -231,6 +351,12 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
           }}
         />
       )}
+      {actionError !== null && (
+        <p className="pool-acterr" role="alert">
+          {ACCOUNTS.ACTION_ERR_PREFIX}
+          {actionError}
+        </p>
+      )}
 
       <ul className="pool-cards" aria-label={ACCOUNTS.CARD_TOTAL}>
         <li className="pool-card">
@@ -255,24 +381,47 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
         </li>
       </ul>
 
-      <table className="pool-table">
-        <thead>
-          <tr>
-            {filter ? null : <th scope="col">{ACCOUNTS.COL_PLATFORM}</th>}
-            <th scope="col">{ACCOUNTS.COL_ACCOUNT}</th>
-            <th scope="col">{ACCOUNTS.COL_STATUS}</th>
-            <th scope="col" title="上游平台的点数余额：签到/任务/充值获得，对话按用量扣除">{ACCOUNTS.COL_CREDIT}</th>
-            <th scope="col" title="近期请求质量分（0–1）：成功上升、失败下降；新账号从 1.0 起步">{ACCOUNTS.COL_HEALTH}</th>
-            <th scope="col">{ACCOUNTS.COL_EXPIRES}</th>
-            <th scope="col">{ACCOUNTS.COL_COOLDOWN}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {scoped.map((a) => (
-            <AccountRow key={`${a.platform}:${a.id}`} entry={a} showPlatform={!filter} />
-          ))}
-        </tbody>
-      </table>
+      {/* M6b 列数增加，窄屏横向滚动，表格自身不再撑破版心 */}
+      <div className="pool-scroll">
+        <table className="pool-table">
+          <thead>
+            <tr>
+              {filter ? null : <th scope="col">{ACCOUNTS.COL_PLATFORM}</th>}
+              <th scope="col">{ACCOUNTS.COL_ACCOUNT}</th>
+              <th scope="col">{ACCOUNTS.COL_STATUS}</th>
+              <th scope="col" title="上游平台的点数余额：签到/任务/充值获得，对话按用量扣除">
+                {ACCOUNTS.COL_CREDIT}
+              </th>
+              <th scope="col" title="本次运行累计：成功 / 失败">
+                {ACCOUNTS.COL_SUCCESS}
+              </th>
+              <th scope="col" title="已发出、尚未返回响应的请求数">
+                {ACCOUNTS.COL_INFLIGHT}
+              </th>
+              <th scope="col" title="近期请求质量分（0–1）：成功上升、失败下降；新账号从 1.0 起步">
+                {ACCOUNTS.COL_HEALTH}
+              </th>
+              <th scope="col">{ACCOUNTS.COL_EXPIRES}</th>
+              <th scope="col">{ACCOUNTS.COL_COOLDOWN}</th>
+              <th scope="col" title="最近一次请求成功的时间">
+                {ACCOUNTS.COL_LASTOK}
+              </th>
+              <th scope="col">{ACCOUNTS.COL_ACTIONS}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scoped.map((a) => (
+              <AccountRow
+                key={`${a.platform}:${a.id}`}
+                entry={a}
+                showPlatform={!filter}
+                busy={busyKey === `${a.platform}:${a.id}`}
+                onAction={(action, entry) => void runAction(action, entry)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
