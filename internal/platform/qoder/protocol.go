@@ -108,7 +108,7 @@ const (
 	cosyVersion = "0.1.43"
 	// Protocol-mandated COSY signature secret shipped inside every official
 	// client; it is wire-constant data, not a deployed credential.
-	defaultSecret = "d2FyLCB3YXIgbmV2ZXIgY2hhbmdlcw==" // #nosec G101 -- well-known client-side protocol constant, not a secret credential
+	defaultSecret = "d2FyLCB3YXIgbmV2ZXIgY2hhbmdlcw==" // #nosec G101 -- well-known client-side protocol constant, not a secret credential; gitleaks:allow (repo-scoped allowlist in .gitleaks.toml)
 )
 
 // signatureSecret mirrors the reference's QODER_SIGNATURE_SECRET override;

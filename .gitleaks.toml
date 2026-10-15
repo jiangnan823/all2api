@@ -1,0 +1,15 @@
+# gitleaks configuration — repo-scoped allowlist.
+#
+# The single entry below is the COSY protocol signature constant shipped
+# inside every official Qoder client (base64 of a well-known phrase; the
+# upstream protocol implementation uses the same literal). It is
+# wire-constant data, not a deployed credential: no account, session, or
+# rotation touches it. Everything else in the default rule set stays active
+# — this mirrors the repo's narrow #nosec G101 exemption style for the same
+# constant (internal/platform/qoder/protocol.go).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "COSY client protocol constant (public, non-credential)"
+regexes = ['''d2FyLCB3YXIgbmV2ZXIgY2hhbmdlcw==''']
