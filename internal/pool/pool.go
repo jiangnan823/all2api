@@ -157,20 +157,40 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 	for i, w := range weights {
 		accum += w
 		if r <= accum {
-			// Lease this account (anti-thundering)
-			token := s.rng.Uint64()
-			s.leases[topN[i].ID] = fmt.Sprintf("%016x", token)
-			go func(id string) {
+			// Lease this account (anti-thundering): the lease blocks other
+			// concurrent selects until released. The send path calls
+			// ReleaseLease as soon as its attempt completes; the TTL goroutine
+			// is only a backstop for crashed/aborted flows, and it must only
+			// delete ITS OWN lease — a released-then-retaken account gets a
+			// fresh token, and a stale timer deleting it would silently lift
+			// the protection mid-request.
+			token := fmt.Sprintf("%016x", s.rng.Uint64())
+			s.leases[topN[i].ID] = token
+			go func(id, tok string) {
 				time.Sleep(s.leaseTTL)
 				s.mu.Lock()
-				delete(s.leases, id)
+				if s.leases[id] == tok {
+					delete(s.leases, id)
+				}
 				s.mu.Unlock()
-			}(topN[i].ID)
+			}(topN[i].ID, token)
 			return topN[i], nil
 		}
 	}
 
 	return topN[len(topN)-1], nil
+}
+
+// ReleaseLease lifts the send-path lease on an account. The router calls it
+// the moment a send attempt completes (success, failure, or finished stream)
+// so a healthy account becomes immediately selectable again — without this,
+// a single-eligible-account pool answers no_available_account for the whole
+// lease TTL (30s) after every request. Deleting a missing key is a no-op
+// (the TTL backstop may have fired first).
+func (s *WeightedRandomSelector) ReleaseLease(accountID string) {
+	s.mu.Lock()
+	delete(s.leases, accountID)
+	s.mu.Unlock()
 }
 
 // Round deducts cost from selected account.

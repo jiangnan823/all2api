@@ -239,6 +239,22 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 		return !hasBr || br.Allow()
 	}
 
+	// Lease discipline: Select takes an anti-thundering lease on each account
+	// it hands out. While this request keeps retrying, the leases stay put —
+	// that is what bounds the loop to "each account at most once" (Select
+	// returns nil once every account is leased or cooled). They are all
+	// released when the request is done, whatever the outcome: holding them
+	// for the full 30s TTL after a request would count a healthy account as
+	// unavailable and 503 the client's next request (live regression
+	// 2026-10-15: a single funded account answered no_available_account for
+	// every request within 30s of the previous one).
+	var leased []string
+	defer func() {
+		for _, id := range leased {
+			rt.host.Pool.ReleaseLease(id)
+		}
+	}()
+
 	var lastErr error
 	for {
 		if err := r.Context().Err(); err != nil {
@@ -274,6 +290,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			}
 			return
 		}
+		leased = append(leased, acct.ID)
 
 		if req.Stream {
 			committed, streamErr := rt.relayStream(w, r.Context(), sender, acct, req)

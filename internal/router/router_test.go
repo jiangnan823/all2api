@@ -508,6 +508,29 @@ func TestV1NoSenderRegistered503(t *testing.T) {
 	}
 }
 
+// Sequential requests against a single eligible account must both succeed:
+// the send-path lease is released when the attempt completes, not after the
+// 30s TTL (live regression 2026-10-15 — a real client's second request within
+// 30s got no_available_account while the only funded account sat healthy).
+func TestV1SequentialCallsSingleAccount(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	fs := newSender("rseq")
+	reg := newRegistry(t, fs)
+	h := newTestHost(t)
+	addAccount(t, h, "only", "rseq")
+	mux := newMux(h, reg)
+
+	for i := 1; i <= 2; i++ {
+		rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rseq/m"), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("call %d: got %d, want 200 (body %s)", i, rec.Code, rec.Body)
+		}
+	}
+	if calls, _ := fs.callLog(); len(calls) != 2 {
+		t.Fatalf("sends = %d, want 2 (both calls must reach the single account)", len(calls))
+	}
+}
+
 func TestV1NonStreamFullChain(t *testing.T) {
 	loadRouterConfig(t, `{"listen":":0"}`)
 	fs := newSender("rfull")
