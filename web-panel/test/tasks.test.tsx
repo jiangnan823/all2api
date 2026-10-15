@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
-import { TasksScreen } from '../src/app/TasksScreen';
+import { TasksScreen, TASKS_POLL_MS } from '../src/app/TasksScreen';
 import { TASKS, taskDisplayName } from '../src/i18n/zh';
 
 /**
@@ -196,5 +196,82 @@ describe('任务中心屏 — axe 基线', () => {
     const { container } = render(<TasksScreen />);
     await screen.findByText(TASKS.ERROR_TITLE);
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+/**
+ * M8-connect 低频轮询门禁：挂载即拉取 + 每 TASKS_POLL_MS 静默重拉（不整屏打回加载态）
+ * + 卸载清理解绑 + 与手动刷新共存（手动刷新既有用例另测）。
+ */
+describe('任务中心屏 — 60s 低频轮询（M8-connect）', () => {
+  it('挂载拉取一次；每个 TASKS_POLL_MS 恰好 +1 请求；卸载后零新增', async () => {
+    vi.useFakeTimers();
+    try {
+      const fn = vi.fn(async (...args: unknown[]) => {
+        const url = String(args[0]);
+        if (url !== '/api/tasks') throw new Error(`unexpected fetch: ${url}`);
+        return { ok: true, status: 200, json: async () => TASKS_WIRE };
+      });
+      vi.stubGlobal('fetch', fn);
+      const { unmount } = render(<TasksScreen />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(screen.getByText(TASKS.COUNT.replace('{count}', '4'))).toBeTruthy();
+      expect(fn.mock.calls).toHaveLength(1); // 仅挂载一次，interval 不立即补发
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TASKS_POLL_MS);
+      });
+      expect(fn.mock.calls).toHaveLength(2); // 一轮恰好 +1（低频，不密集轰炸）
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TASKS_POLL_MS);
+      });
+      expect(fn.mock.calls).toHaveLength(3);
+
+      unmount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TASKS_POLL_MS * 3);
+      });
+      expect(fn.mock.calls).toHaveLength(3); // 卸载清理解绑，零新增
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('静默轮询不打回加载态；轮询期失败翻错误态、下一轮自愈回就绪', async () => {
+    vi.useFakeTimers();
+    try {
+      let ok = true;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (...args: unknown[]) => {
+          const url = String(args[0]);
+          if (url !== '/api/tasks') throw new Error(`unexpected fetch: ${url}`);
+          if (!ok) return { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) };
+          return { ok: true, status: 200, json: async () => TASKS_WIRE };
+        }),
+      );
+      render(<TasksScreen />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(screen.getByText(taskDisplayName('signin'))).toBeTruthy();
+
+      ok = false;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TASKS_POLL_MS);
+      });
+      expect(screen.getByText(TASKS.ERROR_TITLE)).toBeTruthy();
+
+      ok = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TASKS_POLL_MS);
+      });
+      expect(screen.getByText(taskDisplayName('signin'))).toBeTruthy(); // 下一轮自愈
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

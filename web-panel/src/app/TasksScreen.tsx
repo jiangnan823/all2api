@@ -10,6 +10,7 @@ import { TASKS, settingsLine, taskDescription, taskDisplayName } from '../i18n/z
  * （TASK_NAME_COPY / TASK_DESC_COPY），未知任务名按原始标识如实回显（可追溯优于装懂）。
  * 如实边界：手动触发端点不存在（仅账号级 recover）——本屏只读展示「自动调度已注册」，
  * 不渲染任何执行按钮。X-API-Key 经 panelApi provider 注入（与全面板一致）；
+ * M8-connect 起挂载即拉取并按 60s 低频轮询（TASKS_POLL_MS），手动刷新共存；
  * 不落任何 storage（M1 红线）。
  */
 
@@ -92,6 +93,12 @@ function parseTasksWire(body: unknown): TaskEntry[] {
   });
 }
 
+/**
+ * 任务屏低频轮询周期（M8-connect）：任务由网关 cron 调度，分钟级变化，
+ * 60s 自动重拉足够；手动刷新按钮保留，两者共用同一 load（seq 守卫防过期覆盖）。
+ */
+export const TASKS_POLL_MS = 60_000;
+
 export function TasksScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   /** 平台页签（v1.1 分平台裁定）：默认 workbuddy（今日唯一有任务面的平台）。 */
@@ -101,7 +108,6 @@ export function TasksScreen() {
 
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
-    setState({ phase: 'loading' });
     try {
       const tasks = await apiGet('/api/tasks', parseTasksWire);
       if (seq !== seqRef.current) return;
@@ -114,6 +120,10 @@ export function TasksScreen() {
 
   useEffect(() => {
     void load();
+    // 低频轮询（M8-connect）：不把已就绪的屏整屏打回加载态（与账号屏同一静默刷新语义），
+    // 错误态在下一轮轮询内自愈；卸载清理解绑（手动刷新按钮与此共存）。
+    const timer = window.setInterval(() => void load(), TASKS_POLL_MS);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   if (state.phase === 'loading') {

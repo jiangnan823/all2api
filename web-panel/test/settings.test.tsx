@@ -508,6 +508,28 @@ describe('设置屏 — X-API-Key 来源（内存态，M1 红线）', () => {
   });
 });
 
+describe('设置屏 — API Key 明文/密文切换（M8-connect 眼睛按钮）', () => {
+  it('默认密文；点击切明文再切回，type 与 aria-pressed 联动且不影响内存态值', async () => {
+    await renderReady();
+    const input = screen.getByLabelText(SETTINGS.APIKEY_TITLE) as HTMLInputElement;
+    expect(input.type).toBe('password');
+    const eye = screen.getByRole('button', { name: SETTINGS.APIKEY_SHOW });
+    expect(eye.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.change(input, { target: { value: 'sk-visible-check' } });
+    fireEvent.click(eye);
+    expect(input.type).toBe('text');
+    expect(eye.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: SETTINGS.APIKEY_HIDE })).toBeTruthy();
+    // 显隐纯前端：输入框内存态不因切换丢失
+    expect((screen.getByLabelText(SETTINGS.APIKEY_TITLE) as HTMLInputElement).value).toBe('sk-visible-check');
+
+    fireEvent.click(screen.getByRole('button', { name: SETTINGS.APIKEY_HIDE }));
+    expect(input.type).toBe('password');
+    expect(eye.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
 describe('设置屏 — axe 基线', () => {
   it('就绪态（默认源）无违规', async () => {
     installFetch(OK_ROUTES);

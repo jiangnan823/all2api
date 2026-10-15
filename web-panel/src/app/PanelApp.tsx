@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NAV, PANEL, settingsLine } from '../i18n/zh';
 import { probePillStatus, PILL_POLL_MS, type PillStatus } from '../lib/statusPill';
 import { AccountsScreen } from './AccountsScreen';
+import { ConnectScreen } from './ConnectScreen';
 import { LogsScreen } from './LogsScreen';
 import { ModelsScreen } from './ModelsScreen';
 import { OverviewScreen } from './OverviewScreen';
@@ -9,7 +10,7 @@ import { SettingsScreen } from './SettingsScreen';
 import { TasksScreen } from './TasksScreen';
 
 type Theme = 'light' | 'dark';
-type SectionId = 'accounts' | 'tasks' | 'models' | 'settings' | 'logs';
+type SectionId = 'accounts' | 'tasks' | 'models' | 'connect' | 'settings' | 'logs';
 /** v1.2 账号池二级菜单：总览 + 分平台明细。内存态，不落 storage（M1 红线）。 */
 type AccountView = 'overview' | 'workbuddy' | 'qoder' | 'trae';
 
@@ -26,14 +27,14 @@ function preferredTheme(): Theme {
 }
 
 /**
- * 左栏五项中文页签（M5b，信息架构对齐参考控制台）：账号池为首屏；
- * 「用量 / 积分构成」暂不做，不留死链接。任务中心 / 模型两屏由并行批交付文件
- * （src/app/TasksScreen.tsx、src/app/ModelsScreen.tsx），此处渲染占位组件，集成方替换。
+ * 左栏中文页签（M5b 信息架构 + M8-connect 恢复「连接」真屏）：账号池为首屏；
+ * 「用量 / 积分构成」暂不做，不留死链接。连接屏由本批交付（ConnectScreen.tsx）。
  */
 const NAV_ITEMS: ReadonlyArray<{ id: SectionId; label: string; icon: string }> = [
   { id: 'accounts', label: NAV.ACCOUNTS, icon: '▤' },
   { id: 'tasks', label: NAV.TASKS, icon: '☑' },
   { id: 'models', label: NAV.MODELS, icon: '◫' },
+  { id: 'connect', label: NAV.CONNECT, icon: '⇄' },
   { id: 'settings', label: NAV.CONFIG, icon: '⚙' },
   { id: 'logs', label: NAV.LOGS, icon: '⌁' },
 ];
@@ -124,9 +125,10 @@ function pillCopy(status: PillStatus): { value: string; detail: string | null } 
 }
 
 /**
- * B1 面板外壳 → M5b 信息架构重建 → v1.2 二级菜单：左 rail 五项可见中文页签，
- * 「账号池」下挂二级菜单（总览 + 分平台明细，主人裁定 2026-10-15）；任务中心 /
- * 模型挂并行批交付的真实屏；配置/日志原样。主题切换仍只在内存态（M1 红线）。
+ * B1 面板外壳 → M5b 信息架构重建 → v1.2 二级菜单 → M8-connect 恢复「连接」真屏：
+ * 左 rail 六项可见中文页签，「账号池」下挂二级菜单（总览 + 分平台明细，主人裁定
+ * 2026-10-15）；任务中心 / 模型挂并行批交付的真实屏；连接屏三块内容卡（Base URL /
+ * API Key 状态 / 可用模型）；配置/日志原样。主题切换仍只在内存态（M1 红线）。
  */
 export function PanelApp() {
   const [theme, toggleTheme] = useTheme();
@@ -230,6 +232,17 @@ export function PanelApp() {
                 </h2>
               </div>
               <ModelsScreen />
+            </section>
+          )}
+
+          {active === 'connect' && (
+            <section className="shell__section" id="connect" aria-labelledby="shell-h-connect">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-connect">
+                  {NAV.CONNECT}
+                </h2>
+              </div>
+              <ConnectScreen onOpenSettings={() => setActive('settings')} />
             </section>
           )}
 

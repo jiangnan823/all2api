@@ -4,13 +4,13 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, within, cleanup, act } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { PanelApp } from '../src/app/PanelApp';
-import { NAV, PANEL } from '../src/i18n/zh';
+import { CONNECT, NAV, PANEL } from '../src/i18n/zh';
 
 /**
- * 外壳门禁（M5b 信息架构重建）：axe 基线 + 五项可见中文页签导航 + 占位屏 + 主题切换的
- * 内存态承诺 + 接线批的安全红线自查。
- * 导航 = 账号池（首屏，挂 AccountsScreen）/ 任务中心 / 模型（并行批占位）/ 配置（挂 SettingsScreen）/
- * 日志（挂 LogsScreen）。默认 fetch 桩永不 settle：AccountsScreen / LogsScreen / SettingsScreen
+ * 外壳门禁（M5b 信息架构重建 + M8-connect 恢复「连接」真屏）：axe 基线 + 六项可见中文页签导航
+ * + 占位屏 + 主题切换的内存态承诺 + 接线批的安全红线自查。
+ * 导航 = 账号池（首屏，挂 AccountsScreen）/ 任务中心 / 模型（并行批真实屏）/ 连接（挂 ConnectScreen）/
+ * 配置（挂 SettingsScreen）/ 日志（挂 LogsScreen）。默认 fetch 桩永不 settle：各功能屏
  * / pill 各自钉在加载态——外壳断言不依赖各屏内部实现（各有专属测试文件）。
  * 安全扫描面 = 本批新增的入口层（src/app/PanelApp.tsx、src/main.tsx、index.html）；
  * freeze.test.ts 的 IMPL_DIRS 不含这几处，故红线在本文件自证，不动冻结测试。
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('外壳结构（M5b）', () => {
-  it('渲染标题、五项可见中文页签与 pill（首次探测未落定 = 未接线）', () => {
+  it('渲染标题、六项可见中文页签与 pill（首次探测未落定 = 未接线）', () => {
     render(<PanelApp />);
     expect(screen.getByRole('heading', { level: 1, name: PANEL.TITLE })).toBeTruthy();
     expect(screen.getByText(PANEL.STATUS_UNWIRED)).toBeTruthy();
@@ -47,6 +47,7 @@ describe('外壳结构（M5b）', () => {
       'Trae',
       NAV.TASKS,
       NAV.MODELS,
+      NAV.CONNECT,
       NAV.CONFIG,
       NAV.LOGS,
     ]);
@@ -115,6 +116,18 @@ describe('导航与主题（键盘可达）', () => {
       expect(document.getElementById(id)).toBeTruthy();
       expect(screen.getByText(loading)).toBeTruthy();
     }
+  });
+
+  it('连接页签挂载 ConnectScreen（M8-connect：三卡外壳 + 双卡钉加载态）', () => {
+    render(<PanelApp />);
+    fireEvent.click(screen.getByRole('link', { name: NAV.CONNECT }));
+    expect(document.getElementById('connect')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: NAV.CONNECT })).toBeTruthy();
+    // 卡一 Base URL 无需请求，直接可读；卡二/卡三钉加载态（fetch 桩永不 settle）
+    expect(screen.getByRole('heading', { level: 3, name: CONNECT.BASEURL_TITLE })).toBeTruthy();
+    expect(screen.getByText(`${window.location.origin}/v1`)).toBeTruthy();
+    expect(screen.getByText(CONNECT.KEY_LOADING)).toBeTruthy();
+    expect(screen.getByText(CONNECT.MODELS_LOADING)).toBeTruthy();
   });
 
   it('日志页签挂载 LogsScreen（钉加载态）', () => {

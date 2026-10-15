@@ -1724,3 +1724,226 @@ input.add-account__input {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+
+/* ---- M8-connect：连接屏（Base URL / API Key 状态 / 可用模型三块内容卡） ---- */
+
+.connect-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.connect-screen__note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.connect-screen__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+
+.connect-screen__card-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.connect-screen__card-hint {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.connect-screen__url-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.connect-screen__url {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface-2);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.connect-screen__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-link);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.connect-screen__copy:hover {
+  background: var(--bg-hover);
+}
+
+.connect-screen__copied {
+  color: var(--status-success);
+  font-weight: 600;
+}
+
+.connect-screen__key-line {
+  margin: 0;
+}
+
+.connect-screen__badge {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.connect-screen__badge--on {
+  background: var(--soft-success);
+  color: var(--status-success);
+}
+
+.connect-screen__badge--off {
+  background: var(--soft-skipped);
+  color: var(--text-secondary);
+}
+
+.connect-screen__goto {
+  align-self: flex-start;
+}
+
+.connect-screen__count {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.connect-screen__scroll {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.connect-screen__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.connect-screen__table th,
+.connect-screen__table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.connect-screen__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface-2);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.connect-screen__platform {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connect-screen__model-id code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.connect-screen__model-name code {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.connect-screen__state {
+  margin: 0;
+  padding: var(--sp-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.connect-screen__state--error {
+  border-color: var(--status-danger);
+  background: var(--soft-danger);
+}
+
+.connect-screen__state-title {
+  margin: 0 0 var(--sp-1);
+  font-weight: 600;
+  color: var(--status-danger);
+}
+
+.connect-screen__state-msg {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  word-break: break-all;
+}
+
+.connect-screen__state-hint {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+}
+
+/* ---- M8-connect：设置屏 API Key 明文/密文切换行 ---- */
+
+.settings-screen__apikey-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.settings-screen__apikey-eye {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.settings-screen__apikey-eye:hover {
+  background: var(--bg-hover);
+}
+
+.settings-screen__apikey-eye[aria-pressed='true'] {
+  border-color: var(--brand);
+  color: var(--brand);
+}
