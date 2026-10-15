@@ -8,6 +8,8 @@
 //   - checkin activity status POST {billing}/v2/billing/meter/checkin-activity-status
 //   - active report           POST {billing}/v2/report (event array)
 //   - cat travel cycle        GET/POST {chat}/activity/growth/buddy/travel/{status,depart,claim}
+//   - credit task surface     GET/POST {chat}/v2/activity/growth/tasks[/accept],
+//                             POST {web}/activity/growth/tasks/{code}/claim (growth.go)
 //   - balance query           POST {billing}/v2/billing/meter/get-user-resource
 //   - token keepalive         the M3a refresh chain (refresh.go), reused as-is
 //
@@ -88,6 +90,9 @@ type TaskClientOptions struct {
 	// BillingBaseURL overrides the billing-realm base (check-in, report,
 	// balance). Tests point this at the same stub server.
 	BillingBaseURL string
+	// WebBaseURL overrides the growth-center web base (the growth task claim
+	// endpoint family, growth.go). Tests point this at the same stub server.
+	WebBaseURL string
 	// HTTPClient overrides the transport. Nil uses a 30s-timeout client.
 	HTTPClient *http.Client
 	// Credentials resolves stored credentials for the Refresh chain. Nil only
@@ -201,11 +206,22 @@ func (c *TaskClient) do(ctx context.Context, cred *Credential, method, path stri
 		return "", &adapter.UpstreamError{Status: http.StatusBadGateway, Reason: adapter.ReasonPlatformDown, Message: "workbuddy: read task " + path + " body: " + err.Error()}
 	}
 	text := string(raw)
-	if resp.StatusCode >= 400 {
-		return "", classifyError(resp.StatusCode, text, resp.Header)
+	return taskReplyText(resp.StatusCode, resp.Header, text)
+}
+
+// taskReplyText folds one task-domain HTTP reply into do()'s contract:
+// HTTP >= 400 goes through classifyError (with the real header so rate-limit
+// retry hints survive), and an HTTP-2xx body carrying a non-zero {code}
+// envelope goes through taskBusinessError first (the task-domain
+// idempotent/limit codes must win over the generic buckets). Extracted from
+// do() so the growth surface in growth.go shares the exact classification
+// order instead of forking it.
+func taskReplyText(status int, header http.Header, text string) (string, error) {
+	if status >= 400 {
+		return "", classifyError(status, text, header)
 	}
 	if code, ok := businessCode(text); ok && code != "" && code != "0" {
-		return "", taskBusinessError(resp.StatusCode, text, code)
+		return "", taskBusinessError(status, text, code)
 	}
 	return text, nil
 }

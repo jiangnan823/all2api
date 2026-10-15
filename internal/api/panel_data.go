@@ -38,7 +38,8 @@ import (
 // Register so the existing registration path stays untouched (the M5a batch
 // adds routes, changes none; M6a appends the account write routes
 // pause/resume/remove behind the same nil-host/nil-store guard as the
-// add-account routes). All parameters are nullable: nil host/empty
+// add-account routes; M7a appends the workbuddy growth task endpoints behind
+// the same guard). All parameters are nullable: nil host/empty
 // pool, nil scheduler, nil stats memory and nil ring each degrade to the
 // honest empty response, never a panic.
 func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats *schedule.StatsMemory, ring *observability.Ring) {
@@ -48,6 +49,7 @@ func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats
 	mux.HandleFunc("GET /api/logs", withAPIKey(handleLogs(ring)))
 	registerAddAccount(mux, h)
 	registerAccountWrite(mux, h)
+	registerGrowth(mux, h)
 }
 
 // TaskSource is the read-only scheduler view panel_data needs (schedule
