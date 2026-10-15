@@ -693,3 +693,364 @@
   font-size: var(--fs-sm);
   color: var(--status-danger);
 }
+
+/* ---- M5c 任务中心屏（TasksScreen）：卡片网格 + 启用徽标 + 最近一次运行统计 ---- */
+
+.tasks-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.tasks-screen__state {
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.tasks-screen__state--error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  border-color: var(--status-danger);
+  color: var(--text-primary);
+}
+
+.tasks-screen__state-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--status-danger);
+}
+
+.tasks-screen__state-msg {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.tasks-screen__state-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.tasks-screen__note {
+  margin: 0;
+  padding: var(--sp-3);
+  border-left: 3px solid var(--status-warn);
+  background: var(--soft-warn);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-primary);
+}
+
+.tasks-screen__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.tasks-screen__bar-note {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.tasks-screen__grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-3);
+}
+
+.tasks-screen__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.tasks-screen__card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.tasks-screen__card-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  flex: 1;
+}
+
+.tasks-screen__badge {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tasks-screen__badge--on {
+  background: var(--soft-success);
+  color: var(--status-success);
+}
+
+.tasks-screen__badge--off {
+  background: var(--soft-skipped);
+  color: var(--status-idle);
+}
+
+.tasks-screen__card-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.tasks-screen__cron {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.tasks-screen__cron code {
+  font-family: var(--mono);
+  color: var(--text-primary);
+}
+
+.tasks-screen__lastrun {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line-divider);
+}
+
+.tasks-screen__lastrun-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.tasks-screen__never {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.tasks-screen__stats {
+  margin: 0;
+  display: flex;
+  gap: var(--sp-4);
+}
+
+.tasks-screen__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tasks-screen__stat dt {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.tasks-screen__stat dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-lg);
+  color: var(--text-primary);
+}
+
+.tasks-screen__stat-num--success {
+  color: var(--status-success);
+}
+
+.tasks-screen__stat-num--failed {
+  color: var(--status-danger);
+}
+
+.tasks-screen__stat-num--skipped {
+  color: var(--status-skipped);
+}
+
+.tasks-screen__ran-at {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ---- M5c 模型屏（ModelsScreen）：平台过滤 + 模型能力表 ---- */
+
+.models-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.models-screen__state {
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.models-screen__state--error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  border-color: var(--status-danger);
+  color: var(--text-primary);
+}
+
+.models-screen__state-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--status-danger);
+}
+
+.models-screen__state-msg {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.models-screen__state-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.models-screen__note {
+  margin: 0;
+  padding: var(--sp-3);
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-primary);
+}
+
+.models-screen__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.models-screen__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.models-screen__filter select {
+  min-height: var(--row-h);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.models-screen__bar-note {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.models-screen__count {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.models-screen__scroll {
+  overflow-x: auto;
+}
+
+.models-screen__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+.models-screen__table th,
+.models-screen__table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.models-screen__table thead th {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+}
+
+.models-screen__platform {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--line-border);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.models-screen__model-name code {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+.models-screen__model-note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.models-screen__num {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  /* S 档：表格横向滚动而不是挤压能力列（与 .throttle-form__table 同一约定） */
+  .models-screen__table {
+    min-width: 560px;
+  }
+
+  .tasks-screen__grid {
+    grid-template-columns: 1fr;
+  }
+}

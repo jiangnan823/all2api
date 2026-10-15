@@ -306,3 +306,96 @@ export function configUnitCopy(unit: string | undefined, fieldKey: string): stri
   if (unit === 'count') return FIELD_UNIT_FOR_COUNT[fieldKey] ?? '次';
   return UNIT_CODE_COPY[unit] ?? unit;
 }
+
+/**
+ * 任务中心屏（M5c）。全部为**新增键**，不改动上方任何冻结段（并行批在同文件改
+ * NAV/ACCOUNTS/LOGS 命名空间，本块独立追加）。边界如实：手动触发端点不存在
+ * （仅账号级 recover），文案明示只读，不渲染假按钮。
+ */
+export const TASKS = {
+  LOADING: '正在读取任务调度状态…',
+  ERROR_TITLE: '任务状态读取失败',
+  ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  /** 顶部诚实说明行：本屏只读 + 无手动触发端点。 */
+  NOTE: '任务由网关定时自动调度，面板只读展示；手动触发接口未提供（仅账号级修复可用）。',
+  COUNT: '已注册 {count} 个定时任务',
+  REFRESH: '刷新',
+  EMPTY: '网关没有注册任何定时任务。',
+  ENABLED_ON: '已启用',
+  ENABLED_OFF: '已停用',
+  CRON_LABEL: '调度周期',
+  LAST_RUN_TITLE: '最近一次运行',
+  NEVER_RUN: '尚未运行',
+  STAT_TOTAL: '总数',
+  STAT_SUCCESS: '成功',
+  STAT_FAILED: '失败',
+  STAT_SKIPPED: '跳过',
+  RAN_AT: '运行时间：{at}',
+} as const;
+
+/** 任务名 → 中文名（未知任务名回退原始标识，如实可追溯）。 */
+const TASK_NAME_COPY: Record<string, string> = {
+  signin: '自动签到',
+  active_check: '活跃上报',
+  cat_travel: '猫猫旅行',
+  token_keepalive: '凭证保活',
+};
+
+/** 任务名 → 一行说明（与 CONSENT_APPENDIX.workbuddy 的例行操作描述口径一致）。 */
+const TASK_DESC_COPY: Record<string, string> = {
+  signin: '按计划代替你在平台完成每日签到，领取签到权益。',
+  active_check: '按计划上报账号活跃状态，降低长期沉默触发的风控概率。',
+  cat_travel: 'WorkBuddy 专属的宠物出行任务，按计划代替你完成猫猫旅行派遣。',
+  token_keepalive: '按计划刷新平台凭证，减少「凭证已过期」导致的重新授权。',
+};
+
+export function taskDisplayName(name: string): string {
+  return TASK_NAME_COPY[name] ?? name;
+}
+
+export function taskDescription(name: string): string {
+  return TASK_DESC_COPY[name] ?? '';
+}
+
+/**
+ * 模型屏（M5c）。全部为**新增键**。边界如实：目录来自本地配置（workbuddy 已知默认
+ * 模型 + ModelMap；qoder 静态快照 13 个），上游实时查询未接入；wb2api 式的积分倍率
+ * /思考档位无数据来源，本屏不渲染该两列。
+ */
+export const MODELS = {
+  LOADING: '正在读取模型目录…',
+  ERROR_TITLE: '模型目录读取失败',
+  ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  /** 顶部诚实说明行：目录来源 + 能力字段缺失语义。 */
+  NOTE: '模型目录来自本地配置（含平台默认模型与 ModelMap），上游实时查询未接入；「—」表示目录未声明该能力。',
+  FILTER_LABEL: '平台',
+  FILTER_ALL: '全部平台',
+  SOURCE_LOCAL: '目录来源：本地配置',
+  SOURCE_PREFIX: '目录来源：',
+  COUNT: '{count} 个模型',
+  REFRESH: '刷新',
+  EMPTY: '模型目录为空。',
+  FILTER_EMPTY: '该平台没有已登记的模型。',
+  COL_PLATFORM: '平台',
+  COL_MODEL: '模型',
+  COL_CONTEXT: '上下文',
+  COL_MAX_OUTPUT: '最大输出',
+  COL_TOOL: '工具调用',
+  COL_STREAM: '流式',
+  COL_FREE: '免费额度',
+  UNKNOWN: '—',
+} as const;
+
+/** 平台标识 → 显示名（与 SOURCE_NAMES 同源扩列；未知平台回退原始标识）。 */
+export const MODEL_SOURCE_NAMES: Record<string, string> = {
+  workbuddy: 'WorkBuddy',
+  qoder: 'Qoder',
+  trae: 'Trae',
+};
+
+/** 能力三态格的明确值文案（null = 未声明，由 MODELS.UNKNOWN 承担）。 */
+export function modelCapLabel(v: 'yes' | 'no'): string {
+  return v === 'yes' ? '支持' : '不支持';
+}
