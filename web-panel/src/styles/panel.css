@@ -1609,3 +1609,118 @@ input.add-account__input {
   color: var(--status-danger);
   font-size: var(--fs-sm);
 }
+
+/* ---- M7b 成长任务弹层（wb2api「积分任务」同款：遮罩 + 居中卡 + 四列表格）----
+   布局模式复用 DangerAction 的遮罩/居中卡；只用 tokens.css 冻结 token。 */
+.growth-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: var(--scrim);
+}
+
+.growth-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(720px, 100%);
+  max-height: min(80vh, 640px);
+  padding: var(--sp-5) var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.growth-modal__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  color: var(--text-primary);
+}
+
+.growth-modal__note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+/* 表格区在卡内纵向滚动，长清单不撑破弹层 */
+.growth-modal__scroll {
+  overflow: auto;
+}
+
+.growth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.growth-table th,
+.growth-table td {
+  padding: var(--sp-2);
+  text-align: left;
+  border-bottom: 1px solid var(--line-divider);
+  vertical-align: top;
+}
+
+.growth-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line-border);
+}
+
+.growth-table__num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.growth-code {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* 状态徽标档：可领取=主色 / 已完成=蓝；已领取与灰色档复用 pool-badge--ok / --idle */
+.growth-status--brand {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+.growth-status--info {
+  color: var(--status-running);
+  border-color: var(--status-running);
+}
+
+.growth-modal__empty {
+  margin: 0;
+  padding: var(--sp-5) 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.growth-modal__msg {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.growth-modal__msg--ok {
+  color: var(--status-success);
+}
+
+.growth-modal__msg--err {
+  color: var(--status-danger);
+}
+
+.growth-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}

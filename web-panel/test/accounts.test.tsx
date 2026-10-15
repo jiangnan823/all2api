@@ -217,10 +217,11 @@ describe('账号池屏 — 就绪渲染', () => {
     const bar = wbRow.querySelector('.pool-creditbar i') as HTMLElement;
     expect(bar).toBeTruthy();
     expect(bar.style.width).toBe('18%');
-    // 最近成功：29 秒前（相对时间，纯前端换算）；暂停演示号 6 小时前
-    expect(wbRow.textContent).toContain('29 秒前');
+    // 最近成功：29 秒前（相对时间，纯前端换算）；暂停演示号 6 小时前。
+    // 用同一时钟重算期望串：模块加载 NOW_SEC 到断言之间跨秒（29→30）属正常流逝，不是回归。
+    expect(wbRow.textContent).toContain(relativeTime(NOW_SEC - 29));
     const pausedRow = await findRow(WB_PAUSED_ID);
-    expect(pausedRow.textContent).toContain('6 小时前');
+    expect(pausedRow.textContent).toContain(relativeTime(NOW_SEC - 3600 * 6));
     // 旧形状（trae）：新字段全缺 → 在途 0 弱化、最近成功 —、积分只显单值 88 无条
     const traeRow = await findRow('tr-ffff00001111');
     expect(traeRow.querySelector('.pool-num--dim')?.textContent).toBe('0');

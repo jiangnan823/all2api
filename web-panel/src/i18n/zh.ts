@@ -505,3 +505,40 @@ export const CRON_FIELD = {
   FALLBACK_SHAPE: '该表达式不是"每日整点"形态，已回落为原始表达式编辑（懂 cron 可直接改）。',
   FALLBACK_EDITED: '已手动修改为非每日形态，已回落为原始表达式编辑。',
 } as const;
+
+/**
+ * 成长任务弹层文案（M7b，wb2api「积分任务」同款）。**独立新增命名空间**，
+ * 不改动上方任何冻结段；端点由后端并行批交付（growth-tasks / growth-accept / growth-claim-auto），
+ * {error} 信封原文逐字展示，不回显凭证。
+ * 状态六值为冻结闭集（claimed/claimable/completed/in_progress/accepted/not_accepted），
+ * 未知值原样回显（可追溯优于装懂）。
+ */
+export const GROWTH = {
+  BTN_OPEN: '任务',
+  TITLE: '积分任务 · {name}',
+  NOTE: '成长任务来自上游平台，接受与领取由网关代为执行；奖励与状态以上游实际回执为准。',
+  COL_TASK: '任务',
+  COL_PROGRESS: '进度',
+  COL_REWARD: '奖励',
+  COL_STATUS: '状态',
+  ACCEPT_ALL: '全部接受',
+  CLAIM_AUTO: '一键完成可自动任务',
+  REFRESH: '重新查询',
+  CLOSE: '关闭',
+  EMPTY: '该账号暂无成长任务',
+  LOADING: '正在读取成长任务…',
+  ERROR_TITLE: '成长任务读取失败',
+  RETRY: '重试',
+  CLAIM_OK: '领取成功 +{n} 积分',
+  ACCEPT_OK: '已接受 {n} 个任务',
+  ACTION_ERR_PREFIX: '操作失败：',
+  STATUS_CLAIMED: '已领取',
+  STATUS_CLAIMABLE: '可领取',
+  STATUS_COMPLETED: '已完成',
+  STATUS_IN_PROGRESS: '进行中',
+  STATUS_ACCEPTED: '已报名',
+  STATUS_NOT_ACCEPTED: '未报名',
+  REWARD_CREDIT: '+{n} 分',
+  REWARD_ENERGY: '+{n} 能',
+  DASH: '—',
+} as const;
