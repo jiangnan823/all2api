@@ -101,6 +101,14 @@ func main() {
 	}
 	gwHost.Creds = creds
 
+	// M3b credit seeding: auth files carry no balance, so accounts registered
+	// with Credit=0 and the default credit_floor would block them all on the
+	// request path. One billing get-user-resource call per account (4 in
+	// parallel, best-effort — a failure is one log line and the account stays
+	// below the floor until the next restart or an earned reward).
+	seeded, seedFailed := creds.SeedCredits()
+	fmt.Printf("Credit seeding: %d account(s) seeded, %d failed (billing get-user-resource)\n", seeded, seedFailed)
+
 	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
 	// Upstream sends resolve per request from adapters implementing
 	// adapter.Sender; with no implementer registered every /v1 call answers
@@ -125,14 +133,15 @@ func main() {
 	}
 	fmt.Printf("Upstream senders registered: %d\n", senders)
 
-	// Scheduled tasks (M2 batch ②): assemble the schedule.Deps seam onto the
-	// shared host pool and start the cron loop. The per-account upstream is
-	// host.NewScheduleUpstream — the honest no-protocol stub (every op wraps
-	// schedule.ErrUnsupportedTask, batches count Skipped quietly). The
-	// REPLACEMENT POINT for the real client is that one constructor call.
+	// Scheduled tasks (M2 batch ②, upstream real since M3b): assemble the
+	// schedule.Deps seam onto the shared host pool and start the cron loop.
+	// host.NewScheduleUpstream resolves per-account credentials from the store
+	// and drives the documented endpoints (check-in / active report / cat
+	// travel / token refresh); a nil store would degrade ops to explicit
+	// per-account errors, and creds is always non-nil here.
 	schedDeps := &schedule.Deps{
 		Source:          host.NewScheduleSource(gwHost.Pool),
-		Upstream:        host.NewScheduleUpstream(),
+		Upstream:        host.NewScheduleUpstream(creds),
 		Store:           host.NewScheduleStore(gwHost.Pool),
 		FailureCooldown: time.Duration(cfg.Pool.CooldownSec) * time.Second,
 		Crons: schedule.Crons{

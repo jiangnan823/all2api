@@ -38,23 +38,16 @@ func TestPoolSourceFiltersByTaskPlatform(t *testing.T) {
 	_, src, _ := newWiredHost(seededAccounts())
 	ctx := context.Background()
 
-	// cat_travel is workbuddy-only.
-	batch, err := src.Accounts(ctx, schedule.TaskCatTravel)
-	if err != nil {
-		t.Fatalf("cat_travel listing: %v", err)
-	}
-	if len(batch) != 1 || batch[0].ID != "w1" || batch[0].Platform != "workbuddy" {
-		t.Fatalf("cat_travel batch = %+v, want only workbuddy w1", batch)
-	}
-
-	// Cross-platform tasks see all three platforms.
-	for _, task := range []string{schedule.TaskSignin, schedule.TaskActiveCheck, schedule.TaskTokenKeepalive} {
+	// Since M3b every task is workbuddy-only: the one wired schedule upstream
+	// is the workbuddy task client, and the source must not offer accounts to
+	// an upstream that cannot serve them.
+	for _, task := range []string{schedule.TaskSignin, schedule.TaskActiveCheck, schedule.TaskCatTravel, schedule.TaskTokenKeepalive} {
 		batch, err := src.Accounts(ctx, task)
 		if err != nil {
 			t.Fatalf("%s listing: %v", task, err)
 		}
-		if len(batch) != 3 {
-			t.Fatalf("%s batch = %d accounts, want 3", task, len(batch))
+		if len(batch) != 1 || batch[0].ID != "w1" || batch[0].Platform != "workbuddy" {
+			t.Fatalf("%s batch = %+v, want only workbuddy w1", task, batch)
 		}
 	}
 }
@@ -150,16 +143,16 @@ func TestPoolStoreUnknownAccountErrors(t *testing.T) {
 }
 
 // TestStubUpstreamSkipSemantics runs the real handler batch against the stub
-// upstream over a real pool: every op reports ErrUnsupportedTask, so handlers
-// must count Skipped, write nothing back, and keep the batch success.
+// upstream (NewScheduleStubUpstream — the qoder/trae-build production shape)
+// over a real pool: every op reports ErrUnsupportedTask, so handlers must
+// count Skipped, write nothing back, and keep the batch success.
 func TestStubUpstreamSkipSemantics(t *testing.T) {
 	sel := pool.NewWeightedRandomSelector(100, 3, 60)
 	sel.AddAccount(&pool.Account{ID: "w1", Platform: "workbuddy", Credit: 500, Health: 1.0, Status: "active"})
-	sel.AddAccount(&pool.Account{ID: "q1", Platform: "qoder", Credit: 500, Health: 1.0, Status: "active"})
 
 	deps := &schedule.Deps{
 		Source:          NewScheduleSource(sel),
-		Upstream:        NewScheduleUpstream(),
+		Upstream:        NewScheduleStubUpstream(),
 		Store:           NewScheduleStore(sel),
 		FailureCooldown: 60 * time.Second,
 	}
@@ -179,11 +172,10 @@ func TestStubUpstreamSkipSemantics(t *testing.T) {
 	}
 
 	want := map[string]schedule.RunStats{
-		schedule.TaskSignin:         {Task: schedule.TaskSignin, Total: 2, Skipped: 2},
-		schedule.TaskActiveCheck:    {Task: schedule.TaskActiveCheck, Total: 2, Skipped: 2},
-		schedule.TaskTokenKeepalive: {Task: schedule.TaskTokenKeepalive, Total: 2, Skipped: 2},
-		// cat_travel is workbuddy-only: qoder never enters the batch.
-		schedule.TaskCatTravel: {Task: schedule.TaskCatTravel, Total: 1, Skipped: 1},
+		schedule.TaskSignin:         {Task: schedule.TaskSignin, Total: 1, Skipped: 1},
+		schedule.TaskActiveCheck:    {Task: schedule.TaskActiveCheck, Total: 1, Skipped: 1},
+		schedule.TaskTokenKeepalive: {Task: schedule.TaskTokenKeepalive, Total: 1, Skipped: 1},
+		schedule.TaskCatTravel:      {Task: schedule.TaskCatTravel, Total: 1, Skipped: 1},
 	}
 	if len(runs) != 4 {
 		t.Fatalf("ReportStats called %d times, want 4", len(runs))
@@ -207,7 +199,7 @@ func TestStubUpstreamSkipSemantics(t *testing.T) {
 }
 
 func TestStubUpstreamErrorsWrapSentinel(t *testing.T) {
-	up := NewScheduleUpstream()
+	up := NewScheduleStubUpstream()
 	acc := &schedule.Account{ID: "w1", Platform: "workbuddy", Status: schedule.AccountActive}
 	ctx := context.Background()
 
@@ -232,7 +224,7 @@ func TestDepsAssemblyContract(t *testing.T) {
 	_, src, store := newWiredHost(seededAccounts())
 	deps := &schedule.Deps{
 		Source:          src,
-		Upstream:        NewScheduleUpstream(),
+		Upstream:        NewScheduleUpstream(nil), // real upstream shape; ops are not invoked here
 		Store:           store,
 		FailureCooldown: 60 * time.Second,
 		Crons: schedule.Crons{
