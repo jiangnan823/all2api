@@ -5,7 +5,9 @@ import {
   ACCOUNTS_POLL_MS,
   addQoderAccount,
   addWorkbuddyAccount,
+  checkinAccount,
   fetchAccounts,
+  refreshAccountBalance,
   pauseAccount,
   relativeTime,
   removeAccount,
@@ -119,7 +121,7 @@ function AccountIdCell(props: { id: string }) {
   );
 }
 
-type AccountAction = 'pause' | 'resume' | 'remove';
+type AccountAction = 'pause' | 'resume' | 'remove' | 'checkin' | 'balance';
 
 /** 状态列：paused 判定优先于 status（灰徽「已暂停选号」）；否则按 statusTone 徽色 + 中文文案。 */
 function StatusBadge(props: { entry: AccountEntry }) {
@@ -205,6 +207,24 @@ function AccountActions(props: {
       <button type="button" className="pool-act" onClick={() => onTasks(a)}>
         {GROWTH.BTN_OPEN}
       </button>
+      <button
+        type="button"
+        className="pool-act"
+        disabled={busy}
+        title={ACCOUNTS.BTN_CHECKIN_TITLE}
+        onClick={() => onAction('checkin', a)}
+      >
+        {ACCOUNTS.BTN_CHECKIN}
+      </button>
+      <button
+        type="button"
+        className="pool-act"
+        disabled={busy}
+        title={ACCOUNTS.BTN_BALANCE_TITLE}
+        onClick={() => onAction('balance', a)}
+      >
+        {ACCOUNTS.BTN_BALANCE}
+      </button>
       {a.paused ? (
         <button
           type="button"
@@ -273,6 +293,8 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       try {
         if (action === 'pause') await pauseAccount(entry.platform, entry.id);
         else if (action === 'resume') await resumeAccount(entry.platform, entry.id);
+        else if (action === 'checkin') await checkinAccount(entry.platform, entry.id);
+        else if (action === 'balance') await refreshAccountBalance(entry.platform, entry.id);
         else await removeAccount(entry.platform, entry.id);
         await load(); // 以服务端快照为准重建表格：删除成功即从表格消失
       } catch (err) {

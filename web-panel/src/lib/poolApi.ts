@@ -317,3 +317,32 @@ export function resumeAccount(platform: string, id: string): Promise<AccountActi
 export function removeAccount(platform: string, id: string): Promise<AccountActionResponse> {
   return postAccountAction(accountActionPath(platform, id, 'remove'));
 }
+
+/** POST /api/accounts/{platform}:{id}/checkin — 手动签到（上游幂等）。 */
+export function checkinAccount(platform: string, id: string): Promise<void> {
+  return apiPostEmpty(`/api/accounts/${encodeURIComponent(platform)}:${encodeURIComponent(id)}/checkin`);
+}
+
+/** POST /api/accounts/{platform}:{id}/balance — 立即重查上游余额并回写池。 */
+export function refreshAccountBalance(platform: string, id: string): Promise<void> {
+  return apiPostEmpty(`/api/accounts/${encodeURIComponent(platform)}:${encodeURIComponent(id)}/balance`);
+}
+
+/** POST 空体 + {error} 信封逐字上抛。 */
+async function apiPostEmpty(path: string): Promise<void> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      // 非 JSON 响应：保留 HTTP 码
+    }
+    throw new Error(msg);
+  }
+}
