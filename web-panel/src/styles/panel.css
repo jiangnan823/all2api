@@ -1313,3 +1313,50 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- v1.2 集成：账号池总览页（全平台摘要卡 + 下钻）。---- */
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-4);
+}
+
+.ov-card {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.ov-card__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ov-card__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.ov-card__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.ov-card__row dd {
+  margin: 0;
+  font-family: var(--mono);
+  color: var(--text-primary);
+}

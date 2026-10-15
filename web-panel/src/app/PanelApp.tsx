@@ -3,10 +3,21 @@ import { NAV, PANEL, settingsLine } from '../i18n/zh';
 import { probePillStatus, PILL_POLL_MS, type PillStatus } from '../lib/statusPill';
 import { AccountsScreen } from './AccountsScreen';
 import { LogsScreen } from './LogsScreen';
+import { ModelsScreen } from './ModelsScreen';
+import { OverviewScreen } from './OverviewScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { TasksScreen } from './TasksScreen';
 
 type Theme = 'light' | 'dark';
 type SectionId = 'accounts' | 'tasks' | 'models' | 'settings' | 'logs';
+/** v1.2 账号池二级菜单：总览 + 分平台明细。内存态，不落 storage（M1 红线）。 */
+type AccountView = 'overview' | 'workbuddy' | 'qoder' | 'trae';
+
+const PLATFORMS: ReadonlyArray<{ id: Exclude<AccountView, 'overview'>; label: string }> = [
+  { id: 'workbuddy', label: 'WorkBuddy' },
+  { id: 'qoder', label: 'Qoder' },
+  { id: 'trae', label: 'Trae' },
+];
 
 /** 首屏跟随系统；用户一旦手动切换即以 data-theme 显式覆盖（tokens.css 两档都有落值）。 */
 function preferredTheme(): Theme {
@@ -113,27 +124,14 @@ function pillCopy(status: PillStatus): { value: string; detail: string | null } 
 }
 
 /**
- * 并行批占位屏（M5b）：任务中心 / 模型两屏由并行 agent 交付（TasksScreen / ModelsScreen），
- * 合入前这里如实标注「并行开发中」，集成方在 ScreenFor 分支处替换为真实组件。
- */
-function PlaceholderScreen(props: { name: string }) {
-  return (
-    <div className="pool-empty">
-      <h3 className="pool-empty__title">{PANEL.PLACEHOLDER_TITLE}</h3>
-      <p className="pool-empty__body">{settingsLine(PANEL.PLACEHOLDER_BODY, { name: props.name })}</p>
-    </div>
-  );
-}
-
-/**
- * B1 面板外壳 → M5b 信息架构重建：左 rail 五项可见中文页签（icon + 文字同显）+
- * 顶栏 + 单活动视图内容区。账号池首屏；配置页签原样挂载 SettingsScreen；
- * 日志页签挂 LogsScreen；任务中心 / 模型为并行批占位。connect 空状态节随重建退役。
- * 主题切换仍只在内存态（M1 红线）。
+ * B1 面板外壳 → M5b 信息架构重建 → v1.2 二级菜单：左 rail 五项可见中文页签，
+ * 「账号池」下挂二级菜单（总览 + 分平台明细，主人裁定 2026-10-15）；任务中心 /
+ * 模型挂并行批交付的真实屏；配置/日志原样。主题切换仍只在内存态（M1 红线）。
  */
 export function PanelApp() {
   const [theme, toggleTheme] = useTheme();
   const [active, setActive] = useState<SectionId>('accounts');
+  const [accView, setAccView] = useState<AccountView>('overview');
 
   return (
     <div className="shell">
@@ -157,6 +155,21 @@ export function PanelApp() {
               <span className="shell__nav-text">{item.label}</span>
             </a>
           ))}
+          {active === 'accounts' && (
+            <div className="shell__subnav" role="navigation" aria-label={NAV.ACCOUNTS}>
+              {(['overview', ...PLATFORMS.map((p) => p.id)] as AccountView[]).map((v) => (
+                <a
+                  key={v}
+                  className="shell__nav-link shell__nav-link--sub"
+                  href="#accounts"
+                  aria-current={accView === v ? 'page' : undefined}
+                  onClick={() => setAccView(v)}
+                >
+                  <span className="shell__nav-text">{v === 'overview' ? PANEL.ACC_OVERVIEW : PLATFORMS.find((p) => p.id === v)?.label}</span>
+                </a>
+              ))}
+            </div>
+          )}
         </nav>
       </aside>
 
@@ -181,10 +194,14 @@ export function PanelApp() {
             <section className="shell__section" id="accounts" aria-labelledby="shell-h-accounts">
               <div className="shell__section-head">
                 <h2 className="shell__section-title" id="shell-h-accounts">
-                  {NAV.ACCOUNTS}
+                  {accView === 'overview' ? PANEL.ACC_OVERVIEW_TITLE : `${NAV.ACCOUNTS} · ${PLATFORMS.find((p) => p.id === accView)?.label}`}
                 </h2>
               </div>
-              <AccountsScreen />
+              {accView === 'overview' ? (
+                <OverviewScreen onOpen={(p: 'workbuddy' | 'qoder' | 'trae') => setAccView(p)} />
+              ) : (
+                <AccountsScreen platform={accView} />
+              )}
             </section>
           )}
 
@@ -195,8 +212,7 @@ export function PanelApp() {
                   {NAV.TASKS}
                 </h2>
               </div>
-              {/* 并行批占位：集成方替换为 <TasksScreen />（src/app/TasksScreen.tsx，归并行批所有） */}
-              <PlaceholderScreen name={NAV.TASKS} />
+              <TasksScreen />
             </section>
           )}
 
@@ -207,8 +223,7 @@ export function PanelApp() {
                   {NAV.MODELS}
                 </h2>
               </div>
-              {/* 并行批占位：集成方替换为 <ModelsScreen />（src/app/ModelsScreen.tsx，归并行批所有） */}
-              <PlaceholderScreen name={NAV.MODELS} />
+              <ModelsScreen />
             </section>
           )}
 

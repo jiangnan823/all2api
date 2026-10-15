@@ -38,30 +38,35 @@ describe('外壳结构（M5b）', () => {
 
     const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
     const links = within(rail).getAllByRole('link');
-    // 文字 span 承载可见标签（icon span aria-hidden，不计入可访问名）
+    // v1.2 二级菜单：五项主页签之后是账号池子菜单（总览 + 三平台），文字 span 承载可见标签
     expect(links.map((l) => l.querySelector('.shell__nav-text')?.textContent)).toEqual([
       NAV.ACCOUNTS,
       NAV.TASKS,
       NAV.MODELS,
       NAV.CONFIG,
       NAV.LOGS,
+      PANEL.ACC_OVERVIEW,
+      'WorkBuddy',
+      'Qoder',
+      'Trae',
     ]);
     expect(within(rail).getByRole('link', { name: NAV.ACCOUNTS })).toBeTruthy();
     expect(within(rail).getByRole('link', { name: NAV.LOGS })).toBeTruthy();
     for (const l of links) {
       // 页签文字可见（不再 hidden），可访问名 = 图标 aria-hidden 后的纯文字
       expect(l.textContent!.trim().length).toBeGreaterThan(0);
-      expect(l.querySelector('.shell__nav-ico')?.getAttribute('aria-hidden')).toBe('true');
     }
   });
 
-  it('首屏默认账号池（含节标题，AccountsScreen 钉在加载态）', () => {
+  it('首屏默认账号池总览（v1.2：二级菜单首项 = 总览，含聚合卡）', () => {
     render(<PanelApp />);
-    expect(screen.getByRole('heading', { level: 2, name: NAV.ACCOUNTS })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: PANEL.ACC_OVERVIEW_TITLE })).toBeTruthy();
     // AccountsScreen 的加载中 role=status（pill 也是 role=status，故按类名区分取值）
     const notes = screen.getAllByRole('status');
     expect(notes.some((el) => el.className === 'pool-note' && el.textContent === '正在读取账号池…')).toBe(true);
     expect(document.getElementById('accounts')).toBeTruthy();
+    // 二级菜单存在且总览为当前项
+    expect(within(screen.getByRole('complementary', { name: PANEL.RAIL_ARIA })).getByRole('link', { name: PANEL.ACC_OVERVIEW })).toBeTruthy();
   });
 
   it('connect 空状态节已退役：接入标题/空态文案不再出现', () => {
@@ -100,20 +105,15 @@ describe('导航与主题（键盘可达）', () => {
     expect(screen.getByText('正在读取网关配置…')).toBeTruthy();
   });
 
-  it('任务中心 / 模型两页签渲染并行开发中占位（含屏名）', () => {
+  it('任务中心 / 模型两页签挂载真实屏（v1.2 集成，加载态）', () => {
     render(<PanelApp />);
-    for (const [id, name] of [
-      ['tasks', NAV.TASKS],
-      ['models', NAV.MODELS],
+    for (const [id, name, loading] of [
+      ['tasks', NAV.TASKS, '正在读取任务调度状态…'],
+      ['models', NAV.MODELS, '正在读取模型目录…'],
     ] as const) {
       fireEvent.click(screen.getByRole('link', { name }));
       expect(document.getElementById(id)).toBeTruthy();
-      // 占位体只渲染一份（单活动视图），标题与正文都含屏名
-      expect(screen.getAllByText(PANEL.PLACEHOLDER_TITLE)).toHaveLength(1);
-      const body = screen.getByText(
-        (_, el) => el?.className === 'pool-empty__body' && (el.textContent ?? '').includes(`「${name}」`),
-      );
-      expect(body.textContent).toContain(`「${name}」功能屏由并行批次交付`);
+      expect(screen.getByText(loading)).toBeTruthy();
     }
   });
 

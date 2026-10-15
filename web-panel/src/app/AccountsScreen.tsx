@@ -102,8 +102,12 @@ function AccountRow(props: { entry: AccountEntry }) {
 /**
  * 账号池屏容器：加载/错误/空池/就绪四态；就绪态 = 状态卡行 + 表格。
  * 30s 轮询在四态下都保持（错误态下一轮也可能自愈），手动「刷新」立即重拉。
+ *
+ * v1.2 二级菜单：`platform` 传入时分平台过滤（undefined = 总览，聚合取全量）。
+ * 过滤是纯前端切片——/api/accounts 一次拉全量，避免按平台轮询多次。
  */
-export function AccountsScreen() {
+export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae' }) {
+  const filter = props.platform;
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const seqRef = useRef(0);
 
@@ -143,7 +147,18 @@ export function AccountsScreen() {
   }
 
   const { data } = state;
-  if (data.accounts.length === 0) {
+  // v1.2：平台切片（明细页）；聚合卡也按切片重算（总览页走全量，不做二次聚合）。
+  const scoped = filter ? data.accounts.filter((a) => a.platform === filter) : data.accounts;
+  const agg = filter
+    ? {
+        total: scoped.length,
+        active: scoped.filter((a) => a.status === 'active').length,
+        cooling: scoped.filter((a) => a.status === 'cooling').length,
+        disabled: scoped.filter((a) => a.status === 'disabled').length,
+        creditTotal: scoped.reduce((sum, a) => sum + (a.credit ?? 0), 0),
+      }
+    : { total: data.total, active: data.active, cooling: data.cooling, disabled: data.disabled, creditTotal: data.creditTotal };
+  if (scoped.length === 0) {
     return (
       <div className="pool-empty">
         <h3 className="pool-empty__title">{ACCOUNTS.EMPTY_TITLE}</h3>
@@ -167,30 +182,30 @@ export function AccountsScreen() {
       <ul className="pool-cards" aria-label={ACCOUNTS.CARD_TOTAL}>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_TOTAL}</span>
-          <span className="pool-card__value">{data.total}</span>
+          <span className="pool-card__value">{agg.total}</span>
         </li>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_ACTIVE}</span>
-          <span className="pool-card__value pool-card__value--ok">{data.active}</span>
+          <span className="pool-card__value pool-card__value--ok">{agg.active}</span>
         </li>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_COOLING}</span>
-          <span className="pool-card__value pool-card__value--warn">{data.cooling}</span>
+          <span className="pool-card__value pool-card__value--warn">{agg.cooling}</span>
         </li>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_DISABLED}</span>
-          <span className="pool-card__value pool-card__value--err">{data.disabled}</span>
+          <span className="pool-card__value pool-card__value--err">{agg.disabled}</span>
         </li>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_CREDIT}</span>
-          <span className="pool-card__value">{fmtCredit(data.creditTotal, ACCOUNTS.DASH)}</span>
+          <span className="pool-card__value">{fmtCredit(agg.creditTotal, ACCOUNTS.DASH)}</span>
         </li>
       </ul>
 
       <table className="pool-table">
         <thead>
           <tr>
-            <th scope="col">{ACCOUNTS.COL_PLATFORM}</th>
+            {filter ? null : <th scope="col">{ACCOUNTS.COL_PLATFORM}</th>}
             <th scope="col">{ACCOUNTS.COL_ACCOUNT}</th>
             <th scope="col">{ACCOUNTS.COL_STATUS}</th>
             <th scope="col">{ACCOUNTS.COL_CREDIT}</th>
@@ -200,7 +215,7 @@ export function AccountsScreen() {
           </tr>
         </thead>
         <tbody>
-          {data.accounts.map((a) => (
+          {scoped.map((a) => (
             <AccountRow key={`${a.platform}:${a.id}`} entry={a} />
           ))}
         </tbody>
