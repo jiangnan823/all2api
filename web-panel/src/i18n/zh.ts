@@ -661,3 +661,36 @@ export const LOGIN = {
   ERROR_PREFIX: '登录失败：',
   FINISH: '完成',
 } as const;
+
+/**
+ * 积分到期提醒卡（M9a，账号池明细页下方）。数据源 GET /api/packages
+ * （上游逐包实时查询，FEFO 升序）；单号探查失败原样显示错误。
+ */
+export const PACKAGES = {
+  TITLE: '积分到期提醒',
+  NOTE: '按最近到期批次估算 · 日均需耗 = 批次剩余 ÷ 距到期天数 · 上游按失效时刻先后自动优先扣减（FEFO）',
+  LOADING: '正在实时查询上游积分批次…',
+  REFRESH: '检查',
+  NEAREST: '最近到期 {date}（{days} 天后到期）· 该批 {remain} 积分 · 到期前日均需耗 ≈{daily}',
+  BATCH_LINE: '随后 {date} · {remain}',
+} as const;
+
+/**
+ * 模型锁池卡（M9b，账号池明细页下方）：数据源 GET /api/model-locks
+ * （网关路由层 429 观测的模型级锁聚合）；空态 = 所有模型均可选。
+ */
+export const MODELLOCKS = {
+  TITLE: '模型锁池',
+  REFRESH: '刷新',
+  LOADING: '正在读取模型锁池…',
+  EMPTY: '当前没有模型级限流 —— 所有模型均可选',
+  COL_MODEL: '模型',
+  COL_LOCKED: '锁定账号',
+  COL_EARLIEST: '最早解锁',
+  COL_REASON: '原因',
+} as const;
+
+/**
+ * 积分到期提醒卡（M9a，账号池明细页下方）。数据源 GET /api/packages
+ * （上游逐包实时查询，FEFO 升序）；单号探查失败原样显示错误。
+ */
