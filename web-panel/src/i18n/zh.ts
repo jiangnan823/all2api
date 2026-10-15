@@ -277,8 +277,10 @@ export const ACCOUNTS = {
 } as const;
 
 /**
- * 运行日志屏文案（M5b）。数据端点 GET /api/logs?limit=200 由后端并行批交付；
- * 级别过滤只内置 全部/info/error 三档，其他级别在「全部」下如实显示。
+ * 运行日志屏文案（M5b；M8-reqlog 追加 TAB_/RESULT_/REQ_ 组——请求记录 tab，
+ * 全部为新增键，不改动上方任何冻结段）。数据端点 GET /api/logs?limit=200 与
+ * GET /api/requests?limit=300&result=…；级别过滤只内置 全部/info/error 三档，
+ * 其他级别在「全部」下如实显示。
  */
 export const LOGS = {
   SUB: '网关运行日志实时滚动，可按级别过滤，每 10 秒自动刷新。',
@@ -296,6 +298,30 @@ export const LOGS = {
   DASH: '—',
   EMPTY_TITLE: '暂无日志',
   EMPTY_BODY: '网关产生新的运行日志后会自动出现在这里。',
+  TAB_LABEL: '日志屏视图',
+  TAB_RUNTIME: '运行日志',
+  TAB_REQUESTS: '请求记录',
+  RESULT_SUCCESS: '成功',
+  RESULT_ERROR: '失败',
+  RESULT_STREAM_ERROR: '流中断',
+  RESULT_INTERRUPTED: '客户端取消',
+  RESULT_UNKNOWN: '未知',
+  REQ_SUB: '最近 /v1 请求（旧→新），结果过滤为服务端口径，每 30 秒自动刷新。',
+  REQ_LOADING: '正在读取请求记录…',
+  REQ_ERROR_TITLE: '请求记录读取失败',
+  REQ_FILTER_LABEL: '结果过滤',
+  REQ_FILTER_SUCCESS: '成功',
+  REQ_FILTER_ERROR: '失败',
+  REQ_EMPTY_TITLE: '暂无请求记录',
+  REQ_EMPTY_BODY: '网关处理新的 /v1 请求后会自动出现在这里。',
+  REQ_LIST_LABEL: '请求记录表',
+  REQ_COL_TIME: '时间',
+  REQ_COL_RESULT: '结果',
+  REQ_COL_MODEL: '模型',
+  REQ_COL_ACCOUNT: '账号',
+  REQ_COL_LATENCY: '耗时',
+  REQ_COL_TOKENS: 'Token（输入/输出）',
+  REQ_MS: '{ms} ms',
 } as const;
 
 /**
@@ -545,4 +571,21 @@ export const GROWTH = {
   REWARD_CREDIT: '+{n} 分',
   REWARD_ENERGY: '+{n} 能',
   DASH: '—',
+} as const;
+
+/**
+ * 用量 KPI 文案（M8-reqlog）。数据端点 GET /api/usage（本次运行口径，
+ * 进程重启清零）；全部为**新增键**，独立追加不与上方冻结段冲突。
+ * 边界如实：流式请求上游当前不下发 usage，token 口径只含非流式回包，
+ * 前端不做任何折算或补零。
+ */
+export const USAGE = {
+  WINDOW_BADGE: '本次运行',
+  WINDOW_NOTE: '进程重启清零',
+  KPI_REQUESTS: '请求',
+  KPI_FAIL: '失败',
+  KPI_PROMPT: '输入 tokens',
+  KPI_COMPLETION: '输出 tokens',
+  ARIA_LABEL: '本次运行用量摘要',
+  ERROR_NOTE: '用量数据读取失败，30 秒后自动重试。',
 } as const;

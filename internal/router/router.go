@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"all2api/internal/adapter"
 	"all2api/internal/config"
 	"all2api/internal/host"
 	"all2api/internal/pool"
+	"all2api/internal/usage"
 )
 
 // OpenAI error envelope types (subset the gateway actually emits).
@@ -193,6 +195,24 @@ func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, err
 // account — no router-side retry ring. The loop ends when Select finds no
 // eligible account left.
 func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.ChatRequest) {
+	// M8 request ledger: exactly one entry per client request, emitted by the
+	// deferred record below whatever the exit path. Result defaults to
+	// "error" (the validation/pool-exhaustion exits); success-shaped paths
+	// overwrite it before returning. Platform/account land here as the
+	// pipeline resolves them, so a retried request shows its last attempt.
+	start := time.Now()
+	ledger := usage.RequestEntry{
+		TS:               start,
+		Result:           usage.ResultError,
+		Model:            bareModelName(req.Model),
+		PromptTokens:     -1,
+		CompletionTokens: -1,
+	}
+	defer func() {
+		ledger.Latency = time.Since(start)
+		usage.Default.Record(ledger)
+	}()
+
 	if strings.TrimSpace(req.Model) == "" {
 		writeError(w, http.StatusBadRequest, apiError{
 			Message: "you must provide a model parameter",
@@ -210,6 +230,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 		})
 		return
 	}
+	ledger.Platform = platform
 	sender, ok := a.(adapter.Sender)
 	if !ok {
 		// Interface-first reality: adapters ship without an upstream HTTP
@@ -258,6 +279,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 	var lastErr error
 	for {
 		if err := r.Context().Err(); err != nil {
+			ledger.Result = usage.ResultInterrupted
 			return // client went away — nothing left to report or bill
 		}
 		if !gate() {
@@ -291,13 +313,17 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			return
 		}
 		leased = append(leased, acct.ID)
+		ledger.AccountID = usage.ShortID(acct.ID)
 		// Observation plane (M6a): the attempt is in flight from here
 		// until its completion; every outcome path below pairs one
 		// finishAttempt decrement with the existing UpdateHealth call.
 		rt.host.Pool.InFlightAdd(platform, acct.ID, +1)
 
 		if req.Stream {
-			committed, streamErr := rt.relayStream(w, r.Context(), sender, acct, req)
+			committed, reqID, streamErr := rt.relayStream(w, r.Context(), sender, acct, req)
+			if reqID != "" {
+				ledger.RequestID = reqID
+			}
 			if !committed {
 				// Outright stream-start failure: same retry path as SendChat.
 				lastErr = streamErr
@@ -305,14 +331,23 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 				continue
 			}
-			if streamErr == nil {
+			switch {
+			case streamErr == nil:
+				ledger.Result = usage.ResultSuccess
 				rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
 				rt.finishAttempt(platform, acct.ID, "success")
-			} else {
+			case errors.Is(streamErr, context.Canceled):
+				// Client disconnect mid-stream: the upstream outcome stays
+				// unobserved — recorded as interrupted, not as a failure.
+				ledger.Result = usage.ResultInterrupted
+				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
+				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
+			default:
 				// Mid-stream failure: the classification of the upstream error
 				// (429 vs 5xx vs timeout) still feeds the breaker — Record is
 				// keyed on the upstream status, not on the wire status that
 				// stays committed at 200.
+				ledger.Result = usage.ResultStreamError
 				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 			}
@@ -321,6 +356,9 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 
 		resp, err := sender.SendChat(r.Context(), acct, req)
 		if err == nil {
+			ledger.Result = usage.ResultSuccess
+			ledger.RequestID = resp.ID
+			ledger.PromptTokens, ledger.CompletionTokens = usage.TokensFromAdapterUsage(resp.Usage)
 			rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
 			rt.finishAttempt(platform, acct.ID, "success")
 			writeJSON(w, http.StatusOK, resp)
@@ -330,6 +368,16 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 		rt.recordSendOutcome(platform, acct.ID, upstreamStatus(err), err)
 		rt.finishAttempt(platform, acct.ID, healthStatus(err))
 	}
+}
+
+// bareModelName strips a "platform/" routing prefix for the ledger, matching
+// what the upstream actually received (the dispatch strip happens only after
+// a successful route).
+func bareModelName(model string) string {
+	if i := strings.Index(model, "/"); i > 0 {
+		return model[i+1:]
+	}
+	return model
 }
 
 // finishAttempt closes one dispatch attempt: the in-flight counter booked at
@@ -453,10 +501,12 @@ func (rt *Router) disabledPlatforms() map[string]bool {
 // may retry on the next account; once committed, the status line is out and
 // a mid-stream failure can only travel as an in-band error frame (followed
 // by stream close without [DONE], so clients must not treat it as complete).
-func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender adapter.Sender, acct *pool.Account, req adapter.ChatRequest) (committed bool, streamErr error) {
+// requestID is the completion id observed on the first chunk carrying one,
+// for the request ledger ("" when the stream died before any id showed up).
+func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender adapter.Sender, acct *pool.Account, req adapter.ChatRequest) (committed bool, requestID string, streamErr error) {
 	chunks, errCh, err := sender.SendChatStream(ctx, acct, req)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -480,18 +530,21 @@ func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender
 		case <-ctx.Done():
 			// Client disconnected: stop relaying; the cancelled ctx also
 			// tells the sender goroutines to stand down.
-			return true, ctx.Err()
+			return true, requestID, ctx.Err()
 		case chunk, ok := <-chunks:
 			if !ok {
 				writeFrame("[DONE]")
-				return true, nil
+				return true, requestID, nil
+			}
+			if requestID == "" && chunk.ID != "" {
+				requestID = chunk.ID
 			}
 			payload, mErr := json.Marshal(chunk)
 			if mErr != nil {
-				return true, mErr
+				return true, requestID, mErr
 			}
 			if !writeFrame(string(payload)) {
-				return true, nil
+				return true, requestID, nil
 			}
 		case upErr, ok := <-errCh:
 			if !ok {
@@ -502,7 +555,7 @@ func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender
 			if payload, mErr := json.Marshal(errorEnvelope{Error: e}); mErr == nil {
 				writeFrame(string(payload))
 			}
-			return true, upErr
+			return true, requestID, upErr
 		}
 	}
 }
