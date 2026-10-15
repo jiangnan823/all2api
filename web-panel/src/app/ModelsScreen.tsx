@@ -184,7 +184,7 @@ export function ModelsScreen() {
                     <code>{m.model}</code>
                     {m.note !== null && <span className="models-screen__model-note">{m.note}</span>}
                   </td>
-                  <td className="models-screen__num">{numOrUnknown(m.contextSize)}</td>
+                  <td className="models-screen__num">{m.contextSize !== null && m.contextSize > 0 ? m.contextSize.toLocaleString() : numOrUnknown(null)}</td>
                   <td className="models-screen__num">{numOrUnknown(m.maxOutput)}</td>
                   <td>{triCopy(m.supportsTool)}</td>
                   <td>{triCopy(m.supportsStream)}</td>

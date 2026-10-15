@@ -19,8 +19,8 @@ interface TaskLastRun {
   success: number;
   failed: number;
   skipped: number;
-  /** 服务器本地展示串（与 /api/time 的 local 同源风格），面板原样展示不做时区换算。 */
-  at: string;
+  /** M5a wire 为 TimeLocal 双形态 {unix, local}；面板用 local 串原样展示。 */
+  at: { unix: number; local: string };
 }
 
 interface TaskEntry {
@@ -58,6 +58,14 @@ function reqStr(v: unknown, where: string): string {
   return v;
 }
 
+/** TimeLocal 双形态解析（{unix, local}）；形状不对即抛（与 reqStr 同纪律）。 */
+function parseTimeLocal(v: unknown, where: string): { unix: number; local: string } {
+  const o = asObj(v, where);
+  const unix = reqNum(o['unix'], `${where}.unix`);
+  const local = reqStr(o['local'], `${where}.local`);
+  return { unix, local };
+}
+
 function parseTasksWire(body: unknown): TaskEntry[] {
   const root = asObj(body, '(root)');
   const arr = root['tasks'];
@@ -77,7 +85,7 @@ function parseTasksWire(body: unknown): TaskEntry[] {
         success: reqNum(l['success'], `tasks[${i}].last_run.success`),
         failed: reqNum(l['failed'], `tasks[${i}].last_run.failed`),
         skipped: reqNum(l['skipped'], `tasks[${i}].last_run.skipped`),
-        at: reqStr(l['at'], `tasks[${i}].last_run.at`),
+        at: parseTimeLocal(l['at'], `tasks[${i}].last_run.at`),
       };
     }
     return { name, cron, enabled: t['enabled'], lastRun };
@@ -214,7 +222,7 @@ function TaskCard({ task }: { task: TaskEntry }) {
                 <dd className={last.skipped > 0 ? 'tasks-screen__stat-num--skipped' : undefined}>{last.skipped}</dd>
               </div>
             </dl>
-            <p className="tasks-screen__ran-at">{settingsLine(TASKS.RAN_AT, { at: last.at })}</p>
+            <p className="tasks-screen__ran-at">{settingsLine(TASKS.RAN_AT, { at: last.at.local })}</p>
           </>
         )}
       </div>

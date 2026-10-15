@@ -20,13 +20,13 @@ const TASKS_WIRE = {
       name: 'signin',
       cron: '0 9,21 * * *',
       enabled: true,
-      last_run: { name: 'signin', total: 3, success: 2, failed: 1, skipped: 0, at: '2026-10-15 09:03:21' },
+      last_run: { name: 'signin', total: 3, success: 2, failed: 1, skipped: 0, at: { unix: 1760000200, local: '2026-10-15 10:00:00' } },
     },
     {
       name: 'active_check',
       cron: '0 10 * * *',
       enabled: true,
-      last_run: { total: 5, success: 5, failed: 0, skipped: 0, at: '2026-10-15 10:00:44' },
+      last_run: { total: 5, success: 5, failed: 0, skipped: 0, at: { unix: 1760000200, local: '2026-10-15 10:00:00' } },
     },
     {
       name: 'cat_travel',
@@ -38,7 +38,7 @@ const TASKS_WIRE = {
       name: 'token_keepalive',
       cron: '0 22 * * *',
       enabled: true,
-      last_run: { total: 4, success: 3, failed: 0, skipped: 1, at: '2026-10-14 22:00:07' },
+      last_run: { total: 4, success: 3, failed: 0, skipped: 1, at: { unix: 1760000200, local: '2026-10-15 10:00:00' } },
     },
   ],
 };
@@ -141,7 +141,7 @@ describe('任务中心屏 — 卡片内容（中文名 / cron / 徽色 / 统计�
     expect(signin.textContent).toContain('3'); // total
     expect(signin.textContent).toContain('2'); // success
     expect(signin.textContent).toContain('1'); // failed
-    expect(signin.textContent).toContain('2026-10-15 09:03:21');
+    expect(signin.textContent).toContain('2026-10-15 10:00:00');
     expect(signin.textContent).toContain(TASKS.STAT_SKIPPED); // skipped=0 也展示列名
   });
 
