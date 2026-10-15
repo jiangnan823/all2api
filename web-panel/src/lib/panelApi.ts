@@ -40,7 +40,7 @@ export function setApiKeyProvider(provider: () => string): void {
   apiKeyProvider = provider;
 }
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const key = apiKeyProvider().trim();
   return key === '' ? {} : { 'X-API-Key': key };
 }

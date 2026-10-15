@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NAV, PANEL, settingsLine } from '../i18n/zh';
 import { probePillStatus, PILL_POLL_MS, type PillStatus } from '../lib/statusPill';
 import { AccountsScreen } from './AccountsScreen';
@@ -154,22 +154,28 @@ export function PanelApp() {
               </span>
               <span className="shell__nav-text">{item.label}</span>
             </a>
-          ))}
-          {active === 'accounts' && (
-            <div className="shell__subnav" role="navigation" aria-label={NAV.ACCOUNTS}>
-              {(['overview', ...PLATFORMS.map((p) => p.id)] as AccountView[]).map((v) => (
-                <a
-                  key={v}
-                  className="shell__nav-link shell__nav-link--sub"
-                  href="#accounts"
-                  aria-current={accView === v ? 'page' : undefined}
-                  onClick={() => setAccView(v)}
-                >
-                  <span className="shell__nav-text">{v === 'overview' ? PANEL.ACC_OVERVIEW : PLATFORMS.find((p) => p.id === v)?.label}</span>
-                </a>
-              ))}
-            </div>
-          )}
+          )).reduce<React.ReactNode[]>((acc, item, i) => {
+            acc.push(item);
+            // v1.2 二级菜单紧跟「账号池」项下方（主人裁定：子菜单必须贴近父项）。
+            if (NAV_ITEMS[i].id === 'accounts' && active === 'accounts') {
+              acc.push(
+                <div key="accounts-subnav" className="shell__subnav" role="navigation" aria-label={NAV.ACCOUNTS}>
+                  {(['overview', ...PLATFORMS.map((p) => p.id)] as AccountView[]).map((v) => (
+                    <a
+                      key={v}
+                      className="shell__nav-link shell__nav-link--sub"
+                      href="#accounts"
+                      aria-current={accView === v ? 'page' : undefined}
+                      onClick={() => setAccView(v)}
+                    >
+                      <span className="shell__nav-text">{v === 'overview' ? PANEL.ACC_OVERVIEW : PLATFORMS.find((p) => p.id === v)?.label}</span>
+                    </a>
+                  ))}
+                </div>,
+              );
+            }
+            return acc;
+          }, [])}
         </nav>
       </aside>
 

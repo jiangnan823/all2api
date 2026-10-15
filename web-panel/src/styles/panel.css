@@ -1444,3 +1444,70 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* ---- v1.2 集成：添加账号面板（各平台明细页内嵌）。---- */
+.add-account {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.add-account__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.add-account__hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  max-width: 72ch;
+  line-height: var(--lh-loose);
+}
+
+.add-account__hint code {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  background: var(--bg-surface);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.add-account__input {
+  background: var(--bg-surface);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+textarea.add-account__input {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+
+input.add-account__input {
+  width: 100%;
+  max-width: 420px;
+}
+
+.add-account__ok {
+  margin: 0;
+  color: var(--status-success, #3ddc97);
+  font-size: var(--fs-sm);
+}
+
+.add-account__error {
+  margin: 0;
+  color: var(--status-danger);
+  font-size: var(--fs-sm);
+}

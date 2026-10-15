@@ -44,6 +44,7 @@ func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats
 	mux.HandleFunc("GET /api/tasks", withAPIKey(handleTasks(sched, stats)))
 	mux.HandleFunc("GET /api/models", withAPIKey(handleModels))
 	mux.HandleFunc("GET /api/logs", withAPIKey(handleLogs(ring)))
+	registerAddAccount(mux, h)
 }
 
 // TaskSource is the read-only scheduler view panel_data needs (schedule

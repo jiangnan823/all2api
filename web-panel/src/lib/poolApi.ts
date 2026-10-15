@@ -47,7 +47,7 @@ export interface LogsSnapshot {
 /** 级别过滤档（UI 闭集）：other 兜底任一未知级别值。 */
 export type LogLevelFilter = 'all' | 'info' | 'error';
 
-import { ApiError, apiGet } from './panelApi';
+import { ApiError, apiGet, authHeaders } from './panelApi';
 
 export const LOGS_FETCH_LIMIT = 200;
 export const ACCOUNTS_POLL_MS = 30_000;
@@ -171,4 +171,47 @@ export function logLevelTone(level: string): 'err' | 'warn' | 'idle' {
 export function logMatchesFilter(entry: LogEntry, filter: LogLevelFilter): boolean {
   if (filter === 'all') return true;
   return entry.level.toLowerCase() === filter;
+}
+
+// ---------- 添加账号（v1.2 §1a：面板内一等操作，文件只是落盘位置） ----------
+
+export interface AddAccountResult {
+  ok: boolean;
+  platform: 'workbuddy' | 'qoder';
+  id: string;
+}
+
+/** POST /api/accounts/workbuddy（body = 官方桌面端凭证 JSON 原文）。 */
+export function addWorkbuddyAccount(rawJSON: string): Promise<AddAccountResult> {
+  return apiPostJson('/api/accounts/workbuddy', rawJSON);
+}
+
+/** POST /api/accounts/qoder（body = {"pat":"pt-…"}）。 */
+export function addQoderAccount(pat: string): Promise<AddAccountResult> {
+  return apiPostJson('/api/accounts/qoder', JSON.stringify({ pat }));
+}
+
+/** 通用 POST + {error} 信封解析（后端拒绝为 400 + 中文原因）。 */
+async function apiPostJson(path: string, body: string): Promise<AddAccountResult> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body,
+    });
+  } catch {
+    throw new ApiError('network error');
+  }
+  if (res.status === 401) throw new ApiError('HTTP 401', 401);
+  let parsed: { ok?: boolean; id?: string; error?: string };
+  try {
+    parsed = await res.json();
+  } catch {
+    throw new ApiError(`HTTP ${res.status}`, res.status);
+  }
+  if (parsed.ok === true && typeof parsed.id === 'string') {
+    return { ok: true, platform: path.endsWith('/qoder') ? 'qoder' : 'workbuddy', id: parsed.id };
+  }
+  throw new ApiError(parsed.error || `HTTP ${res.status}`, res.status);
 }

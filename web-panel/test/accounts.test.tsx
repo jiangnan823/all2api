@@ -184,11 +184,12 @@ describe('账号池屏 — 错误态 / 空态 / 轮询', () => {
     expect(await screen.findByText('wb-0123456789abcdef')).toBeTruthy();
   });
 
-  it('空池 → 引导文案（workbuddy-*.json 放入 auths\）+ 刷新按钮', async () => {
+  it('空池 → 添加向导引导（C1：空态必须有添加入口，不再教用户放文件）+ 刷新按钮', async () => {
     installFetch({ '/api/accounts': { body: { accounts: [], total: 0, active: 0, cooling: 0, disabled: 0, credit_total: 0 } } });
     render(<AccountsScreen />);
     expect(await screen.findByText(ACCOUNTS.EMPTY_TITLE)).toBeTruthy();
-    expect(screen.getByText(ACCOUNTS.EMPTY_BODY)).toBeTruthy();
+    expect(screen.getByText(ACCOUNTS.EMPTY_BODY, { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: ACCOUNTS.ADD_OPEN })).toBeTruthy();
     expect(screen.getByRole('button', { name: ACCOUNTS.REFRESH })).toBeTruthy();
   });
 

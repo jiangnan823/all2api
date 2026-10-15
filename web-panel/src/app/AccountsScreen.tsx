@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ACCOUNTS } from '../i18n/zh';
 import {
   ACCOUNTS_POLL_MS,
+  addQoderAccount,
+  addWorkbuddyAccount,
   fetchAccounts,
   statusTone,
   type AccountEntry,
@@ -47,6 +49,15 @@ function fmtUnix(sec: number | null, dash: string): string {
 
 function fmtCredit(n: number | null, dash: string): string {
   return n === null ? dash : n.toLocaleString();
+}
+
+/** 冷却截止 → 倒计时（"23 分钟"）；无冷却显示 —。纯前端换算，分钟粒度。 */
+function cooldownLabel(unix: number | null): string {
+  if (unix === null || unix === 0) return '—';
+  const ms = unix * 1000 - Date.now();
+  if (ms <= 0) return '即将解除';
+  const min = Math.ceil(ms / 60000);
+  return `${min} 分钟后`;
 }
 
 /** 账号 ID 全量显示 + 点击复制（clipboard API 不可用时如实不提示成功，不假成功）。 */
@@ -106,7 +117,7 @@ function AccountRow(props: { entry: AccountEntry; showPlatform: boolean }) {
       <td className="pool-table__num">{fmtCredit(a.credit, ACCOUNTS.DASH)}</td>
       <td>{a.health ?? ACCOUNTS.DASH}</td>
       <td className="pool-table__num">{fmtUnix(a.expiresAt, ACCOUNTS.DASH)}</td>
-      <td className="pool-table__num">{fmtUnix(a.cooldownEnd, ACCOUNTS.DASH)}</td>
+      <td className="pool-table__num">{cooldownLabel(a.cooldownEnd)}</td>
     </tr>
   );
 }
@@ -120,6 +131,7 @@ function AccountRow(props: { entry: AccountEntry; showPlatform: boolean }) {
  */
 export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae' }) {
   const filter = props.platform;
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const seqRef = useRef(0);
 
@@ -171,10 +183,23 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       }
     : { total: data.total, active: data.active, cooling: data.cooling, disabled: data.disabled, creditTotal: data.creditTotal };
   if (scoped.length === 0) {
+    // v1.2 C1/C1b：空池 = 添加向导入口（不是"去放文件"）；trae 未接入显示接入引导。
+    const emptyCopy =
+      filter === 'trae'
+        ? ACCOUNTS.EMPTY_TRAE
+        : filter === 'qoder'
+          ? `${ACCOUNTS.EMPTY_BODY} ${ACCOUNTS.EMPTY_QO_HINT}`
+          : `${ACCOUNTS.EMPTY_BODY} ${ACCOUNTS.EMPTY_WB_HINT}`;
     return (
       <div className="pool-empty">
         <h3 className="pool-empty__title">{ACCOUNTS.EMPTY_TITLE}</h3>
-        <p className="pool-empty__body">{ACCOUNTS.EMPTY_BODY}</p>
+        <p className="pool-empty__body">{emptyCopy}</p>
+        {filter !== 'trae' && (
+          <button type="button" className="btn btn--primary" onClick={() => setWizardOpen(true)}>
+            {ACCOUNTS.ADD_OPEN}
+          </button>
+        )}
+        {filter === 'trae' ? null : null}
         <button type="button" className="btn" onClick={() => void load()}>
           {ACCOUNTS.REFRESH}
         </button>
@@ -186,10 +211,26 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
     <div className="pool-screen">
       <div className="pool-screen__toolbar">
         <p className="pool-screen__sub">{ACCOUNTS.SUB}</p>
-        <button type="button" className="btn" onClick={() => void load()}>
-          {ACCOUNTS.REFRESH}
-        </button>
+        <div className="row">
+          {filter && (
+            <button type="button" className="btn btn--primary" onClick={() => setWizardOpen((v) => !v)}>
+              {wizardOpen ? ACCOUNTS.ADD_CLOSE : ACCOUNTS.ADD_OPEN}
+            </button>
+          )}
+          <button type="button" className="btn" onClick={() => void load()}>
+            {ACCOUNTS.REFRESH}
+          </button>
+        </div>
       </div>
+      {filter && wizardOpen && (
+        <AddAccountPanel
+          platform={filter}
+          onAdded={() => {
+            setWizardOpen(false);
+            void load();
+          }}
+        />
+      )}
 
       <ul className="pool-cards" aria-label={ACCOUNTS.CARD_TOTAL}>
         <li className="pool-card">
@@ -220,8 +261,8 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
             {filter ? null : <th scope="col">{ACCOUNTS.COL_PLATFORM}</th>}
             <th scope="col">{ACCOUNTS.COL_ACCOUNT}</th>
             <th scope="col">{ACCOUNTS.COL_STATUS}</th>
-            <th scope="col">{ACCOUNTS.COL_CREDIT}</th>
-            <th scope="col">{ACCOUNTS.COL_HEALTH}</th>
+            <th scope="col" title="上游平台的点数余额：签到/任务/充值获得，对话按用量扣除">{ACCOUNTS.COL_CREDIT}</th>
+            <th scope="col" title="近期请求质量分（0–1）：成功上升、失败下降；新账号从 1.0 起步">{ACCOUNTS.COL_HEALTH}</th>
             <th scope="col">{ACCOUNTS.COL_EXPIRES}</th>
             <th scope="col">{ACCOUNTS.COL_COOLDOWN}</th>
           </tr>
@@ -232,6 +273,101 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * 添加账号面板（v1.2 §1a，主人裁定：添加账号是面板内一等操作）：
+ * - workbuddy：粘贴官方桌面端凭证 JSON 原文（account.uid/nickname + auth.accessToken/refreshToken…）
+ * - qoder：粘贴 PAT（pt-…）
+ * 校验与落盘在后端（POST /api/accounts/{platform}）；成功后回调刷新账号池；
+ * 字段校验错误（400 + {error}）逐字显示，不静默兜底。
+ */
+function AddAccountPanel(props: { platform: 'workbuddy' | 'qoder' | 'trae'; onAdded: () => void }) {
+  const { platform } = props;
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [okId, setOkId] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = platform === 'qoder' ? await addQoderAccount(value) : await addWorkbuddyAccount(value);
+      setOkId(res.id);
+      setValue('');
+      props.onAdded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSubmit = platform === 'qoder' ? value.trim().startsWith('pt-') : value.trim() !== '';
+
+  if (platform === 'trae') {
+    // 矩阵 §1a：trae 未接入网关，不渲染假表单（此前会误路由 workbuddy 端点）。
+    return (
+      <div className="add-account" role="note">
+        <h3 className="add-account__title">{ACCOUNTS.ADD_TITLE}</h3>
+        <p className="add-account__hint">{ACCOUNTS.EMPTY_TRAE}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="add-account" role="form" aria-label={ACCOUNTS.ADD_TITLE}>
+      <h3 className="add-account__title">{ACCOUNTS.ADD_TITLE}</h3>
+      {platform === 'workbuddy' && (
+        <>
+          <p className="add-account__hint">
+            打开官方桌面端凭证目录 <code>%LOCALAPPDATA%\CodeBuddyExtension\Data\Public\auth\</code>，
+            复制对应账号 <code>*.info</code> 文件的完整 JSON 内容，粘贴到下面：
+          </p>
+          <textarea
+            className="add-account__input"
+            aria-label={ACCOUNTS.ADD_WB_LABEL}
+            placeholder='{"account":{"uid":"…","nickname":"…"},"auth":{"accessToken":"…","refreshToken":"…","expiresAt":…,"realm":"cn"}}'
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={busy}
+          />
+        </>
+      )}
+      {platform === 'qoder' && (
+        <>
+          <p className="add-account__hint">
+            打开 Qoder 客户端 → 设置/账号 → 生成 Personal Access Token（形如 <code>pt-xxxxxxxx</code>），粘贴到下面：
+          </p>
+          <input
+            type="text"
+            className="add-account__input"
+            aria-label={ACCOUNTS.ADD_QO_LABEL}
+            placeholder="pt-xxxxxxxx…"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={busy}
+          />
+        </>
+      )}
+      <div className="row">
+        <button type="button" className="btn btn--primary" disabled={busy || !canSubmit} onClick={() => void submit()}>
+          {busy ? ACCOUNTS.ADD_SAVING : ACCOUNTS.ADD_SAVE}
+        </button>
+      </div>
+      {okId !== null && (
+        <p className="add-account__ok" role="status">
+          {ACCOUNTS.ADD_OK_PREFIX} {okId} {ACCOUNTS.ADD_OK_SUFFIX}
+        </p>
+      )}
+      {error !== null && (
+        <p className="add-account__error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

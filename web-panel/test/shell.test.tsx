@@ -38,17 +38,17 @@ describe('外壳结构（M5b）', () => {
 
     const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
     const links = within(rail).getAllByRole('link');
-    // v1.2 二级菜单：五项主页签之后是账号池子菜单（总览 + 三平台），文字 span 承载可见标签
+    // v1.2 二级菜单紧跟「账号池」项下方（主人裁定：子菜单必须贴近父项）
     expect(links.map((l) => l.querySelector('.shell__nav-text')?.textContent)).toEqual([
       NAV.ACCOUNTS,
-      NAV.TASKS,
-      NAV.MODELS,
-      NAV.CONFIG,
-      NAV.LOGS,
       PANEL.ACC_OVERVIEW,
       'WorkBuddy',
       'Qoder',
       'Trae',
+      NAV.TASKS,
+      NAV.MODELS,
+      NAV.CONFIG,
+      NAV.LOGS,
     ]);
     expect(within(rail).getByRole('link', { name: NAV.ACCOUNTS })).toBeTruthy();
     expect(within(rail).getByRole('link', { name: NAV.LOGS })).toBeTruthy();
