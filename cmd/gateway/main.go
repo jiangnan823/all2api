@@ -189,10 +189,16 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:    addr,
+		Handler: mux,
+		// ReadTimeout bounds only the request head/body read (small JSON on a
+		// local link). WriteTimeout is deliberately disabled: it starts at the
+		// end of the request read and would kill any /v1 SSE stream still
+		// running when it fires (10s under the previous value — longer model
+		// answers died mid-flight). Client disconnects are handled by the
+		// request context, and Shutdown's 10s window still drains connections
+		// on stop.
+		ReadTimeout: 5 * time.Second,
 	}
 
 	// A2 (adversarial review): the signal channel drives server.Shutdown
