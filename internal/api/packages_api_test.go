@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,15 +28,21 @@ import (
 	"all2api/internal/schedule"
 )
 
-// fakePackagesBackend scripts the seam call and records invocations.
+// fakePackagesBackend scripts the seam call and records invocations. The
+// aggregate handler probes concurrently, so every access is mutex-guarded —
+// without it the race detector trips on the shared call log (found in CI
+// test/race, not a production defect).
 type fakePackagesBackend struct {
 	batches map[string][]pkgBatch // key: accountID
 	err     map[string]error      // key: accountID
 
+	mu     sync.Mutex
 	called []string
 }
 
 func (f *fakePackagesBackend) Packages(_ context.Context, _, accountID string) ([]pkgBatch, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.called = append(f.called, accountID)
 	if err, ok := f.err[accountID]; ok {
 		return nil, err
