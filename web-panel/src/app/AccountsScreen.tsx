@@ -188,7 +188,7 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       filter === 'trae'
         ? ACCOUNTS.EMPTY_TRAE
         : filter === 'qoder'
-          ? `${ACCOUNTS.EMPTY_BODY} ${ACCOUNTS.EMPTY_QO_HINT}`
+          ? `${ACCOUNTS.EMPTY_BODY} ${ACCOUNTS.EMPTY_BODY_QO}`
           : `${ACCOUNTS.EMPTY_BODY} ${ACCOUNTS.EMPTY_WB_HINT}`;
     return (
       <div className="pool-empty">
