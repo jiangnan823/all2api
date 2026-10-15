@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ACCOUNTS, GROWTH, LOGIN } from '../i18n/zh';
-import { GrowthTasksModal } from '../components/GrowthTasksModal';
+import { GrowthTasksModal, ModelLocksCard, PackagesCard } from '../components';
 import {
   ACCOUNTS_POLL_MS,
   addQoderAccount,
@@ -479,6 +479,12 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
           nickname={growthTarget.nickname}
           onClose={() => setGrowthTarget(null)}
         />
+      )}
+      {filter !== undefined && (
+        <>
+          <PackagesCard />
+          <ModelLocksCard />
+        </>
       )}
     </div>
   );
