@@ -26,6 +26,8 @@ func Register(mux *http.ServeMux, h *host.Host) {
 	mux.HandleFunc("/api/config/fields", withAPIKey(handleConfigFields))
 	mux.HandleFunc("/api/time", withAPIKey(handleServerTime))
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))
+	mux.HandleFunc("/api/requests", withAPIKey(handleRequests))
+	mux.HandleFunc("/api/usage", withAPIKey(handleUsage))
 	if h != nil {
 		mux.HandleFunc("POST /api/accounts/{id}/recover", withAPIKey(handleRecover(h)))
 	}
