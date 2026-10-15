@@ -947,3 +947,16 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 - 热替换流程（第 N 次验证）：**必须先杀进程再 build**——env -i 构建在 exe 被占用时静默不写入（exit 0 不落盘），本轮两次踩坑后固化为「kill → build → start → curl 验 wire」四步。
 
 遗留：growth 任务队列（下一批第一项）；行内「余额」在 wb2api 还伴随 per-account 余额历史，本版只做即时回写。
+
+
+## 9.31 M9 双支：积分到期分布 + 模型锁池（2026-10-16，主人追问「积分到期提醒和模型锁池呢？」驱动）
+
+两支并行子 agent 均因 5 小时限额（1308）中断，半成品由我接手收尾合入：
+
+- **m9-packages**（a9ca8a0）：`internal/platform/workbuddy/packages.go` 从 get-user-resource 全包响应做 FEFO 提取；`internal/api/packages_api.go` 两端点——`GET /api/accounts/{platform}:{id}/packages` 与聚合 `GET /api/packages`。wire 走 pkgBatchWire/pkgAccountWire（snake_case + TimeLocal 双形态），聚合含 total_remain/nearest/daily_burn。
+- **m9-modelocks**（fba8a30）：`internal/router/modelocks.go` ModelLockRegistry——429 时按 (model,account) 记锁、Select 跳过锁定组合；`internal/api/modelocks_api.go` `GET /api/model-locks` 输出 locked_accounts/earliest_unlock/reason。接手修复：测试缺 config import。
+- **面板**：PackagesCard（每账号「{date}（{days} 天后到期）· 该批 {remain} 积分 · 日均需耗 ≈{daily}」+ 后续批次折叠）、ModelLocksCard、i18n 新增 PACKAGES/MODELLOCKS 命名空间（zh.ts EOF 冲突双方保留；CONNECT 重复 COPY_MODEL 清理）；双卡挂载进账号池详情视图（cfd9b0b + fdd66b6 补 barrel 导出——提交漏带 index.ts 会让 CI typecheck 挂，教训：**改 import 的提交必须连同 barrel 一起验收**）。
+- **测试基建**：fakePackagesBackend 共享调用日志在并发探查下无锁 append——race 检出，加 sync.Mutex（测试缺陷非生产）。
+- **实测**：热替换后 /api/packages、/api/model-locks（连同 /api/usage、/api/requests）全部上线；模型屏 45 行实时目录渲染正常；前端 304 用例全绿、typecheck/build 0 错、Go 八包绿。
+
+遗留（沿用 §9.29 清单）：用量 token 流式口径、growth「自动完成」类抓包消歧、trae 平台接入；新增小项——聚合 /api/packages 的 daily_burn 目前按批次静态估算，待主人反馈校准口径。
