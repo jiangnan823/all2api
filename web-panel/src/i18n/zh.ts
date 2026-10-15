@@ -260,6 +260,18 @@ export const ACCOUNTS = {
   EMPTY_WB_HINT: 'WorkBuddy 凭证可从官方桌面端 CodeBuddyExtension 的 auth 目录复制。',
   EMPTY_TRAE: 'Trae 平台尚未接入网关，启用与添加账号将在接入后开放。',
   EMPTY_BODY: '该平台还没有账号。点击「＋ 添加账号」，按向导粘贴凭证即可，保存后立即生效。',
+  /* ---- M6b 富列 + 行内操作（只追加，不改上方既有键）---- */
+  COL_SUCCESS: '成功 / 失败',
+  COL_INFLIGHT: '在途',
+  COL_LASTOK: '最近成功',
+  COL_ACTIONS: '操作',
+  STATUS_PAUSED: '已暂停选号',
+  STATUS_CRED_INVALID: '凭证失效',
+  BTN_PAUSE: '暂停选号',
+  BTN_RESUME: '恢复选号',
+  BTN_REMOVE: '删除',
+  CONFIRM_REMOVE: '确认删除该账号？它将从账号池移除，本地凭证文件将被删除，不可恢复。',
+  ACTION_ERR_PREFIX: '操作失败：',
 } as const;
 
 /**
