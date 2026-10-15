@@ -935,3 +935,15 @@ lease 修复的第一版是「每次发送后立刻释放」，嵌入重试循�
 - 上游 growth「自动完成」类任务的聊天注入消歧——需抓包；
 - 用量 token 流式口径（adapter.StreamChunk 无 Usage 字段）——待上游观测后定；
 - parity-audit 第三波（模型搜索排序、密钥眼睛等 S 项）已随本批落入。
+
+
+## 9.30 行内「已签 / 余额」快捷操作（2026-10-16，主人验收追问「为什么不直接加签到按钮」驱动）
+
+wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除已有）：
+
+- **后端**：`POST /api/accounts/{platform}:{id}/checkin`（上游幂等，重复签 already=true 零奖励）与 `.../balance`（立即重查上游钱包并回写池 credit/credit_total）。实现在 growthBackend 接口扩展（wbGrowthBackend 已持 client+creds+pool），错误走 growthFail 同族文案。
+- **前端**：账号池行内「已签」「余额」两键（busy 态禁用），成功后重拉快照——积分列实时看到变化。
+- **实测**：真实签到 `{"signed":true,"credit_gained":100}`，紧跟余额重查 5638（签到奖励实时入账）。
+- 热替换流程（第 N 次验证）：**必须先杀进程再 build**——env -i 构建在 exe 被占用时静默不写入（exit 0 不落盘），本轮两次踩坑后固化为「kill → build → start → curl 验 wire」四步。
+
+遗留：growth 任务队列（下一批第一项）；行内「余额」在 wb2api 还伴随 per-account 余额历史，本版只做即时回写。
