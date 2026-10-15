@@ -4,20 +4,20 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, within, cleanup, act } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { PanelApp } from '../src/app/PanelApp';
-import { PANEL } from '../src/i18n/zh';
+import { NAV, PANEL } from '../src/i18n/zh';
 
 /**
- * B1 外壳门禁：axe 基线 + 导航可达性 + 主题切换的内存态承诺 + 接线批的安全红线自查。
- * 安全扫描面 = 本批新增的入口层（src/app、src/main.tsx、index.html）；
- * freeze.test.ts 的 IMPL_DIRS 不含这两处，故红线在本文件自证，不动冻结测试。
- * M2 B2 起设置节挂真实功能屏（SettingsScreen 会发 /api/config 等请求），
- * 本文件用永不 settle 的 fetch 桩把它钉在加载态——外壳断言不依赖设置屏内部实现（那是 settings.test 的面）。
- * M2 第二批：topbar 状态 pill 接真实探测（/api/time）；默认桩永不 settle = pill 停留「未接线」，
- * pill 各态由本文件的专用 describe 用可控 fetch 桩驱动（settings.test 只管设置屏自身）。
+ * 外壳门禁（M5b 信息架构重建）：axe 基线 + 五项可见中文页签导航 + 占位屏 + 主题切换的
+ * 内存态承诺 + 接线批的安全红线自查。
+ * 导航 = 账号池（首屏，挂 AccountsScreen）/ 任务中心 / 模型（并行批占位）/ 配置（挂 SettingsScreen）/
+ * 日志（挂 LogsScreen）。默认 fetch 桩永不 settle：AccountsScreen / LogsScreen / SettingsScreen
+ * / pill 各自钉在加载态——外壳断言不依赖各屏内部实现（各有专属测试文件）。
+ * 安全扫描面 = 本批新增的入口层（src/app/PanelApp.tsx、src/main.tsx、index.html）；
+ * freeze.test.ts 的 IMPL_DIRS 不含这几处，故红线在本文件自证，不动冻结测试。
  */
 expect.extend(toHaveNoViolations);
 
-/** 永不 settle 的 fetch：设置屏钉加载态、pill 钉「未接线」首观感。 */
+/** 永不 settle 的 fetch：各功能屏钉加载态、pill 钉「未接线」首观感。 */
 const HANGING_FETCH = vi.fn(() => new Promise(() => {}));
 
 beforeEach(() => {
@@ -30,14 +30,44 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
 });
 
-describe('外壳结构', () => {
-  it('渲染标题、两节（设置节已接线，接入节空状态）与 pill（首次探测未落定 = 未接线）', () => {
+describe('外壳结构（M5b）', () => {
+  it('渲染标题、五项可见中文页签与 pill（首次探测未落定 = 未接线）', () => {
     render(<PanelApp />);
     expect(screen.getByRole('heading', { level: 1, name: PANEL.TITLE })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 2, name: PANEL.SETTINGS_TITLE })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 2, name: PANEL.CONNECT_TITLE })).toBeTruthy();
-    expect(screen.getAllByText(PANEL.EMPTY_TITLE)).toHaveLength(1);
     expect(screen.getByText(PANEL.STATUS_UNWIRED)).toBeTruthy();
+
+    const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
+    const links = within(rail).getAllByRole('link');
+    // 文字 span 承载可见标签（icon span aria-hidden，不计入可访问名）
+    expect(links.map((l) => l.querySelector('.shell__nav-text')?.textContent)).toEqual([
+      NAV.ACCOUNTS,
+      NAV.TASKS,
+      NAV.MODELS,
+      NAV.CONFIG,
+      NAV.LOGS,
+    ]);
+    expect(within(rail).getByRole('link', { name: NAV.ACCOUNTS })).toBeTruthy();
+    expect(within(rail).getByRole('link', { name: NAV.LOGS })).toBeTruthy();
+    for (const l of links) {
+      // 页签文字可见（不再 hidden），可访问名 = 图标 aria-hidden 后的纯文字
+      expect(l.textContent!.trim().length).toBeGreaterThan(0);
+      expect(l.querySelector('.shell__nav-ico')?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('首屏默认账号池（含节标题，AccountsScreen 钉在加载态）', () => {
+    render(<PanelApp />);
+    expect(screen.getByRole('heading', { level: 2, name: NAV.ACCOUNTS })).toBeTruthy();
+    // AccountsScreen 的加载中 role=status（pill 也是 role=status，故按类名区分取值）
+    const notes = screen.getAllByRole('status');
+    expect(notes.some((el) => el.className === 'pool-note' && el.textContent === '正在读取账号池…')).toBe(true);
+    expect(document.getElementById('accounts')).toBeTruthy();
+  });
+
+  it('connect 空状态节已退役：接入标题/空态文案不再出现', () => {
+    render(<PanelApp />);
+    expect(screen.queryByText('接入与凭证')).toBeNull();
+    expect(screen.queryByText('本节尚未接入网关接口')).toBeNull();
   });
 
   it('首屏未手动切换时 data-theme 落系统偏好（jsdom 无暗色偏好 → light）', () => {
@@ -52,24 +82,46 @@ describe('外壳结构', () => {
 });
 
 describe('导航与主题（键盘可达）', () => {
-  it('图标导航带可访问名，默认当前项为配置', () => {
+  it('默认当前项为账号池，点击页签切换 aria-current 与锚点目标', () => {
     render(<PanelApp />);
     const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
     const links = within(rail).getAllByRole('link');
-    expect(links).toHaveLength(2);
     expect(links[0].getAttribute('aria-current')).toBe('page');
-    expect(links[1].getAttribute('aria-current')).toBeNull();
+
+    const config = within(rail).getByRole('link', { name: NAV.CONFIG });
+    fireEvent.click(config);
+    expect(config.getAttribute('aria-current')).toBe('page');
+    expect(links[0].getAttribute('aria-current')).toBeNull();
+    expect(config.getAttribute('href')).toBe('#settings');
+    expect(document.getElementById('settings')).toBeTruthy();
+
+    // 配置页签挂载 SettingsScreen（钉加载态）+ 节标题
+    expect(screen.getByRole('heading', { level: 2, name: NAV.CONFIG })).toBeTruthy();
+    expect(screen.getByText('正在读取网关配置…')).toBeTruthy();
   });
 
-  it('点击接入导航后当前项转移，锚点指向真实存在的节', () => {
+  it('任务中心 / 模型两页签渲染并行开发中占位（含屏名）', () => {
     render(<PanelApp />);
-    const connect = screen.getByRole('link', { name: PANEL.NAV_CONNECT });
-    fireEvent.click(connect);
-    expect(connect.getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('link', { name: PANEL.NAV_SETTINGS }).getAttribute('aria-current')).toBeNull();
-    expect(connect.getAttribute('href')).toBe('#connect');
-    expect(document.getElementById('connect')).toBeTruthy();
-    expect(document.getElementById('settings')).toBeTruthy();
+    for (const [id, name] of [
+      ['tasks', NAV.TASKS],
+      ['models', NAV.MODELS],
+    ] as const) {
+      fireEvent.click(screen.getByRole('link', { name }));
+      expect(document.getElementById(id)).toBeTruthy();
+      // 占位体只渲染一份（单活动视图），标题与正文都含屏名
+      expect(screen.getAllByText(PANEL.PLACEHOLDER_TITLE)).toHaveLength(1);
+      const body = screen.getByText(
+        (_, el) => el?.className === 'pool-empty__body' && (el.textContent ?? '').includes(`「${name}」`),
+      );
+      expect(body.textContent).toContain(`「${name}」功能屏由并行批次交付`);
+    }
+  });
+
+  it('日志页签挂载 LogsScreen（钉加载态）', () => {
+    render(<PanelApp />);
+    fireEvent.click(screen.getByRole('link', { name: NAV.LOGS }));
+    expect(document.getElementById('logs')).toBeTruthy();
+    expect(screen.getByText('正在读取日志…')).toBeTruthy();
   });
 
   it('主题按钮切换 data-theme，且只落内存态', () => {
@@ -87,14 +139,14 @@ describe('导航与主题（键盘可达）', () => {
 /**
  * topbar 状态 pill 的接线门禁（M2 第二批）。判定面与 lib/statusPill.ts 一致：
  * GET /api/time 成功 = 已连接（附服务器时间偏差）；401 = 服务在但 key 不符；其余 = 离线。
- * 轮询用 fake timers 驱动；fetch 桩按 URL 分流（设置屏的其他请求保持挂起，不影响 pill 断言）。
+ * 轮询用 fake timers 驱动；fetch 桩按 URL 分流（功能屏的其他请求保持挂起，不影响 pill 断言）。
  */
 describe('状态 pill（/api/time 探测接线）', () => {
   const TIME_WIRE = { now: 1760420400, local: '2026-10-14 12:00:00', timezone: 'Asia/Shanghai' };
 
   type Route = { status?: number; body?: unknown; reject?: boolean };
 
-  /** pill 用 role=status；设置屏加载态也是 role=status，故按外壳类名取值避免歧义。 */
+  /** pill 用 role=status；各屏加载态也是 role=status，故按外壳类名取值避免歧义。 */
   const pill = () => document.querySelector('p.shell__status') as HTMLElement;
 
   function installPillFetch(routes: Record<string, Route>) {
@@ -102,7 +154,7 @@ describe('状态 pill（/api/time 探测接线）', () => {
     const fn = vi.fn(async (...args: unknown[]) => {
       const url = typeof args[0] === 'string' ? args[0] : String(args[0]);
       const route = routes[url];
-      if (!route) return new Promise(() => {}); // 其余端点永不 settle（钉住设置屏）
+      if (!route) return new Promise(() => {}); // 其余端点永不 settle（钉住各功能屏）
       if (route.reject) throw new TypeError('fetch failed');
       const status = route.status ?? 200;
       return { ok: status < 400, status, json: async () => route.body };

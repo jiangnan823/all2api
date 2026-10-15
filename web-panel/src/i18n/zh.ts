@@ -175,14 +175,15 @@ export function reasonCopy(code: string, message?: string) {
  * §9 逐字基准与 402 唯一形态由 TC-M1-033 diff 通道守卫，本批零触碰。
  * M2 第二批：状态 pill 接真实探测（/api/time = 服务连通；401 = key 不符；其余 = 离线），
  * STATUS_UNWIRED 保留为首屏未完成首次探测时的观感键。
+ * M5b：connect 空状态节退役（CONNECT_* / EMPTY_* 随节删除）；新增占位屏文案；
+ * 页签标签统一迁往新 NAV 命名空间（下方）。
  */
 export const PANEL = {
   TITLE: 'all2api 管理面板',
   RAIL_ARIA: '主导航',
   LOGO: 'a2',
-  NAV_SETTINGS: '配置',
-  NAV_CONNECT: '接入',
   THEME: '切换明暗主题',
+  THEME_SHORT: '明/暗',
   STATUS_LABEL: '接口状态',
   STATUS_UNWIRED: '未接线',
   STATUS_ONLINE: '已连接',
@@ -193,10 +194,73 @@ export const PANEL = {
   STATUS_REFRESH: '立即重新探测',
   SETTINGS_TITLE: '按源节流与高级选项',
   SETTINGS_SUB: '每个来源的节流预算与请求特征改写都集中在此管理。',
-  CONNECT_TITLE: '接入与凭证',
-  CONNECT_SUB: '新增来源、校验凭证，以及接入须知的确认记录。',
-  EMPTY_TITLE: '本节尚未接入网关接口',
-  EMPTY_BODY: '这里显示的是网关的实时配置与状态。本次构建交付的是界面骨架，接线完成后内容自动出现。',
+  PLACEHOLDER_TITLE: '并行开发中',
+  PLACEHOLDER_BODY: '「{name}」功能屏由并行批次交付，合入后此占位将被替换。',
+} as const;
+
+/**
+ * 左栏页签标签（M5b）。五项信息架构对齐参考控制台：账号池为首屏；
+ * 「用量 / 积分构成」暂不做，不留死链接。TASKS / MODELS 命名空间归并行批（M5c）所有，
+ * 本文件不得出现这两个命名空间。
+ */
+export const NAV = {
+  ACCOUNTS: '账号池',
+  TASKS: '任务中心',
+  MODELS: '模型',
+  CONFIG: '配置',
+  LOGS: '运行日志',
+} as const;
+
+/**
+ * 账号池屏文案（M5b）。数据端点 GET /api/accounts 由后端并行批交付，形状见
+ * lib/panelApi.ts 的 TODO(contract) 注释；空池引导按运维实际路径逐字写。
+ */
+export const ACCOUNTS = {
+  SUB: '各来源账号的池化状态、积分与健康度总览，每 30 秒自动刷新。',
+  LOADING: '正在读取账号池…',
+  ERROR_TITLE: '账号池读取失败',
+  ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  REFRESH: '刷新',
+  CARD_TOTAL: '账号总数',
+  CARD_ACTIVE: '可用',
+  CARD_COOLING: '冷却中',
+  CARD_DISABLED: '已禁用',
+  CARD_CREDIT: '积分剩余',
+  COL_PLATFORM: '平台',
+  COL_ACCOUNT: '账号 ID',
+  COL_STATUS: '状态',
+  COL_CREDIT: '积分',
+  COL_HEALTH: '健康度',
+  COL_EXPIRES: '到期时间',
+  COL_COOLDOWN: '冷却至',
+  COPY: '点击复制账号 ID',
+  COPIED: '已复制',
+  DASH: '—',
+  EMPTY_TITLE: '账号池为空',
+  EMPTY_BODY: '把 workbuddy-*.json 放入 auths\\ 后重启网关，账号会自动出现在这里。',
+} as const;
+
+/**
+ * 运行日志屏文案（M5b）。数据端点 GET /api/logs?limit=200 由后端并行批交付；
+ * 级别过滤只内置 全部/info/error 三档，其他级别在「全部」下如实显示。
+ */
+export const LOGS = {
+  SUB: '网关运行日志实时滚动，可按级别过滤，每 10 秒自动刷新。',
+  LOADING: '正在读取日志…',
+  ERROR_TITLE: '日志读取失败',
+  ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
+  RETRY: '重试',
+  REFRESH: '刷新',
+  LEVEL_LABEL: '级别过滤',
+  FILTER_ALL: '全部',
+  FILTER_INFO: 'info',
+  FILTER_ERROR: 'error',
+  AUTOSCROLL: '自动滚动',
+  LIST_LABEL: '日志列表',
+  DASH: '—',
+  EMPTY_TITLE: '暂无日志',
+  EMPTY_BODY: '网关产生新的运行日志后会自动出现在这里。',
 } as const;
 
 /**

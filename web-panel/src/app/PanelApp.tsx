@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PANEL, settingsLine } from '../i18n/zh';
+import { NAV, PANEL, settingsLine } from '../i18n/zh';
 import { probePillStatus, PILL_POLL_MS, type PillStatus } from '../lib/statusPill';
+import { AccountsScreen } from './AccountsScreen';
+import { LogsScreen } from './LogsScreen';
 import { SettingsScreen } from './SettingsScreen';
 
 type Theme = 'light' | 'dark';
-type SectionId = 'settings' | 'connect';
+type SectionId = 'accounts' | 'tasks' | 'models' | 'settings' | 'logs';
 
 /** 首屏跟随系统；用户一旦手动切换即以 data-theme 显式覆盖（tokens.css 两档都有落值）。 */
 function preferredTheme(): Theme {
@@ -12,9 +14,17 @@ function preferredTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-const NAV: ReadonlyArray<{ id: SectionId; label: string; icon: string }> = [
-  { id: 'settings', label: PANEL.NAV_SETTINGS, icon: '⚙' },
-  { id: 'connect', label: PANEL.NAV_CONNECT, icon: '⤴' },
+/**
+ * 左栏五项中文页签（M5b，信息架构对齐参考控制台）：账号池为首屏；
+ * 「用量 / 积分构成」暂不做，不留死链接。任务中心 / 模型两屏由并行批交付文件
+ * （src/app/TasksScreen.tsx、src/app/ModelsScreen.tsx），此处渲染占位组件，集成方替换。
+ */
+const NAV_ITEMS: ReadonlyArray<{ id: SectionId; label: string; icon: string }> = [
+  { id: 'accounts', label: NAV.ACCOUNTS, icon: '▤' },
+  { id: 'tasks', label: NAV.TASKS, icon: '☑' },
+  { id: 'models', label: NAV.MODELS, icon: '◫' },
+  { id: 'settings', label: NAV.CONFIG, icon: '⚙' },
+  { id: 'logs', label: NAV.LOGS, icon: '⌁' },
 ];
 
 /** 主题只在内存态切换：面板不落任何 storage（M1 安全红线，接线批继续生效）。 */
@@ -102,24 +112,28 @@ function pillCopy(status: PillStatus): { value: string; detail: string | null } 
   }
 }
 
-function EmptyState() {
+/**
+ * 并行批占位屏（M5b）：任务中心 / 模型两屏由并行 agent 交付（TasksScreen / ModelsScreen），
+ * 合入前这里如实标注「并行开发中」，集成方在 ScreenFor 分支处替换为真实组件。
+ */
+function PlaceholderScreen(props: { name: string }) {
   return (
-    <div className="shell__empty">
-      <h3 className="shell__empty-title">{PANEL.EMPTY_TITLE}</h3>
-      <p className="shell__empty-body">{PANEL.EMPTY_BODY}</p>
+    <div className="pool-empty">
+      <h3 className="pool-empty__title">{PANEL.PLACEHOLDER_TITLE}</h3>
+      <p className="pool-empty__body">{settingsLine(PANEL.PLACEHOLDER_BODY, { name: props.name })}</p>
     </div>
   );
 }
 
 /**
- * B1 面板外壳：左 rail（功能主干，不含来源）+ 顶栏 + 内容区，结构取自 UI UE
- * 《all2api-panel-hifi-v0.2》。B1 交付骨架与真实可用的主题切换；
- * M2 B2 起配置节挂载真实功能屏（SettingsScreen），接入节（B4/B5）仍为空状态待接线。
- * M2 第二批：topbar 状态 pill 接真实探测（/api/time），不再是不接线的占位文案。
+ * B1 面板外壳 → M5b 信息架构重建：左 rail 五项可见中文页签（icon + 文字同显）+
+ * 顶栏 + 单活动视图内容区。账号池首屏；配置页签原样挂载 SettingsScreen；
+ * 日志页签挂 LogsScreen；任务中心 / 模型为并行批占位。connect 空状态节随重建退役。
+ * 主题切换仍只在内存态（M1 红线）。
  */
 export function PanelApp() {
   const [theme, toggleTheme] = useTheme();
-  const [active, setActive] = useState<SectionId>('settings');
+  const [active, setActive] = useState<SectionId>('accounts');
 
   return (
     <div className="shell">
@@ -128,7 +142,7 @@ export function PanelApp() {
           {PANEL.LOGO}
         </div>
         <nav className="shell__nav">
-          {NAV.map((item) => (
+          {NAV_ITEMS.map((item) => (
             <a
               key={item.id}
               className="shell__nav-link"
@@ -140,7 +154,7 @@ export function PanelApp() {
               <span className="shell__nav-ico" aria-hidden="true">
                 {item.icon}
               </span>
-              <span className="shell__visually-hidden">{item.label}</span>
+              <span className="shell__nav-text">{item.label}</span>
             </a>
           ))}
         </nav>
@@ -158,31 +172,68 @@ export function PanelApp() {
             aria-label={PANEL.THEME}
             aria-pressed={theme === 'dark'}
           >
-            明/暗
+            {PANEL.THEME_SHORT}
           </button>
         </header>
 
         <main className="shell__content">
-          <section className="shell__section" id="settings" aria-labelledby="shell-h-settings">
-            <div className="shell__section-head">
-              <h2 className="shell__section-title" id="shell-h-settings">
-                {PANEL.SETTINGS_TITLE}
-              </h2>
-            </div>
-            <p className="shell__section-sub">{PANEL.SETTINGS_SUB}</p>
-            {/* M2 B2 起设置节为真实功能屏：读取 /api/config + /api/config/fields（只读），接入节仍为空状态 */}
-            <SettingsScreen />
-          </section>
+          {active === 'accounts' && (
+            <section className="shell__section" id="accounts" aria-labelledby="shell-h-accounts">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-accounts">
+                  {NAV.ACCOUNTS}
+                </h2>
+              </div>
+              <AccountsScreen />
+            </section>
+          )}
 
-          <section className="shell__section" id="connect" aria-labelledby="shell-h-connect">
-            <div className="shell__section-head">
-              <h2 className="shell__section-title" id="shell-h-connect">
-                {PANEL.CONNECT_TITLE}
-              </h2>
-            </div>
-            <p className="shell__section-sub">{PANEL.CONNECT_SUB}</p>
-            <EmptyState />
-          </section>
+          {active === 'tasks' && (
+            <section className="shell__section" id="tasks" aria-labelledby="shell-h-tasks">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-tasks">
+                  {NAV.TASKS}
+                </h2>
+              </div>
+              {/* 并行批占位：集成方替换为 <TasksScreen />（src/app/TasksScreen.tsx，归并行批所有） */}
+              <PlaceholderScreen name={NAV.TASKS} />
+            </section>
+          )}
+
+          {active === 'models' && (
+            <section className="shell__section" id="models" aria-labelledby="shell-h-models">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-models">
+                  {NAV.MODELS}
+                </h2>
+              </div>
+              {/* 并行批占位：集成方替换为 <ModelsScreen />（src/app/ModelsScreen.tsx，归并行批所有） */}
+              <PlaceholderScreen name={NAV.MODELS} />
+            </section>
+          )}
+
+          {active === 'settings' && (
+            <section className="shell__section" id="settings" aria-labelledby="shell-h-settings">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-settings">
+                  {NAV.CONFIG}
+                </h2>
+              </div>
+              <p className="shell__section-sub">{PANEL.SETTINGS_SUB}</p>
+              <SettingsScreen />
+            </section>
+          )}
+
+          {active === 'logs' && (
+            <section className="shell__section" id="logs" aria-labelledby="shell-h-logs">
+              <div className="shell__section-head">
+                <h2 className="shell__section-title" id="shell-h-logs">
+                  {NAV.LOGS}
+                </h2>
+              </div>
+              <LogsScreen />
+            </section>
+          )}
         </main>
       </div>
     </div>
