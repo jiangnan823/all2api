@@ -445,16 +445,20 @@ func TestTravelCycleUnknownStateErrors(t *testing.T) {
 func TestGetUserResourceFiltersCreditsUnit(t *testing.T) {
 	stub, c, cred := newTaskStub(t)
 	stub.script(pathGetUserResource, taskReply{body: `{"code":0,"msg":"ok","data":{"Response":{"Data":{"Accounts":[` +
-		`{"CapacityUnit":"tokens","CycleCapacityRemain":999000},` +
-		`{"CapacityUnit":"credits","CycleCapacityRemain":2500}` +
+		`{"CapacityUnit":"tokens","CycleCapacityRemain":999000,"CycleCapacitySize":888000},` +
+		`{"CapacityUnit":"credits","CycleCapacityRemain":2500,"CycleCapacitySize":4000},` +
+		`{"CapacityUnit":"credits","CycleCapacitySize":700}` +
 		`]}}}}`})
 
-	credits, err := c.GetUserResource(context.Background(), cred)
+	credits, total, err := c.GetUserResource(context.Background(), cred)
 	if err != nil {
 		t.Fatalf("GetUserResource: %v", err)
 	}
 	if credits != 2500 {
-		t.Fatalf("credits = %d, want 2500 (CapacityUnit=credits row, tokens row skipped)", credits)
+		t.Fatalf("credits = %d, want 2500 (CapacityUnit=credits rows, tokens row skipped, sizeless row adds no remain)", credits)
+	}
+	if total != 4700 {
+		t.Fatalf("total = %d, want 4700 (sum of CycleCapacitySize over credits rows only)", total)
 	}
 	call := stub.callsFor(pathGetUserResource)[0]
 	if call.Method != http.MethodPost || call.Body != "{}" {
@@ -476,12 +480,12 @@ func TestGetUserResourceToleratesMissingData(t *testing.T) {
 	} {
 		stub, c, cred := newTaskStub(t)
 		stub.script(pathGetUserResource, taskReply{body: body})
-		credits, err := c.GetUserResource(context.Background(), cred)
+		credits, total, err := c.GetUserResource(context.Background(), cred)
 		if err == nil {
 			t.Fatalf("%s: err = nil, want an explicit shape error", name)
 		}
-		if credits != 0 {
-			t.Fatalf("%s: credits = %d, want 0", name, credits)
+		if credits != 0 || total != 0 {
+			t.Fatalf("%s: credits=%d total=%d, want 0/0", name, credits, total)
 		}
 	}
 }

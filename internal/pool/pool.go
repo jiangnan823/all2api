@@ -14,13 +14,25 @@ import (
 // Account represents a single platform account in the pool.
 type Account struct {
 	ID           string    `json:"id"`
-	Platform     string    `json:"platform"` // source: "workbuddy", "qoder", "trae"
-	Credit       int64     `json:"credit"`   // remaining credits/points
-	Health       float64   `json:"health"`   // 0.0–1.0, derived from recent failure rate
+	Platform     string    `json:"platform"`     // source: "workbuddy", "qoder", "trae"
+	Credit       int64     `json:"credit"`       // remaining credits/points
+	CreditTotal  int64     `json:"credit_total"` // upstream quota capacity (0 = unknown/not yet seeded)
+	Health       float64   `json:"health"`       // 0.0–1.0, derived from recent failure rate
 	ExpiresAt    time.Time `json:"expires_at"`
 	Status       string    `json:"status"` // active, cooling, disabled
 	CooldownEnd  time.Time `json:"cooldown_end,omitempty"`
 	LastSelected time.Time `json:"last_selected"`
+
+	// Observation plane (M6a, per-process counters — never persisted):
+	// SuccessCount/FailCount/InFlight are maintained by UpdateHealth and
+	// InFlightAdd on the dispatch path; Paused is the panel's selection
+	// switch (Select skips paused accounts); LastSuccess is the wall-clock
+	// stamp of the most recent successful send.
+	SuccessCount int64     `json:"success_count"`
+	FailCount    int64     `json:"fail_count"`
+	InFlight     int64     `json:"in_flight"`
+	Paused       bool      `json:"paused"`
+	LastSuccess  time.Time `json:"last_success"`
 }
 
 // SetStatus updates the account status.
@@ -128,6 +140,11 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 		if _, leased := s.leases[acc.ID]; leased {
 			continue
 		}
+		// Skip paused accounts (panel selection switch, M6a): a paused account
+		// keeps its counters and health state but is out of the rotation.
+		if acc.Paused {
+			continue
+		}
 		candidates = append(candidates, acc)
 	}
 
@@ -203,7 +220,11 @@ func (s *WeightedRandomSelector) Round(account *Account, cost float64) {
 	}
 }
 
-// UpdateHealth updates account health based on recent request outcome.
+// UpdateHealth updates account health based on recent request outcome. It is
+// also the observation-plane counting point (M6a): a "success" bumps
+// SuccessCount and stamps LastSuccess, every other status bumps FailCount —
+// on top of the unchanged health/cooldown semantics below. The dispatch loop
+// calls this exactly once per completed send attempt.
 func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string, latency time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -219,18 +240,39 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 
 	switch status {
 	case "success":
+		account.SuccessCount++
+		account.LastSuccess = time.Now()
 		account.Health = min(1.0, account.Health+0.05)
 	case "rate_limited":
+		account.FailCount++
 		account.Health = max(0.0, account.Health-0.1)
 		account.TriggerCooldown(2 * time.Minute)
 	case "auth_error":
+		account.FailCount++
 		account.Health = 0.0
 		account.SetStatus("disabled")
 	case "timeout":
+		account.FailCount++
 		account.Health = max(0.0, account.Health-0.02)
 	default:
+		account.FailCount++
 		account.Health = max(0.0, account.Health-0.05)
 	}
+}
+
+// InFlightAdd adjusts the account's in-flight request counter by delta: +1
+// when the dispatch loop hands a send to the selected account, -1 when the
+// attempt completes. Same lock discipline as every other field write (A4):
+// the mutation runs under the pool write lock. An unknown account (removed
+// mid-request) is a no-op; a negative bookkeeping drift clamps at 0 because
+// the wire value counts physical requests and cannot honestly go below zero.
+func (s *WeightedRandomSelector) InFlightAdd(platform, accountID string, delta int32) {
+	s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.InFlight += int64(delta)
+		if acc.InFlight < 0 {
+			acc.InFlight = 0
+		}
+	})
 }
 
 // RecoverAccount clears an account's cooldown as part of the user-initiated
@@ -335,6 +377,26 @@ func (s *WeightedRandomSelector) SetAccountCooldown(platform, accountID string, 
 	return s.applyAccount(platform, accountID, func(acc *Account) {
 		acc.CooldownEnd = until
 		acc.SetStatus("cooling")
+	})
+}
+
+// SetAccountCreditTotal records the upstream quota capacity (workbuddy: sum
+// of CycleCapacitySize over the credits rows, written by the credit-seeding
+// path next to SetAccountCredit's remaining balance). 0 means unknown/not yet
+// seeded. Returns false when the account is unknown.
+func (s *WeightedRandomSelector) SetAccountCreditTotal(platform, accountID string, total int64) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.CreditTotal = total
+	})
+}
+
+// SetAccountPaused flips the panel's selection pause switch: a paused account
+// is skipped by Select (alongside the cooling/disabled/credit-floor filters)
+// but keeps its counters, health and cooldown state. Returns false when the
+// account is unknown.
+func (s *WeightedRandomSelector) SetAccountPaused(platform, accountID string, paused bool) bool {
+	return s.applyAccount(platform, accountID, func(acc *Account) {
+		acc.Paused = paused
 	})
 }
 

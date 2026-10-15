@@ -291,6 +291,10 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			return
 		}
 		leased = append(leased, acct.ID)
+		// Observation plane (M6a): the attempt is in flight from here
+		// until its completion; every outcome path below pairs one
+		// finishAttempt decrement with the existing UpdateHealth call.
+		rt.host.Pool.InFlightAdd(platform, acct.ID, +1)
 
 		if req.Stream {
 			committed, streamErr := rt.relayStream(w, r.Context(), sender, acct, req)
@@ -298,19 +302,19 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 				// Outright stream-start failure: same retry path as SendChat.
 				lastErr = streamErr
 				rt.recordSendOutcome(platform, acct.ID, 0, streamErr)
-				rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(streamErr), 0)
+				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 				continue
 			}
 			if streamErr == nil {
 				rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
-				rt.host.Pool.UpdateHealth(platform, acct.ID, "success", 0)
+				rt.finishAttempt(platform, acct.ID, "success")
 			} else {
 				// Mid-stream failure: the classification of the upstream error
 				// (429 vs 5xx vs timeout) still feeds the breaker — Record is
 				// keyed on the upstream status, not on the wire status that
 				// stays committed at 200.
 				rt.recordSendOutcome(platform, acct.ID, upstreamStatus(streamErr), streamErr)
-				rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(streamErr), 0)
+				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 			}
 			return
 		}
@@ -318,14 +322,23 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 		resp, err := sender.SendChat(r.Context(), acct, req)
 		if err == nil {
 			rt.recordSendOutcome(platform, acct.ID, http.StatusOK, nil)
-			rt.host.Pool.UpdateHealth(platform, acct.ID, "success", 0)
+			rt.finishAttempt(platform, acct.ID, "success")
 			writeJSON(w, http.StatusOK, resp)
 			return
 		}
 		lastErr = err
 		rt.recordSendOutcome(platform, acct.ID, upstreamStatus(err), err)
-		rt.host.Pool.UpdateHealth(platform, acct.ID, healthStatus(err), 0)
+		rt.finishAttempt(platform, acct.ID, healthStatus(err))
 	}
+}
+
+// finishAttempt closes one dispatch attempt: the in-flight counter booked at
+// Select time (+1) drops back, and the outcome feeds the pool's health. A
+// "success" also stamps the account's LastSuccess — that bookkeeping lives
+// inside pool.UpdateHealth, the router stays unaware of it.
+func (rt *Router) finishAttempt(platform, accountID, status string) {
+	rt.host.Pool.InFlightAdd(platform, accountID, -1)
+	rt.host.Pool.UpdateHealth(platform, accountID, status, 0)
 }
 
 // recordSendOutcome feeds one send result into the platform's circuit breaker.

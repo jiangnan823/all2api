@@ -36,7 +36,9 @@ import (
 
 // RegisterPanelData wires the four read-only endpoints onto mux. Split from
 // Register so the existing registration path stays untouched (the M5a batch
-// adds routes, changes none). All parameters are nullable: nil host/empty
+// adds routes, changes none; M6a appends the account write routes
+// pause/resume/remove behind the same nil-host/nil-store guard as the
+// add-account routes). All parameters are nullable: nil host/empty
 // pool, nil scheduler, nil stats memory and nil ring each degrade to the
 // honest empty response, never a panic.
 func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats *schedule.StatsMemory, ring *observability.Ring) {
@@ -45,6 +47,7 @@ func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats
 	mux.HandleFunc("GET /api/models", withAPIKey(handleModels))
 	mux.HandleFunc("GET /api/logs", withAPIKey(handleLogs(ring)))
 	registerAddAccount(mux, h)
+	registerAccountWrite(mux, h)
 }
 
 // TaskSource is the read-only scheduler view panel_data needs (schedule
@@ -60,6 +63,17 @@ type TaskSource interface {
 // pool.Account value snapshots (SnapshotAccounts); times use the Q9 dual
 // TimeLocal representation (unix for comparisons, local for display) and a
 // zero time serializes as null via the pointer form.
+//
+// M6a appended the observation/pause block after last_selected (frozen key
+// order: the pre-M6a keys stay first and untouched — the frontend table was
+// built against this exact shape):
+//
+//	success     — successful send count this process (UpdateHealth "success")
+//	fail        — failed send count this process (429/5xx/timeout/auth)
+//	in_flight   — requests currently mid-send for this account
+//	paused      — selection pause switch (Select skips paused accounts)
+//	last_success — most recent successful send, null until the first one
+//	credit_total — upstream quota capacity; 0 = unknown/not yet seeded
 type accountWire struct {
 	Platform     string             `json:"platform"`
 	ID           string             `json:"id"`
@@ -70,6 +84,12 @@ type accountWire struct {
 	ExpiresAt    *adapter.TimeLocal `json:"expires_at"`
 	CooldownEnd  *adapter.TimeLocal `json:"cooldown_end"`
 	LastSelected *adapter.TimeLocal `json:"last_selected"`
+	Success      int64              `json:"success"`
+	Fail         int64              `json:"fail"`
+	InFlight     int64              `json:"in_flight"`
+	Paused       bool               `json:"paused"`
+	LastSuccess  *adapter.TimeLocal `json:"last_success"`
+	CreditTotal  int64              `json:"credit_total"`
 }
 
 // accountsResponse: the account array plus the aggregation flattened at the
@@ -120,6 +140,12 @@ func accountFromPool(acc pool.Account) accountWire {
 		ExpiresAt:    timeLocalPtr(acc.ExpiresAt),
 		CooldownEnd:  timeLocalPtr(acc.CooldownEnd),
 		LastSelected: timeLocalPtr(acc.LastSelected),
+		Success:      acc.SuccessCount,
+		Fail:         acc.FailCount,
+		InFlight:     acc.InFlight,
+		Paused:       acc.Paused,
+		LastSuccess:  timeLocalPtr(acc.LastSuccess),
+		CreditTotal:  acc.CreditTotal,
 	}
 }
 
