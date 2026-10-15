@@ -259,7 +259,7 @@ export const ACCOUNTS = {
   EMPTY_BODY_QO: 'Qoder 平台还没有账号。点击「＋ 添加账号」，粘贴客户端生成的 Personal Access Token 即可。',
   EMPTY_WB_HINT: 'WorkBuddy 凭证可从官方桌面端 CodeBuddyExtension 的 auth 目录复制。',
   EMPTY_TRAE: 'Trae 平台尚未接入网关，启用与添加账号将在接入后开放。',
-  EMPTY_BODY: '把 workbuddy-*.json 放入 auths\\ 后重启网关，账号会自动出现在这里。',
+  EMPTY_BODY: '该平台还没有账号。点击「＋ 添加账号」，按向导粘贴凭证即可，保存后立即生效。',
 } as const;
 
 /**
