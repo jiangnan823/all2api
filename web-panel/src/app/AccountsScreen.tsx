@@ -26,6 +26,17 @@ const TONE_CLASS: Record<ReturnType<typeof statusTone>, string> = {
   idle: 'pool-badge--idle',
 };
 
+/** 状态串 → 中文徽标文案（未知值原样显示，不翻译瞎猜）。 */
+const STATUS_LABEL: Record<string, string> = {
+  active: '可用',
+  cooling: '冷却中',
+  disabled: '已禁用',
+};
+
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status.toLowerCase()] ?? status;
+}
+
 /** Unix 秒 → 本地展示串；null/0 = 无值（显示 —，不编造时间）。 */
 function fmtUnix(sec: number | null, dash: string): string {
   if (sec === null || sec === 0) return dash;
@@ -86,10 +97,11 @@ function AccountRow(props: { entry: AccountEntry }) {
     <tr>
       <td>{a.platform}</td>
       <td>
+        {a.nickname ? <span className="pool-table__nick">{a.nickname}</span> : null}
         <AccountIdCell id={a.id} />
       </td>
       <td>
-        <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{a.status}</span>
+        <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{statusLabel(a.status)}</span>
       </td>
       <td className="pool-table__num">{fmtCredit(a.credit, ACCOUNTS.DASH)}</td>
       <td>{a.health ?? ACCOUNTS.DASH}</td>

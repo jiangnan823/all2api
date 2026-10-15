@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { AccountsScreen } from '../src/app/AccountsScreen';
 import { ACCOUNTS_POLL_MS } from '../src/lib/poolApi';
@@ -19,12 +19,13 @@ const ACCOUNTS_WIRE = {
     {
       platform: 'workbuddy',
       id: 'wb-0123456789abcdef',
+      nickname: '40 多岁的年轻小伙',
       status: 'active',
       credit: 1234.5,
       health: 'good',
-      expires_at: 1790000000,
-      cooldown_end: 0,
-      last_selected: 1760000000,
+      expires_at: { unix: 1790000000, local: '2026-10-15 22:00:00' },
+      cooldown_end: null,
+      last_selected: { unix: 1760000000, local: '2026-10-15 12:00:00' },
     },
     {
       platform: 'trae',
@@ -97,6 +98,7 @@ describe('账号池屏 — 就绪渲染', () => {
     expect(totalCard.textContent).toBe(`${ACCOUNTS.CARD_TOTAL}3`);
     // 五张卡 = 总数/可用/冷却/禁用/积分
     expect(cards.querySelectorAll('li.pool-card')).toHaveLength(5);
+    // 状态徽标同文案（可用/冷却中/已禁用）也在文档里，getByText 会撞多个 → 限定在卡片容器内
     for (const label of [
       ACCOUNTS.CARD_TOTAL,
       ACCOUNTS.CARD_ACTIVE,
@@ -104,7 +106,7 @@ describe('账号池屏 — 就绪渲染', () => {
       ACCOUNTS.CARD_DISABLED,
       ACCOUNTS.CARD_CREDIT,
     ]) {
-      expect(screen.getByText(label)).toBeTruthy();
+      expect(within(cards).getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -129,13 +131,17 @@ describe('账号池屏 — 就绪渲染', () => {
     expect(table.textContent).toContain('wb-0123456789abcdef');
     expect(table.textContent).toContain('tr-ffff00001111');
     expect(table.textContent).toContain('qd-deadbeef42');
-    // 状态徽色档：active=ok / cooling=warn / disabled=err
+    // v1.2：昵称主显（有昵称的账号），无昵称账号只有 id
+    expect(table.textContent).toContain('40 多岁的年轻小伙');
+    // v1.2：状态徽标中文文案（未知值原样显示）
     const badges = Array.from(table.querySelectorAll('.pool-badge'));
     expect(badges.map((b) => b.className)).toEqual([
       'pool-badge pool-badge--ok',
       'pool-badge pool-badge--warn',
       'pool-badge pool-badge--err',
     ]);
+    expect(badges.map((b) => b.textContent)).toEqual(['可用', '冷却中', '已禁用']);
+    // v1.2：到期时间解析 TimeLocal 对象形态（此前恒显示 —）
     // credit 缺失（null）显示 —，不编造；health 空串同样 —
     expect(table.textContent).toContain(ACCOUNTS.DASH);
   });

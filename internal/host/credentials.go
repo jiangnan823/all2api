@@ -65,6 +65,7 @@ type fileCred struct {
 	AccessToken  string
 	RefreshToken string
 	UID          string
+	Nickname     string // display name from the auth file (account.nickname); empty for PAT accounts
 	EnterpriseID string
 	Domain       string
 	Global       bool
@@ -128,6 +129,18 @@ func (s *CredentialStore) identitiesByPlatform(platform string) []pool.Account {
 		}
 	}
 	return out
+}
+
+// NicknameFor returns the display name stored with one credential (workbuddy
+// auth files carry account.nickname; qoder PAT accounts have none). Empty
+// string = no display name — callers fall back to the account id.
+func (s *CredentialStore) NicknameFor(platform, accountID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if cred, ok := s.entries[credKey(platform, accountID)]; ok {
+		return cred.Nickname
+	}
+	return ""
 }
 
 // CountPlatform returns the number of stored credentials for one platform.
@@ -286,6 +299,7 @@ func parseAuthFile(path string) (fileCred, error) {
 		AccessToken:  doc.Auth.AccessToken,
 		RefreshToken: doc.Auth.RefreshToken,
 		UID:          doc.Account.UID,
+		Nickname:     doc.Account.Nickname,
 		EnterpriseID: doc.Account.EnterpriseID,
 		Domain:       doc.Auth.Domain,
 		Global:       strings.EqualFold(strings.TrimSpace(doc.Auth.Realm), "global"),

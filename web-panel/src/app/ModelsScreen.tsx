@@ -61,7 +61,8 @@ function parseModelsWire(body: unknown): { source: string; models: ModelRow[] } 
     const m = asObj(v, `models[${i}]`);
     return {
       platform: reqStr(m['platform'], `models[${i}].platform`),
-      model: reqStr(m['model'], `models[${i}].model`),
+      // M5a wire carries `name`（adapter.ModelInfo 既有标签）；`model` 为契约兼容名
+      model: typeof m['model'] === 'string' && m['model'] !== '' ? m['model'] : reqStr(m['name'], `models[${i}].name`),
       contextSize: optNum(m['context_size']),
       maxOutput: optNum(m['max_output']),
       supportsTool: optTri(m['supports_tool']),

@@ -1438,3 +1438,9 @@
 .cron-field--fallback input {
   max-width: 340px;
 }
+
+.pool-table__nick {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}

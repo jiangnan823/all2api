@@ -9,6 +9,8 @@
  */
 
 export interface AccountEntry {
+  /** 显示名（workbuddy 凭证的 account.nickname；PAT 账号无）——空时 UI 回落到 id。 */
+  nickname: string | null;
   platform: string;
   id: string;
   /** 服务端原始状态串（active / cooling / disabled 等），徽色按 statusTone 映射，未知值如实显示。 */
@@ -79,6 +81,21 @@ function numOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/** 可空字符串：缺失/空串/非串 → null（昵称这类展示字段缺失是常态，不丢条目）。 */
+function strOrNull(v: unknown): string | null {
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+
+/**
+ * TimeLocal 双形态（{unix, local}）→ unix 秒。数字直通（兼容旧形态）；
+ * 对象形态读 unix；其余 → null。到期/冷却列此前恒显示 — 就是因为把对象喂给了 numOrNull。
+ */
+function timeLocalToUnix(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (isObject(v) && typeof v['unix'] === 'number' && Number.isFinite(v['unix'])) return v['unix'] as number;
+  return null;
+}
+
 /** GET /api/accounts wire → AccountsSnapshot（防御式：数组内形状不对的条目整条丢弃，不静默造数）。 */
 export function parseAccountsSnapshot(body: unknown): AccountsSnapshot {
   if (!isObject(body)) throw new Error('accounts: 响应非对象');
@@ -90,12 +107,13 @@ export function parseAccountsSnapshot(body: unknown): AccountsSnapshot {
       accounts.push({
         platform: str(item['platform'], 'account.platform'),
         id: str(item['id'], 'account.id'),
+        nickname: strOrNull(item['nickname']),
         status: str(item['status'], 'account.status'),
         credit: numOrNull(item['credit']),
         health: typeof item['health'] === 'string' && item['health'] !== '' ? item['health'] : null,
-        expiresAt: numOrNull(item['expires_at']),
-        cooldownEnd: numOrNull(item['cooldown_end']),
-        lastSelected: numOrNull(item['last_selected']),
+        expiresAt: timeLocalToUnix(item['expires_at']),
+        cooldownEnd: timeLocalToUnix(item['cooldown_end']),
+        lastSelected: timeLocalToUnix(item['last_selected']),
       });
     } catch {
       // 单条畸形不拖垮整屏：丢弃该条（计数仍以服务端汇总字段为准）

@@ -62,6 +62,7 @@ type TaskSource interface {
 type accountWire struct {
 	Platform     string             `json:"platform"`
 	ID           string             `json:"id"`
+	Nickname     string             `json:"nickname"` // display name from the auth file; empty → client falls back to id
 	Status       string             `json:"status"`
 	Credit       int64              `json:"credit"`
 	Health       float64            `json:"health"`
@@ -85,10 +86,12 @@ type accountsResponse struct {
 func handleAccounts(h *host.Host) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resp := accountsResponse{Accounts: []accountWire{}}
-		if h != nil && h.Pool != nil {
+		if h != nil && h.Pool != nil && h.Creds != nil {
 			snapshot := h.Pool.SnapshotAccounts()
 			for _, acc := range snapshot {
-				resp.Accounts = append(resp.Accounts, accountFromPool(acc))
+				w := accountFromPool(acc)
+				w.Nickname = h.Creds.NicknameFor(acc.Platform, acc.ID)
+				resp.Accounts = append(resp.Accounts, w)
 				switch acc.Status {
 				case "cooling":
 					resp.Cooling++
@@ -180,6 +183,9 @@ func handleTasks(sched TaskSource, stats *schedule.StatsMemory) http.HandlerFunc
 // contract type is not served by any endpoint yet, and renaming here would
 // invent a third vocabulary. provider is the platform the model belongs to.
 type modelWire struct {
+	// Platform mirrors Provider under the name the panel reads; both are sent
+	// so the M5a adapter-wire tags and the M5c panel contract stay aligned.
+	Platform       string `json:"platform"`
 	Provider       string `json:"provider"`
 	ID             string `json:"id"`
 	Name           string `json:"name"`
@@ -220,6 +226,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				resp.Models = append(resp.Models, modelWire{
+					Platform:       "qoder",
 					Provider:       "qoder",
 					ID:             m.ID,
 					Name:           m.Name,
@@ -237,6 +244,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 	known := map[string]bool{}
 	for name := range config.Shared.Get().ModelMap {
 		resp.Models = append(resp.Models, modelWire{
+			Platform: "workbuddy",
 			Provider: "workbuddy",
 			ID:       "workbuddy/" + name,
 			Name:     name,
@@ -248,6 +256,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		resp.Models = append(resp.Models, modelWire{
+			Platform: "workbuddy",
 			Provider: "workbuddy",
 			ID:       "workbuddy/" + name,
 			Name:     name,

@@ -72,6 +72,19 @@ func loadM5Config(t *testing.T, body string) {
 func TestAccountsShapeAndAggregation(t *testing.T) {
 	loadM5Config(t, `{"listen":":0"}`)
 	h := newTestHost(t, "qa")
+	// Production wiring (main.go): the store lives on the Host and shares the
+	// pool. Without it, handleAccounts has no nickname source.
+	h.Creds = host.NewCredentialStore(h.Pool)
+	// Seed a workbuddy credential so the nickname pass-through has data (the
+	// "qa" accounts have none and must serialize nickname:"").
+	h.Creds.LoadAuthDir(func() string {
+		dir := t.TempDir()
+		body := `{"account":{"uid":"wb-nick","nickname":"测试昵称"},"auth":{"accessToken":"tok","expiresAt":0,"realm":"cn"}}`
+		if err := os.WriteFile(filepath.Join(dir, "workbuddy-wb-nick.json"), []byte(body), 0o600); err != nil {
+			t.Fatalf("seed auth file: %v", err)
+		}
+		return dir
+	}())
 	now := time.Now()
 	h.Pool.AddAccount(&pool.Account{
 		ID: "a1", Platform: "qa", Status: "active",
@@ -100,7 +113,7 @@ func TestAccountsShapeAndAggregation(t *testing.T) {
 	// Raw wire keys first: the frontend batch aligns against these names.
 	body := rec.Body.String()
 	for _, key := range []string{
-		`"accounts"`, `"platform"`, `"id"`, `"status"`, `"credit"`, `"health"`,
+		`"accounts"`, `"platform"`, `"id"`, `"nickname"`, `"status"`, `"credit"`, `"health"`,
 		`"expires_at"`, `"cooldown_end"`, `"last_selected"`,
 		`"total"`, `"active"`, `"cooling"`, `"disabled"`, `"credit_total"`,
 		`"unix"`, `"local"`,
@@ -109,11 +122,16 @@ func TestAccountsShapeAndAggregation(t *testing.T) {
 			t.Fatalf("wire key %s missing from /api/accounts body: %s", key, body)
 		}
 	}
+	// The workbuddy credential nickname must ride along; PAT accounts have none.
+	if !strings.Contains(body, "测试昵称") {
+		t.Fatalf("nickname pass-through missing: %s", body)
+	}
 
 	var resp struct {
 		Accounts []struct {
 			Platform     string             `json:"platform"`
 			ID           string             `json:"id"`
+			Nickname     string             `json:"nickname"`
 			Status       string             `json:"status"`
 			Credit       int64              `json:"credit"`
 			Health       float64            `json:"health"`
@@ -130,15 +148,24 @@ func TestAccountsShapeAndAggregation(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode accounts response: %v", err)
 	}
-	if resp.Total != 4 || resp.Active != 1 || resp.Cooling != 1 || resp.Disabled != 1 {
-		t.Fatalf("aggregation drift: total=%d active=%d cooling=%d disabled=%d, want 4/1/1/1",
+	// 5 accounts: a1-a4 (qa) plus the seeded workbuddy wb-nick (active, credit 0).
+	if resp.Total != 5 || resp.Active != 2 || resp.Cooling != 1 || resp.Disabled != 1 {
+		t.Fatalf("aggregation drift: total=%d active=%d cooling=%d disabled=%d, want 5/2/1/1",
 			resp.Total, resp.Active, resp.Cooling, resp.Disabled)
 	}
 	if resp.CreditTotal != 742 {
 		t.Fatalf("credit_total = %d, want 742 (500+200+0+42)", resp.CreditTotal)
 	}
-	if len(resp.Accounts) != 4 {
-		t.Fatalf("accounts array = %d entries, want 4", len(resp.Accounts))
+	if len(resp.Accounts) != 5 {
+		t.Fatalf("accounts array = %d entries, want 5", len(resp.Accounts))
+	}
+	for _, a := range resp.Accounts {
+		if a.ID == "wb-nick" && a.Nickname != "测试昵称" {
+			t.Fatalf("wb-nick nickname = %q, want 测试昵称", a.Nickname)
+		}
+		if a.Platform == "qa" && a.Nickname != "" {
+			t.Fatalf("qa account %s must have empty nickname, got %q", a.ID, a.Nickname)
+		}
 	}
 
 	byID := map[string]struct {
