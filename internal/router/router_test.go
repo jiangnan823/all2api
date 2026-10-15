@@ -404,6 +404,60 @@ func TestV1BareModelAutoRoute(t *testing.T) {
 	}
 }
 
+// A bare model name must not be captured by a registered-but-credential-less
+// platform: the first capable adapter (registration order) whose pool is empty
+// is skipped in favour of the next capable adapter that actually has accounts
+// (regression: qoder registering after workbuddy shadowed it for bare names
+// until a qoder PAT was loaded).
+func TestV1BareModelSkipsEmptyPoolPlatform(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	empty, stocked := newSender("rbempty"), newSender("rbstocked")
+	reg := newRegistry(t, empty, stocked)
+	h := newTestHost(t)
+	addAccount(t, h, "a2", "rbstocked") // rbstocked has an account, rbempty none
+	mux := newMux(h, reg)
+
+	rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("m"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bare model route: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if c, _ := empty.callLog(); len(c) != 0 {
+		t.Fatalf("credential-less platform must not receive the call, got %v", c)
+	}
+	calls, _ := stocked.callLog()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "rbstocked:") {
+		t.Fatalf("bare model must route to the platform with accounts, got %v", calls)
+	}
+}
+
+// When every enabled platform's pool is empty the first candidate is used
+// anyway, so the dispatch path reports no_available_account (a real "nothing
+// loaded" state) instead of 404 model_not_found (which would claim the model
+// does not exist).
+func TestV1BareModelAllPoolsEmptyKeepsFirst(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	first, second := newSender("rb1"), newSender("rb2")
+	reg := newRegistry(t, first, second)
+	h := newTestHost(t) // no accounts at all
+	mux := newMux(h, reg)
+
+	rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("m"), nil)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("all-empty pools: got %d, want 503 no_available_account (body %s)", rec.Code, rec.Body)
+	}
+	var env struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode error envelope: %v", err)
+	}
+	if env.Error.Code != "no_available_account" {
+		t.Fatalf("code = %q, want no_available_account", env.Error.Code)
+	}
+}
+
 func TestV1UnknownModel404(t *testing.T) {
 	loadRouterConfig(t, `{"listen":":0"}`)
 	// Registry with NO CapChatCompletion adapter: neither prefix nor bare

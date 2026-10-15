@@ -349,9 +349,14 @@ func upstreamStatus(err error) int {
 // indistinguishable from "this model never existed" for prefix-addressing
 // clients (503 would invite retries against an address that stays gone); a
 // bare model name auto-routes to the first *enabled* adapter carrying
-// CapChatCompletion (registry registration order — deterministic per binary),
-// skipping disabled platforms so traffic fails over to any other enabled
-// platform that can serve the request. A platform with no sources.<id>
+// CapChatCompletion (registry registration order — deterministic per binary)
+// that has at least one pooled account, skipping disabled platforms and
+// platforms with an empty pool so traffic fails over to any other enabled
+// platform that can actually serve the request (a platform with no loaded
+// credentials must not shadow one that has them just because it registered
+// first). When every enabled candidate's pool is empty the first enabled
+// candidate is used anyway, so the dispatch path answers no_available_account
+// instead of a misleading model_not_found. A platform with no sources.<id>
 // stanza at all is never treated as disabled: only the explicit
 // enabled:false switch (the 一键摘源 path) removes a source from /v1.
 func (rt *Router) route(model string) (adapter.Adapter, string, bool) {
@@ -363,11 +368,29 @@ func (rt *Router) route(model string) (adapter.Adapter, string, bool) {
 			return nil, "", false
 		}
 	} else {
+		// fallback keeps the first enabled candidate even when its pool is
+		// empty; poolAvailable reports whether a candidate has accounts.
+		var fallback string
+		poolAvailable := func(name string) bool {
+			if rt.host == nil || rt.host.Pool == nil {
+				return true // no pool to consult: preserve registration-order pick
+			}
+			return len(rt.host.Pool.ListAccounts(name)) > 0
+		}
 		for _, name := range rt.lookup.ByCap(adapter.CapChatCompletion) {
-			if !disabled[name] {
+			if disabled[name] {
+				continue
+			}
+			if fallback == "" {
+				fallback = name
+			}
+			if poolAvailable(name) {
 				platform = name
 				break
 			}
+		}
+		if platform == "" {
+			platform = fallback
 		}
 		if platform == "" {
 			return nil, "", false
