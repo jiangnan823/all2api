@@ -22,6 +22,7 @@ import (
 func Register(mux *http.ServeMux, h *host.Host) {
 	mux.HandleFunc("/api/config", withAPIKey(handleConfig))
 	mux.HandleFunc("POST /api/config", withAPIKey(handleConfigSave))
+	mux.HandleFunc("POST /api/config/restore-defaults", withAPIKey(handleRestoreDefaults))
 	mux.HandleFunc("/api/config/fields", withAPIKey(handleConfigFields))
 	mux.HandleFunc("/api/time", withAPIKey(handleServerTime))
 	mux.HandleFunc("/api/auth/verify", withAPIKey(handleVerify))

@@ -197,6 +197,8 @@ export const PANEL = {
   STATUS_REFRESH: '立即重新探测',
   SETTINGS_TITLE: '按源节流与高级选项',
   SETTINGS_SUB: '每个来源的节流预算与请求特征改写都集中在此管理。',
+  RESTORE_DEFAULTS: '恢复默认设置',
+  RESTORE_CONFIRM: '将把所有可调设置恢复为出厂默认（保留监听地址与 API 密钥），确定恢复吗？',
   PLACEHOLDER_TITLE: '并行开发中',
   PLACEHOLDER_BODY: '「{name}」功能屏由并行批次交付，合入后此占位将被替换。',
 } as const;
@@ -302,6 +304,8 @@ export const LOGS = {
  * X-API-Key 只存内存态（M1 红线），刷新丢失是预期，文案如实说明。
  */
 export const SETTINGS = {
+  RESTORE_DEFAULTS: '恢复默认设置',
+  RESTORE_CONFIRM: '将把所有可调设置恢复为出厂默认（保留监听地址与 API 密钥），确定恢复吗？',
   LOADING: '正在读取网关配置…',
   ERROR_TITLE: '网关配置读取失败',
   ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',

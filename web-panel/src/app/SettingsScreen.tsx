@@ -3,6 +3,7 @@ import type { FieldError, ServerTimeResponse, ThrottleBudget } from '../types/ap
 import { AdvancedToggle, ThrottleForm } from '../components';
 import {
   fetchConfigGroups,
+  restoreDefaults,
   fetchPanelConfig,
   fetchServerTime,
   savePanelConfig,
@@ -213,6 +214,30 @@ export function SettingsScreen() {
     }
   }
 
+  /** 恢复默认设置（v1.2 主人裁定「就没有个默认的设置吗」）：POST restore-defaults，
+   *  连接四项（listen/api_key/auth_dir/state_file）后端保留，其余回出厂；
+   *  成功后重建基线（与保存流同路径）。二次确认用原生 confirm（一次性动作，非危险态字段）。 */
+  async function restoreAll() {
+    if (!model) return;
+    setSaveState({ phase: 'saving' });
+    try {
+      await restoreDefaults();
+      const applied = await fetchPanelConfig();
+      const next = buildSettingsModel(applied, await fetchConfigGroups());
+      setDeliveredThrottleFields(next.throttleFields);
+      setState({ phase: 'ready', model: next });
+      setDrafts(next.server);
+      setGenericDrafts(Object.fromEntries(next.generic.map((g) => [g.group, { ...g.server }])));
+      setFormEpoch((e) => e + 1);
+      setSaveState({ phase: 'saved' });
+    } catch (err) {
+      setSaveState({
+        phase: 'failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   if (state.phase === 'loading') {
     return (
       <div className="settings-screen__state" role="status">
@@ -370,6 +395,18 @@ export function SettingsScreen() {
               })}
             </p>
           )}
+          <div className="row">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                if (window.confirm(SETTINGS.RESTORE_CONFIRM)) void restoreAll();
+              }}
+              disabled={saveState.phase === 'saving'}
+            >
+              {SETTINGS.RESTORE_DEFAULTS}
+            </button>
+          </div>
           <p className="settings-screen__readonly-note">{SETTINGS.SAVE_NOTE}</p>
         </>
       )}

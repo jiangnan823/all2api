@@ -273,3 +273,8 @@ function parseConfigSaveResponse(body: unknown): ConfigSaveResponse {
 export function savePanelConfig(patch: ConfigPatch): Promise<ConfigSaveResponse> {
   return apiFetch('/api/config', 'POST', JSON.stringify(patch), parseConfigSaveResponse);
 }
+
+/** POST /api/config/restore-defaults（v1.2：一键恢复出厂默认，保留连接四项）。 */
+export function restoreDefaults(): Promise<unknown> {
+  return apiFetch('/api/config/restore-defaults', 'POST', undefined, (b) => b);
+}
