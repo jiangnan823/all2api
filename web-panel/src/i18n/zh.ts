@@ -395,6 +395,7 @@ export const TASKS = {
   COUNT: '已注册 {count} 个定时任务',
   REFRESH: '刷新',
   EMPTY: '网关没有注册任何定时任务。',
+  PLATFORM_NONE: '该平台暂无定时任务（Qoder 额度为订阅制无签到；Trae 的每日签到随平台接入开放）。',
   ENABLED_ON: '已启用',
   ENABLED_OFF: '已停用',
   CRON_LABEL: '调度周期',

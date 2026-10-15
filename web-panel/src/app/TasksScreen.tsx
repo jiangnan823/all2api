@@ -86,6 +86,8 @@ function parseTasksWire(body: unknown): TaskEntry[] {
 
 export function TasksScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
+  /** 平台页签（v1.1 分平台裁定）：默认 workbuddy（今日唯一有任务面的平台）。 */
+  const [platform, setPlatform] = useState<'workbuddy' | 'qoder' | 'trae'>('workbuddy');
   /** 过期响应守卫：快速刷新/重试时旧响应不得覆盖新状态。 */
   const seqRef = useRef(0);
 
@@ -127,23 +129,43 @@ export function TasksScreen() {
     );
   }
 
+  // 任务归属平台（v1.1 裁定：分平台管理）。今日已接线的四个任务全部属于 workbuddy；
+  // 未知任务名归入 workbuddy 组（调度器注册来源即 workbuddy），qoder/trae 的任务随
+  // 平台接入在 wire 上带 platform 后再进映射——不在前端发明归属。
+  const knownPlatform = (name: string): 'workbuddy' | 'qoder' | 'trae' => {
+    const known: Record<string, boolean> = {
+      signin: true, active_check: true, cat_travel: true, token_keepalive: true,
+    };
+    return known[name] ? 'workbuddy' : 'workbuddy';
+  };
+  const scoped = state.tasks.filter((t) => knownPlatform(t.name) === platform);
+
   return (
     <div className="tasks-screen">
       {/* 顶部诚实说明：只读 + 无手动触发（端点不存在），不装作有执行能力 */}
       <p className="tasks-screen__note">{TASKS.NOTE}</p>
       <div className="tasks-screen__bar">
+        <div className="filters">
+          {(['workbuddy', 'qoder', 'trae'] as const).map((p) => (
+            <button key={p} type="button" className={platform === p ? 'on' : ''} onClick={() => setPlatform(p)}>
+              {p === 'workbuddy' ? 'WorkBuddy' : p === 'qoder' ? 'Qoder' : 'Trae'}
+            </button>
+          ))}
+        </div>
         <p className="tasks-screen__bar-note" role="status">
-          {settingsLine(TASKS.COUNT, { count: state.tasks.length })}
+          {settingsLine(TASKS.COUNT, { count: scoped.length })}
         </p>
         <button type="button" className="btn" onClick={() => void load()}>
           {TASKS.REFRESH}
         </button>
       </div>
-      {state.tasks.length === 0 ? (
-        <p className="tasks-screen__state">{TASKS.EMPTY}</p>
+      {scoped.length === 0 ? (
+        <p className="tasks-screen__state">
+          {platform === 'workbuddy' ? TASKS.EMPTY : TASKS.PLATFORM_NONE}
+        </p>
       ) : (
         <ul className="tasks-screen__grid">
-          {state.tasks.map((t) => (
+          {scoped.map((t) => (
             <TaskCard key={t.name} task={t} />
           ))}
         </ul>

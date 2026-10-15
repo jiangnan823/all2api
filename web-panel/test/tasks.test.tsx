@@ -158,9 +158,9 @@ describe('任务中心屏 — 只读边界与空态', () => {
     await renderReady();
     expect(screen.getByText(TASKS.NOTE)).toBeTruthy();
     expect(screen.getByText(TASKS.COUNT.replace('{count}', '4'))).toBeTruthy();
-    // 只读边界：全部按钮只有刷新与（错误态才有的）重试，无执行类按钮
+    // 只读边界：按钮 = 三个平台页签 + 刷新（错误态才有的重试），无任何执行类按钮
     const buttons = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(buttons).toEqual([TASKS.REFRESH]);
+    expect(buttons).toEqual(['WorkBuddy', 'Qoder', 'Trae', TASKS.REFRESH]);
   });
 
   it('空 tasks → 空态文案 + 计数为 0', async () => {

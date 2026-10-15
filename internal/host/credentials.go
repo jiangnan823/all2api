@@ -205,6 +205,7 @@ func (s *CredentialStore) LoadAuthDir(dir string) (int, error) {
 				Platform:  WorkbuddyPlatform,
 				ExpiresAt: cred.ExpiresAt,
 				Status:    "active",
+				Health:    1, // optimistic start; request outcomes adjust via UpdateHealth
 			})
 		}
 		loaded++
@@ -244,6 +245,7 @@ func (s *CredentialStore) loadQoderPAT(dir string) int {
 			ID:       cred.UID,
 			Platform: QoderPlatform,
 			Status:   "active",
+			Health:   1,
 		})
 	}
 	return 1

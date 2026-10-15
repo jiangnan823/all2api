@@ -91,11 +91,11 @@ function AccountIdCell(props: { id: string }) {
   );
 }
 
-function AccountRow(props: { entry: AccountEntry }) {
-  const { entry: a } = props;
+function AccountRow(props: { entry: AccountEntry; showPlatform: boolean }) {
+  const { entry: a, showPlatform } = props;
   return (
     <tr>
-      <td>{a.platform}</td>
+      {showPlatform ? <td>{a.platform}</td> : null}
       <td>
         {a.nickname ? <span className="pool-table__nick">{a.nickname}</span> : null}
         <AccountIdCell id={a.id} />
@@ -228,7 +228,7 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
         </thead>
         <tbody>
           {scoped.map((a) => (
-            <AccountRow key={`${a.platform}:${a.id}`} entry={a} />
+            <AccountRow key={`${a.platform}:${a.id}`} entry={a} showPlatform={!filter} />
           ))}
         </tbody>
       </table>
