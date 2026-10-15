@@ -338,8 +338,53 @@ func (c *TaskClient) ReportActive(ctx context.Context, cred *Credential) error {
 	if cred == nil || cred.UID == "" {
 		return errors.New("workbuddy: active report needs the account uid (userId is the required event field)")
 	}
-	events := []map[string]any{{"eventCode": "chat_request_send", "userId": cred.UID}}
-	body, err := json.Marshal(events)
+	// Full client chat_request_send shape (wb_research reference: "do not use a
+	// minimal field set, in case the upstream tightens validation") — live
+	// testing 2026-10-15 10:00 cron rejected a bare {eventCode,userId} event on
+	// all four accounts. Every field stays present with zero values;
+	// conversationId is synthetic (the server does not cross-check it), userId
+	// is the account uid.
+	now := time.Now().UnixMilli()
+	conv := "all2api-" + strconv.FormatInt(now, 10)
+	ev := map[string]any{
+		"eventCode":             "chat_request_send",
+		"timestamp":             now,
+		"reportDelay":           0,
+		"mode":                  "craft",
+		"conversationId":        conv,
+		"requestId":             conv,
+		"inputLength":           12,
+		"requestModelId":        "deepseek-v4-flash",
+		"requestModelName":      "DeepSeek V4 Flash",
+		"isPlan":                false,
+		"isAutoExecuteTerminal": false,
+		"isAutoModify":          false,
+		"codebaseEnable":        false,
+		"maxToken":              0,
+		"maxSteps":              0,
+		"temperature":           0,
+		"maxRetries":            0,
+		"mentionContexts":       []any{},
+		"knowledgeId":           []any{},
+		"knowledgeName":         []any{},
+		"codebaseId":            "",
+		"mentionContextCount":   0,
+		"command":               "",
+		"expertId":              "",
+		"recommendId":           "",
+		"skillId":               "",
+		"skillCount":            0,
+		"totalCount":            0,
+		"fileUri":               "",
+		"presentAt":             now,
+		"traceId":               "",
+		"rootRequestId":         conv,
+		"parentConversationId":  conv,
+		"agentName":             "default",
+		"agentType":             "conversation",
+		"userId":                cred.UID,
+	}
+	body, err := json.Marshal([]map[string]any{ev})
 	if err != nil {
 		return err
 	}

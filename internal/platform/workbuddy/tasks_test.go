@@ -311,6 +311,20 @@ func TestReportActiveInjectsUserId(t *testing.T) {
 	if events[0]["userId"] != "uid-9" {
 		t.Errorf("userId = %v, want uid-9 injected from the credential", events[0]["userId"])
 	}
+	// Full client shape: the live endpoint rejected a bare {eventCode,userId}
+	// event (2026-10-15 10:00 cron, 4/4 accounts failed), so the event must
+	// carry the reference's full field set, not a minimal subset.
+	for _, key := range []string{"timestamp", "mode", "conversationId", "requestId", "requestModelId", "presentAt", "rootRequestId", "parentConversationId", "agentName", "agentType"} {
+		if _, ok := events[0][key]; !ok {
+			t.Errorf("event missing %q — live upstream rejects minimal shapes", key)
+		}
+	}
+	if events[0]["mode"] != "craft" {
+		t.Errorf("mode = %v, want craft (client shape)", events[0]["mode"])
+	}
+	if events[0]["conversationId"] != events[0]["rootRequestId"] {
+		t.Errorf("synthetic conversationId/rootRequestId mismatch: %v vs %v", events[0]["conversationId"], events[0]["rootRequestId"])
+	}
 }
 
 func TestReportActiveRequiresUID(t *testing.T) {
