@@ -265,7 +265,11 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     expect((document.querySelector('input[name="pool.credit_floor"]') as HTMLInputElement).value).toBe('100');
     expect((document.querySelector('input[name="pool.max_retries"]') as HTMLInputElement).value).toBe('3');
     expect((document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement).checked).toBe(false);
-    expect((document.querySelector('input[name="schedule.signin_cron"]') as HTMLInputElement).value).toBe('0 9,21 * * *');
+    // v1.2：cron 字段渲染为 24 小时制时点选择器（9、21 勾选），原始 cron 串不再以文本框暴露
+    const signinChecks = [...document.querySelectorAll<HTMLInputElement>('input[name="schedule.signin_cron:9"], input[name="schedule.signin_cron:21"]')];
+    expect(signinChecks.every((c) => c.checked)).toBe(true);
+    expect(signinChecks).toHaveLength(2);
+    expect(document.querySelector('input[name="schedule.signin_cron"]')).toBeNull();
     // effect=restart_required 的生效标注
     expect(text).toContain(SETTINGS.GENERIC_EFFECT_RESTART);
   });
@@ -286,7 +290,7 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     expect((document.querySelector('input[name="listen"]') as HTMLInputElement).value).toBe('127.0.0.1:8317');
   });
 
-  it('通用组保存流：PATCH 按冻结 path 携带改动值（number 发数值、boolean 发布尔、cron 发字符串）', async () => {
+  it('通用组保存流：PATCH 按冻结 path 携带改动值（number 发数值、boolean 发布尔、cron 经时点选择换算）', async () => {
     const fn = await renderReady({
       ...OK_ROUTES,
       'POST /api/config': { body: SAVE_OK_WIRE },
@@ -295,9 +299,9 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
       target: { value: '150' },
     });
     fireEvent.click(document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement);
-    fireEvent.change(document.querySelector('input[name="schedule.signin_cron"]') as HTMLInputElement, {
-      target: { value: '0 8,20 * * *' },
-    });
+    // v1.2：时点选择器操作——先去掉 21 点，再加 20 点 → cron 从 0 9,21 变为 0 9,20
+    fireEvent.click(document.querySelector('input[name="schedule.signin_cron:21"]') as HTMLInputElement);
+    fireEvent.click(document.querySelector('input[name="schedule.signin_cron:20"]') as HTMLInputElement);
     fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
     await screen.findByText(SETTINGS.SAVE_OK_NOTE);
     const posts = postCallsOf(fn!);
@@ -305,7 +309,7 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     expect(JSON.parse(posts[0][1].body as string)).toEqual([
       { key: 'router.responses_api.enabled', value: true },
       { key: 'pool.credit_floor', value: 150 },
-      { key: 'schedule.signin_cron', value: '0 8,20 * * *' },
+      { key: 'schedule.signin_cron', value: '0 9,20 * * *' },
     ]);
   });
 

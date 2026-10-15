@@ -472,3 +472,11 @@ export const MODEL_SOURCE_NAMES: Record<string, string> = {
 export function modelCapLabel(v: 'yes' | 'no'): string {
   return v === 'yes' ? '支持' : '不支持';
 }
+
+/** v1.2：cron 字段的 24 小时制时点选择（主人裁定——用户不面对 cron 语法）。 */
+export const CRON_FIELD = {
+  HOURS_LABEL: '运行时点（24 小时制，勾选即生效）',
+  HOURS_HINT: '勾选每天运行的小时；保存后自动转成调度表达式。',
+  FALLBACK_SHAPE: '该表达式不是"每日整点"形态，已回落为原始表达式编辑（懂 cron 可直接改）。',
+  FALLBACK_EDITED: '已手动修改为非每日形态，已回落为原始表达式编辑。',
+} as const;

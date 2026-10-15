@@ -20,7 +20,8 @@ import {
   type SourceDraft,
 } from '../lib/settingsModel';
 import { budgetDiff, setDeliveredThrottleFields, throttlePatchToConfigPatch } from '../lib/throttle';
-import { SETTINGS, settingsLine, sourceDisplayName } from '../i18n/zh';
+import { buildDailyCron, parseDailyHours } from '../lib/cronHours';
+import { CRON_FIELD, SETTINGS, settingsLine, sourceDisplayName } from '../i18n/zh';
 
 /**
  * 设置屏容器（M2 B2 → M2 第二批）：进入时并行拉 GET /api/config + GET /api/config/fields，
@@ -421,6 +422,12 @@ function GenericConfigSections(props: {
                         checked={value === true}
                         onChange={(e) => onChange(s.group, f.key, e.target.checked)}
                       />
+                    ) : f.type === 'cron' ? (
+                      <CronHoursField
+                        name={f.key}
+                        value={typeof value === 'string' ? value : ''}
+                        onChange={(expr) => onChange(s.group, f.key, expr)}
+                      />
                     ) : (
                       <input
                         type={f.type === 'number' ? 'number' : 'text'}
@@ -484,5 +491,59 @@ function ApiKeySection() {
       />
       <p className="settings-screen__apikey-note">{SETTINGS.APIKEY_NOTE}</p>
     </section>
+  );
+}
+
+/**
+ * cron 字段的用户形态（v1.2 主人裁定"用户不该面对 cron 语法"）：24 小时制时点多选
+ * （0–23 勾选，如 9,21）。挂载时解析既有表达式——每日 `0 h,h * * *` 形态给选择器，
+ * 其他形态（分钟非 0/通配/步进）如实回落到原生文本框并标注原因；勾选变化即时换算
+ * 回 cron 落草稿（后端契约不变，看到的仍是 cron 值）。未勾选任何时点时保存被拦截
+ * （提示至少选一个），不提交非法空表达式。
+ */
+function CronHoursField(props: { name: string; value: string; onChange: (expr: string) => void }) {
+  const parsed = parseDailyHours(props.value);
+  // 回落是“当前值的形状”决定的展示分支，无需独立状态：值变每日形态即回选择器。
+  const fallback = parsed === null && props.value !== '';
+
+  if (fallback || parsed === null) {
+    return (
+      <span className="cron-field cron-field--fallback">
+        <input
+          type="text"
+          name={props.name}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+        />
+        <span className="settings-screen__generic-desc">
+          {fallback ? CRON_FIELD.FALLBACK_EDITED : CRON_FIELD.FALLBACK_SHAPE}
+        </span>
+      </span>
+    );
+  }
+
+  const toggle = (hour: number, on: boolean) => {
+    const next = on ? [...parsed, hour] : parsed.filter((h) => h !== hour);
+    if (next.length === 0) return; // 至少保留一个时点
+    props.onChange(buildDailyCron(next));
+  };
+
+  return (
+    <span className="cron-field">
+      <span className="cron-field__hours" role="group" aria-label={CRON_FIELD.HOURS_LABEL}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <label key={h} className={`cron-field__hour${parsed.includes(h) ? ' cron-field__hour--on' : ''}`}>
+            <input
+              type="checkbox"
+              name={`${props.name}:${h}`}
+              checked={parsed.includes(h)}
+              onChange={(e) => toggle(h, e.target.checked)}
+            />
+            {String(h).padStart(2, '0')}
+          </label>
+        ))}
+      </span>
+      <span className="settings-screen__generic-desc">{CRON_FIELD.HOURS_HINT}</span>
+    </span>
   );
 }

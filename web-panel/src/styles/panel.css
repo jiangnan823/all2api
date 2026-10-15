@@ -1392,3 +1392,49 @@
   font-family: var(--mono);
   color: var(--text-primary);
 }
+
+/* ---- v1.2：cron 字段 24 小时制时点选择（SettingsScreen CronHoursField）。---- */
+.cron-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.cron-field__hours {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--sp-1);
+  max-width: 420px;
+}
+
+.cron-field__hour {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 0;
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cron-field__hour input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cron-field__hour--on {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.cron-field--fallback input {
+  max-width: 340px;
+}
