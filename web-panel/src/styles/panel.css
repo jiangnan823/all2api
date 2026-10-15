@@ -693,3 +693,294 @@
   font-size: var(--fs-sm);
   color: var(--status-danger);
 }
+
+/* ---- M5b：账号池屏 / 运行日志屏（颜色/间距一律取 tokens.css 冻结变量，不新增 token） ---- */
+
+.pool-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.pool-error,
+.pool-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+}
+
+.pool-error__title,
+.pool-empty__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.pool-error__title {
+  color: var(--status-danger);
+}
+
+.pool-error__detail {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--status-danger);
+}
+
+.pool-error__hint,
+.pool-empty__body {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-loose);
+  color: var(--text-secondary);
+}
+
+.pool-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.pool-screen__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+
+.pool-screen__sub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+/* 状态卡行（总数/可用/冷却中/禁用/积分合计） */
+.pool-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pool-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+}
+
+.pool-card__label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.pool-card__value {
+  font-family: var(--mono);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-tight);
+}
+
+.pool-card__value--ok {
+  color: var(--status-success);
+}
+
+.pool-card__value--warn {
+  color: var(--status-warn);
+}
+
+.pool-card__value--err {
+  color: var(--status-danger);
+}
+
+/* 账号表格 */
+.pool-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+.pool-table th,
+.pool-table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pool-table thead th {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+}
+
+.pool-table__num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pool-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  max-width: 100%;
+}
+
+.pool-copy:hover code {
+  color: var(--brand);
+}
+
+.pool-copy code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.pool-copy__hint {
+  font-size: var(--fs-xs);
+  color: var(--status-success);
+  white-space: nowrap;
+}
+
+/* 状态 / 级别徽色（共用一档基调） */
+.pool-badge {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  border: 1px solid var(--line-border);
+}
+
+.pool-badge--ok {
+  color: var(--status-success);
+  border-color: var(--status-success);
+}
+
+.pool-badge--warn {
+  color: var(--status-warn);
+  border-color: var(--status-warn);
+}
+
+.pool-badge--err {
+  color: var(--status-danger);
+  border-color: var(--status-danger);
+}
+
+.pool-badge--idle {
+  color: var(--text-secondary);
+}
+
+/* 运行日志屏 */
+.logs-screen__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+.logs-screen__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+}
+
+.logs-screen__filter legend {
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.logs-screen__filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+}
+
+.logs-screen__filter-item input[type='radio'],
+.logs-screen__autoscroll input[type='checkbox'] {
+  accent-color: var(--brand);
+}
+
+.logs-screen__autoscroll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+}
+
+.logs-list {
+  margin: 0;
+  padding: var(--sp-3);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-2);
+}
+
+.logs-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-loose);
+  min-width: 0;
+}
+
+.logs-line__ts {
+  flex: none;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-line__level {
+  flex: none;
+  min-width: 5ch;
+  text-align: center;
+}
+
+.logs-line__level--err {
+  color: var(--status-danger);
+}
+
+.logs-line__level--warn {
+  color: var(--status-warn);
+}
+
+.logs-line__level--idle {
+  color: var(--text-tertiary);
+}
+
+.logs-line__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
