@@ -76,10 +76,13 @@ function parseTasksWire(body: unknown): TaskEntry[] {
 
 /**
  * (任务名, 平台) → 冻结配置键（M10 wire，键名不得改；schedule 命名空间沿用既有 JSON path 约定）。
+ * 网关注册的任务名带平台后缀（"signin@workbuddy"，B2 平台化注册），此处剥掉 @后缀再归一。
  * 未知任务名返回 null：无键即无编辑面，渲染只读行，不在前端发明键名。
  */
 function taskConfigKey(name: string, platform: TaskPlatform): string | null {
-  switch (name) {
+  const at = name.indexOf('@');
+  const kind = at === -1 ? name : name.slice(0, at);
+  switch (kind) {
     case 'signin': return `schedule.signin_cron_${platform}`;
     case 'active_check': return `schedule.task_cron_${platform}`;
     case 'token_keepalive': return `schedule.token_keepalive_${platform}`;
