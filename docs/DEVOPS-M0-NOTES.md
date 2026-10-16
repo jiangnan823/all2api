@@ -1066,3 +1066,12 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 - **ModelLocksCard 按 platform 过滤**（load 时按 wire platform 键丢弃他域锁；组件新增 platform 可选 prop，总览 undefined=全量语义不变）。
 - **「全部解锁」收窄作用域**（后端 UnlockAll(platform) + unlock body 新增 platform 键）：qoder 页的全部解锁只清 qoder 锁，此前会越界清掉 workbuddy 的锁——审查视角的 scope leak，主人截图连带揪出来的。
 - 测试：scoped UnlockAll 新例；352 前端用例全绿。教训：**分平台 IA 下每个挂载件都要问「这块在别的平台页该不该出现」**——M10-C 的验收截图恰好只看了 WorkBuddy 页，Qoder 页的串台漏网到主人手里。
+
+
+## 9.41 qoder 凭证排查：两张 PAT 均无效（2026-10-16，主人 ZCode「qoder/* 连接失败」驱动）
+
+主人报 qoder/DeepSeek-Flash 失败。排查链：账号被上游 401/403 "Login expired" 自动禁用（fail 计数与 status 禁用联动正确）；换新 PAT（pt-3s0a…，20:25 面板录入）后**重启网关全新加载仍被拒**。决定性实验：编译参考实现 Qoder-2API-Go，同机同时刻用同一张 PAT 直打——参考实现连交换都过不了（`HTTP 401 personal token is invalid`），我方反而交换通过、进聊天流才被拒。**结论：上游判定该 PAT 无效，与网关实现无关**（参考实现拒绝得更早更干脆）。
+
+- 排查方法沉淀：**"用参考实现同输入复测"是最高效的实现vs凭证归因手段**——一次实验同时排除/坐实整条客户端链。
+- 待主人确认：PAT 来源页（CN qoder.com.cn vs 国际 qoder.com 站别要对上）、复制完整性（当前文件 64 字符）、账号是否有 OpenAPI 配额（两次配额探测均 0）。
+- 附带发现：台账 20:05:59 的 6 连 0ms 错误 = 账号禁用期间的模型遍历秒 503；"Model request was cancelled" 是 ZCode 对「SSE 流中途断开」的包装措辞，根因同上。
