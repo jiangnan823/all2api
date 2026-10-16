@@ -575,9 +575,9 @@ func TestToolChoiceNoneDropped(t *testing.T) {
 
 func TestReasoningEffortMapping(t *testing.T) {
 	cases := []struct {
-		effort      string
-		wantKey     string // "" = neither key may appear
-		wantVal     any
+		effort       string
+		wantKey      string // "" = neither key may appear
+		wantVal      any
 		forbiddenKey string
 	}{
 		{effort: "high", wantKey: "reasoning_effort", wantVal: "high", forbiddenKey: "thinking"},
