@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -567,6 +568,49 @@ func TestToolChoiceNoneDropped(t *testing.T) {
 	}
 	if _, has := obj["tools"]; has {
 		t.Error("tool_choice=none should drop tools (upstream dangling-array 11101)")
+	}
+}
+
+// ---------- reasoning effort → thinking switch ----------
+
+func TestReasoningEffortMapping(t *testing.T) {
+	cases := []struct {
+		effort      string
+		wantKey     string // "" = neither key may appear
+		wantVal     any
+		forbiddenKey string
+	}{
+		{effort: "high", wantKey: "reasoning_effort", wantVal: "high", forbiddenKey: "thinking"},
+		{effort: "Max", wantKey: "reasoning_effort", wantVal: "Max", forbiddenKey: "thinking"},
+		{effort: "off", wantKey: "thinking", wantVal: map[string]any{"type": "disabled"}, forbiddenKey: "reasoning_effort"},
+		{effort: "none", wantKey: "thinking", wantVal: map[string]any{"type": "disabled"}, forbiddenKey: "reasoning_effort"},
+		{effort: "", wantKey: "", wantVal: nil, forbiddenKey: "reasoning_effort"},
+	}
+	for _, tc := range cases {
+		body, err := buildUpstreamBody(adapter.ChatRequest{
+			Model:           "m",
+			Messages:        []adapter.ChatMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+			ReasoningEffort: tc.effort,
+		})
+		if err != nil {
+			t.Fatalf("effort %q: %v", tc.effort, err)
+		}
+		var obj map[string]any
+		if err := json.Unmarshal(body, &obj); err != nil {
+			t.Fatalf("effort %q: %v", tc.effort, err)
+		}
+		if tc.wantKey == "" {
+			if _, has := obj[tc.forbiddenKey]; has {
+				t.Errorf("effort %q: %s must stay absent", tc.effort, tc.forbiddenKey)
+			}
+			continue
+		}
+		if got := obj[tc.wantKey]; !reflect.DeepEqual(got, tc.wantVal) {
+			t.Errorf("effort %q: %s = %v, want %v", tc.effort, tc.wantKey, got, tc.wantVal)
+		}
+		if _, has := obj[tc.forbiddenKey]; has {
+			t.Errorf("effort %q: %s must not appear (upstream 400/11150 semantics)", tc.effort, tc.forbiddenKey)
+		}
 	}
 }
 

@@ -768,6 +768,17 @@ func buildUpstreamBody(req adapter.ChatRequest) ([]byte, error) {
 	if req.User != "" {
 		obj["user"] = req.User
 	}
+	// Reasoning effort → the upstream thinking switch (protocol §7): the
+	// flat reasoning_effort field 400s on "off", so "off" maps to
+	// thinking.disabled and every other non-empty value rides the flat
+	// field verbatim (deepseek 系据此必吐 delta.reasoning_content).
+	if effort := strings.ToLower(strings.TrimSpace(req.ReasoningEffort)); effort != "" {
+		if effort == "off" || effort == "none" {
+			obj["thinking"] = map[string]any{"type": "disabled"}
+		} else {
+			obj["reasoning_effort"] = req.ReasoningEffort
+		}
+	}
 	// stream_options: the official CLI always sends include_usage so the
 	// final frame carries usage (report §4 item 2).
 	obj["stream_options"] = map[string]any{"include_usage": true}

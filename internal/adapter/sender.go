@@ -44,6 +44,11 @@ type ChatRequest struct {
 	Tools       json.RawMessage `json:"tools,omitempty"`       // tool definitions
 	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"` // "none"|"auto"|{...}
 	User        string          `json:"user,omitempty"`
+	// ReasoningEffort is the OpenAI-style reasoning-effort hint ("low" /
+	// "medium" / "high", "off" to disable). Platforms without the concept
+	// ignore it; workbuddy maps it per protocol §7 (off → thinking.disabled,
+	// the flat field itself 400s on "off").
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 // Usage reports token accounting for a completion.
