@@ -1002,3 +1002,15 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 - **共享目录源**：panel_data.go 的 handleModels 行构建抽成 `buildModelRows(ctx,cat,refresh) (rows, source)`（PublicModelList 与面板端点共用，防两套目录漂移）。
 - **集成教训（第 N 次）**：python heredoc 对 CRLF 工作副本做 `\n` 模式替换会**静默不命中**（main.go 接线丢失 → /v1/models 空清单实测才暴露）。判定法：`repr()` 看 `\r\n`；替换一律断言命中（assert in / count）。
 - 实测：`curl /v1/models` 200 + 90 行；裸名与前缀名同列；owned_by 归属正确。
+
+
+## 9.35 reasoning_content 透传 + reasoning_effort 请求侧开关（2026-10-16，主人「把透传做了」点名 + ZCode 供应商测试排查驱动）
+
+主人经 ZCode 新建供应商接网关（模型 workbuddy/glm-5.3-flash）报 "Model request failed."。排查：该文案不在网关代码里（客户端通用报错）；网关侧非流式/流式/工具调用/无 max_tokens 全路径实测通过，api_key 开放模式——失败主因是测试落在热替换窗口或 /v1/models 补齐之前。排查顺带暴露真缺口：**思考型模型的思维链被网关丢弃**。
+
+- **响应侧透传**：`adapter.ChatMessage += ReasoningContent`（`json:"reasoning_content,omitempty"`）。流式免费修复——relayStream 把上游帧解进 StreamChunk 再转发，此前未知字段在 Unmarshal 即被剥；非流式由 workbuddy 聚合器累加（aggregated.reasoning，scanDelta 第四参）。qoder 无此概念，omitempty 保持 wire 干净。协议文档 §13 缺口清单闭合。
+- **请求侧开关**：`ChatRequest += ReasoningEffort`（OpenAI 风格 low/medium/high）。按协议 §7 映射：`off/none` → 删字段 + `thinking:{"type":"disabled"}`（扁平字段 off 会 400/11150）；其余档位原样透传 flat 字段。deepseek 系带档位必吐 delta.reasoning_content。
+- **实测（热替换后真实上游）**：`workbuddy/deepseek-v4.1-flash + reasoning_effort:high` → 非流式 message.reasoning_content 353 字符思维链 + 正文并存；流式 delta 逐字出现 `"reasoning_content":"The"`。不带档位时上游默认关思考、无 reasoning——行为如实。
+- **ZCode 接入口径（已答复主人）**：Base URL `http://127.0.0.1:7800/v1`；模型用 `platform/model` 前缀名钉平台；思考模型给足 max_tokens（小预算全被思维链吃掉时 content 为空 + finish=length，协议合法但客户端看起来像失败）。
+
+门禁：全包测试/vet 全绿，CI 十 job success（7d4c83d）。
