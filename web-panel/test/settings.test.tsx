@@ -256,20 +256,18 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     // 原始文案 key 一律经 zh.ts 换算，不外漏
     expect(text).not.toContain('config.field.listen.label');
     expect(text).not.toContain('config.field.credit_floor.label');
-    // 四组标题在文档中逐一可见
-    for (const t of ['网关', '路由', '池化', '定时任务']) {
+    // 三组标题在文档中逐一可见；schedule（定时任务）组 M10-A 起整组下放平台页，不再渲染
+    for (const t of ['网关', '路由', '池化']) {
       expect(text).toContain(t);
     }
-    // 值来自 raw：顶层字符串 listen、嵌套数值 pool.credit_floor、布尔 router.responses_api.enabled、cron 串
+    expect(text).not.toContain('定时任务');
+    // 值来自 raw：顶层字符串 listen、嵌套数值 pool.credit_floor、布尔 router.responses_api.enabled
     expect((document.querySelector('input[name="listen"]') as HTMLInputElement).value).toBe('127.0.0.1:8317');
     expect((document.querySelector('input[name="pool.credit_floor"]') as HTMLInputElement).value).toBe('100');
     expect((document.querySelector('input[name="pool.max_retries"]') as HTMLInputElement).value).toBe('3');
     expect((document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement).checked).toBe(false);
-    // v1.2：cron 字段渲染为 24 小时制时点选择器（9、21 勾选），原始 cron 串不再以文本框暴露
-    const signinChecks = [...document.querySelectorAll<HTMLInputElement>('input[name="schedule.signin_cron:9"], input[name="schedule.signin_cron:21"]')];
-    expect(signinChecks.every((c) => c.checked)).toBe(true);
-    expect(signinChecks).toHaveLength(2);
-    expect(document.querySelector('input[name="schedule.signin_cron"]')).toBeNull();
+    // M10-A：交付元数据里即便仍带 schedule 字段，配置页也不渲染任何 schedule 输入（下放平台页）
+    expect(document.querySelector('input[name^="schedule."]')).toBeNull();
     // effect=restart_required 的生效标注
     expect(text).toContain(SETTINGS.GENERIC_EFFECT_RESTART);
   });
@@ -290,7 +288,7 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
     expect((document.querySelector('input[name="listen"]') as HTMLInputElement).value).toBe('127.0.0.1:8317');
   });
 
-  it('通用组保存流：PATCH 按冻结 path 携带改动值（number 发数值、boolean 发布尔、cron 经时点选择换算）', async () => {
+  it('通用组保存流：PATCH 按冻结 path 携带改动值（number 发数值、boolean 发布尔；schedule 组不在本页）', async () => {
     const fn = await renderReady({
       ...OK_ROUTES,
       'POST /api/config': { body: SAVE_OK_WIRE },
@@ -299,17 +297,14 @@ describe('设置屏 — 元数据驱动（/api/config/fields 是字段权威）'
       target: { value: '150' },
     });
     fireEvent.click(document.querySelector('input[name="router.responses_api.enabled"]') as HTMLInputElement);
-    // v1.2：时点选择器操作——先去掉 21 点，再加 20 点 → cron 从 0 9,21 变为 0 9,20
-    fireEvent.click(document.querySelector('input[name="schedule.signin_cron:21"]') as HTMLInputElement);
-    fireEvent.click(document.querySelector('input[name="schedule.signin_cron:20"]') as HTMLInputElement);
     fireEvent.click(screen.getByRole('button', { name: SETTINGS.SAVE }));
     await screen.findByText(SETTINGS.SAVE_OK_NOTE);
     const posts = postCallsOf(fn!);
-    // PATCH 顺序跟随组交付序（routing 组先于 pooling），逐项断言冻结 path 与原生类型
+    // PATCH 顺序跟随组交付序（routing 组先于 pooling），逐项断言冻结 path 与原生类型；
+    // 定时任务键（schedule.*）M10-A 起由平台任务卡（PlatformTasksCard）提交，配置页补丁不含
     expect(JSON.parse(posts[0][1].body as string)).toEqual([
       { key: 'router.responses_api.enabled', value: true },
       { key: 'pool.credit_floor', value: 150 },
-      { key: 'schedule.signin_cron', value: '0 9,20 * * *' },
     ]);
   });
 
