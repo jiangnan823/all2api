@@ -222,12 +222,13 @@ describe('模型屏 — M8 实时目录列（积分倍率 / 思考档位）', ()
     ],
   };
 
-  it('积分倍率数字原样、思考档位数组 join；列序 = 平台/模型/倍率/档位/上下文/最大输出/工具/流式', async () => {
+  it('积分倍率数字原样、思考档位数组 join；列序 = 平台/模型/倍率/档位/上下文/最大输出/工具/视觉/流式', async () => {
     await renderReady({ '/api/models': { body: UPSTREAM_WIRE } }, 'deepseek-v4-flash');
     const head = [...document.querySelectorAll('thead th')].map((th) => th.textContent);
     expect(head).toEqual([
       MODELS.COL_PLATFORM, MODELS.COL_MODEL, MODELS.COL_CREDIT, MODELS.COL_TIERS,
-      MODELS.COL_CONTEXT, MODELS.COL_MAX_OUTPUT, MODELS.COL_TOOL, MODELS.COL_STREAM, MODELS.COL_FREE,
+      MODELS.COL_CONTEXT, MODELS.COL_MAX_OUTPUT, MODELS.COL_TOOL, MODELS.COL_VISION,
+      MODELS.COL_STREAM, MODELS.COL_FREE,
     ]);
     const row = document.querySelector('tr[data-platform="workbuddy"]')!;
     expect(row.textContent).toContain('0.05');

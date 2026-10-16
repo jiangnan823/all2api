@@ -529,6 +529,7 @@ export const MODELS = {
   COL_CONTEXT: '上下文',
   COL_MAX_OUTPUT: '最大输出',
   COL_TOOL: '工具调用',
+  COL_VISION: '视觉',
   COL_STREAM: '流式',
   COL_FREE: '免费额度',
   UNKNOWN: '—',

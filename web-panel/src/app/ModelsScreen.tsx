@@ -21,6 +21,7 @@ interface ModelRow {
   contextSize: number | null;
   maxOutput: number | null;
   supportsTool: boolean | null;
+  supportsVision: boolean | null;
   supportsStream: boolean | null;
   isFree: boolean | null;
   creditMultiplier: number | null;
@@ -81,6 +82,7 @@ function parseModelsWire(body: unknown): { source: string; models: ModelRow[] } 
       contextSize: optNum(m['context_size']),
       maxOutput: optNum(m['max_output']),
       supportsTool: optTri(m['supports_tool']),
+      supportsVision: optTri(m['supports_vision']),
       supportsStream: optTri(m['supports_stream']),
       isFree: optTri(m['is_free']),
       creditMultiplier: optNum(m['credit_multiplier']),
@@ -188,6 +190,7 @@ export function ModelsScreen() {
                 <th scope="col">{MODELS.COL_CONTEXT}</th>
                 <th scope="col">{MODELS.COL_MAX_OUTPUT}</th>
                 <th scope="col">{MODELS.COL_TOOL}</th>
+                <th scope="col">{MODELS.COL_VISION}</th>
                 <th scope="col">{MODELS.COL_STREAM}</th>
                 <th scope="col">{MODELS.COL_FREE}</th>
               </tr>
@@ -213,6 +216,7 @@ export function ModelsScreen() {
                   <td className="models-screen__num">{m.contextSize !== null && m.contextSize > 0 ? m.contextSize.toLocaleString() : numOrUnknown(null)}</td>
                   <td className="models-screen__num">{numOrUnknown(m.maxOutput)}</td>
                   <td>{triCopy(m.supportsTool)}</td>
+                  <td>{triCopy(m.supportsVision)}</td>
                   <td>{triCopy(m.supportsStream)}</td>
                   <td>{triCopy(m.isFree)}</td>
                 </tr>
