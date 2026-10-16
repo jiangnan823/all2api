@@ -170,3 +170,29 @@
   color: var(--status-danger);
   font-size: var(--fs-sm);
 }
+
+/* ---- 积分到期提醒卡：每账号块 + 批次 chip（wb2api 同构观感） ---- */
+.packages-card__accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.packages-card__account-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.packages-card__nearest {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.packages-card__batches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--panel-text-dim, #8b93a7);
+}
+.packages-card__batch--more {
+  color: var(--panel-text-dim, #8b93a7);
+}

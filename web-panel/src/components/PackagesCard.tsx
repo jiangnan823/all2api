@@ -40,6 +40,10 @@ const COPY = {
   CHECKING: '检查中…',
   REFRESHED: (n: number): string => `已刷新 ${n} 个账号`,
   ERRORS_TITLE: '查询失败',
+  /** 随后批次最多展示条数（wb2api 同构：3 条 + 「等 N 批」）。 */
+  FOLLOWING_SHOWN: 3,
+  MORE: (n: number): string => `等 ${n} 批`,
+  ALL_SPENT: '该账号所有批次剩余均为 0',
 } as const;
 
 function fmtLocal(cycleEnd: PkgCycleEnd | null): string {
@@ -53,31 +57,49 @@ function daysUntil(cycleEnd: PkgCycleEnd | null): number | null {
 
 function AccountPackages(props: { account: PkgAccount }) {
   const { account: a } = props;
-  const nearest = a.nearest;
-  const days = daysUntil(nearest);
-  const nearestRemain = a.batches[0]?.remain ?? null;
+  // 只剩 0 的批次不参与估算也不倾倒展示（真实上游会返回几十个耗尽的
+  // 历史包，全量渲染成一堵 0 墙没有信息量）——FEFO 语义按「有剩余」算。
+  const active = a.batches.filter((b) => b.remain > 0);
+  if (a.error) {
+    return (
+      <div className="packages-card__account">
+        <h4 className="packages-card__account-title">{a.nickname || a.id}</h4>
+        <p className="packages-card__error" role="alert">{a.error}</p>
+      </div>
+    );
+  }
+  if (active.length === 0) {
+    return (
+      <div className="packages-card__account">
+        <h4 className="packages-card__account-title">{a.nickname || a.id}</h4>
+        <p className="packages-card__nearest">{COPY.ALL_SPENT}</p>
+      </div>
+    );
+  }
+  const nearestBatch = active[0];
+  const days = daysUntil(nearestBatch.cycle_end);
+  // 日均需耗按「该批剩余 ÷ 距到期天数」现算（wb2api 同构口径）；到期当天
+  // 剩余就是今天要烧掉的量。
+  const daily = days === null ? null : Math.ceil(nearestBatch.remain / Math.max(days, 1));
+  const following = active.slice(1, 1 + COPY.FOLLOWING_SHOWN);
+  const more = active.length - 1 - following.length;
   return (
     <div className="packages-card__account">
       <h4 className="packages-card__account-title">{a.nickname || a.id}</h4>
-      {a.error ? (
-        <p className="packages-card__error" role="alert">{a.error}</p>
-      ) : (
-        <>
-          <p className="packages-card__nearest">
-            {PACKAGES.NEAREST.replace('{date}', nearest ? fmtLocal(nearest) : '—')
-              .replace('{days}', String(days))
-              .replace('{remain}', String(nearestRemain))
-              .replace('{daily}', String(a.daily_burn ?? '—'))}
-          </p>
-          <div className="packages-card__batches">
-            {a.batches.map((b, i) => (
-              <span key={i} className="packages-card__batch">
-                {PACKAGES.BATCH_LINE.replace('{date}', b.cycle_end ? b.cycle_end.local.slice(5, 10) : '—').replace('{remain}', String(b.remain))}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      <p className="packages-card__nearest">
+        {PACKAGES.NEAREST.replace('{date}', fmtLocal(nearestBatch.cycle_end))
+          .replace('{days}', String(days === null ? '—' : Math.max(days, 0)))
+          .replace('{remain}', String(nearestBatch.remain))
+          .replace('{daily}', String(daily ?? '—'))}
+      </p>
+      <div className="packages-card__batches">
+        {following.map((b, i) => (
+          <span key={i} className="packages-card__batch">
+            {PACKAGES.BATCH_LINE.replace('{date}', b.cycle_end ? b.cycle_end.local.slice(5, 10) : '—').replace('{remain}', String(b.remain))}
+          </span>
+        ))}
+        {more > 0 && <span className="packages-card__batch packages-card__batch--more">{COPY.MORE(more)}</span>}
+      </div>
     </div>
   );
 }

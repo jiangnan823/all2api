@@ -129,3 +129,67 @@ describe('PackagesCard — M10 检查按钮', () => {
     expect(alerts.map((a) => a.textContent)).toContain('实时查询尚未交付');
   });
 });
+
+describe('PackagesCard — M10-C 零批次过滤与随后截断（主人验收「0 墙」驱动）', () => {
+  function pkgFixture() {
+    return {
+      accounts: [
+        {
+          platform: 'workbuddy',
+          id: 'wb-zero',
+          nickname: '混合批次号',
+          total_remain: 930,
+          nearest: { unix: 1792000000, local: '2026-10-31 00:00:00' },
+          daily_burn: 353,
+          batches: [
+            { remain: 0, cycle_end: { unix: 1792000000, local: '2026-10-31 00:00:00' } },
+            { remain: 100, cycle_end: { unix: 1792600000, local: '2026-11-10 00:00:00' } },
+            { remain: 200, cycle_end: { unix: 1792700000, local: '2026-11-12 00:00:00' } },
+            { remain: 300, cycle_end: { unix: 1792800000, local: '2026-11-14 00:00:00' } },
+            { remain: 50, cycle_end: { unix: 1792900000, local: '2026-11-16 00:00:00' } },
+            { remain: 280, cycle_end: { unix: 1793000000, local: '2026-11-20 00:00:00' } },
+          ],
+        },
+        {
+          platform: 'workbuddy',
+          id: 'wb-all-spent',
+          nickname: '全耗尽号',
+          total_remain: 0,
+          nearest: null,
+          daily_burn: null,
+          batches: [{ remain: 0, cycle_end: { unix: 1792000000, local: '2026-10-31 00:00:00' } }],
+        },
+      ],
+    };
+  }
+
+  it('该批取第一个剩余>0 的批次；随后只显示 3 条 + 「等 N 批」；0 剩余批次不上屏', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/packages/refresh')) return okRefresh();
+      return { ok: true, status: 200, json: async () => pkgFixture() } as Response;
+    }));
+    render(<PackagesCard />);
+    await waitFor(() => expect(screen.getByText('混合批次号')).toBeTruthy());
+    // 该批 = 第一个 remain>0 的批次（100），不是被耗尽的 0
+    const nearest = screen.getByText(/该批 100 积分/);
+    expect(nearest).toBeTruthy();
+    expect(screen.queryByText(/该批 0 积分/)).toBeNull();
+    // 随后：11-12 · 200 / 11-14 · 300 / 11-16 · 50 三条 + 等 1 批；11-20 批被截断；无「· 0」墙
+    expect(screen.getByText(/随后 11-12 · 200/)).toBeTruthy();
+    expect(screen.getByText(/随后 11-14 · 300/)).toBeTruthy();
+    expect(screen.getByText(/随后 11-16 · 50/)).toBeTruthy();
+    expect(screen.getByText(/等 1 批/)).toBeTruthy();
+    expect(screen.queryByText(/随后 11-20 · 280/)).toBeNull();
+    expect(screen.queryByText(/随后 10-31 · 0/)).toBeNull();
+  });
+
+  it('全部批次剩余 0 → 诚实整句，不编造到期估算', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/packages/refresh')) return okRefresh();
+      return { ok: true, status: 200, json: async () => pkgFixture() } as Response;
+    }));
+    render(<PackagesCard />);
+    await waitFor(() => expect(screen.getByText('全耗尽号')).toBeTruthy());
+    expect(screen.getByText('该账号所有批次剩余均为 0')).toBeTruthy();
+  });
+});
