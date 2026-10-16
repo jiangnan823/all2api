@@ -132,12 +132,27 @@ type Deps struct {
 // Crons maps each configurable task to its cron spec, as filled from
 // config.Schedule. Only three keys exist there — signin_cron → Signin,
 // task_cron → ActiveCheck (the "0 10 * * *" daily slot), token_keepalive_cron
-// → TokenKeepalive — and that mapping is recorded here as-is: cat_travel has
-// NO config key. It always runs on its code-truth spec (DefaultCatTravelCron,
-// from the schedule.go package header "cat_travel(09/21)"); a fourth config
-// key is deliberately not invented.
+// → TokenKeepalive — and that mapping is recorded here as-is. (M10-B2 update:
+// per-platform cron keys now exist — schedule.signin_cron_<platform> et al and
+// the workbuddy-only cat_travel_cron; they ride PlatformCrons and
+// BuildPlatformTasks below, while this struct stays the legacy global path
+// BuildDefaultTasks serves. cat_travel gained its first config key there.)
 type Crons struct {
 	Signin         string // config.Schedule.SigninCron
 	ActiveCheck    string // config.Schedule.TaskCron
 	TokenKeepalive string // config.Schedule.TokenKeepalive
+}
+
+// PlatformCrons carries one platform's resolved cron specs for the M10-B2
+// per-platform task registration: four tasks (cat_travel only where the
+// platform actually offers it — workbuddy). Values are the config-resolved
+// specs (empty platform key already fell back to the global key upstream, in
+// host.SchedulePlatformTasks); "" lets BuildPlatformTasks apply the code-truth
+// default, which is what cat_travel does when its key is unset.
+type PlatformCrons struct {
+	Platform       string
+	Signin         string
+	ActiveCheck    string
+	TokenKeepalive string
+	CatTravel      string
 }

@@ -9,8 +9,11 @@ package host
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
+	"all2api/internal/config"
 	"all2api/internal/pool"
 	"all2api/internal/schedule"
 )
@@ -45,9 +48,24 @@ func taskPlatforms(taskType string) map[string]bool {
 	}
 }
 
+// taskPlatformScope resolves the platform a task run is scoped to. The M10-B2
+// per-platform tasks carry the schedule.PlatformTaskName suffix
+// ("<task>@<platform>"): the run then covers exactly that platform — the
+// registration (SchedulePlatformTasks) already decided capability when it
+// created the task, so the source trusts the name. Bare legacy task names
+// keep the global capability table above.
+func taskPlatformScope(taskType string) (platform string, scoped bool) {
+	base, platform, found := strings.Cut(taskType, "@")
+	if !found || base == "" || platform == "" {
+		return "", false
+	}
+	return platform, true
+}
+
 // Accounts lists the run's account batch (deps.go AccountSource contract).
 func (s *poolSource) Accounts(_ context.Context, taskType string) ([]*schedule.Account, error) {
 	platforms := taskPlatforms(taskType)
+	scope, scoped := taskPlatformScope(taskType)
 	snapshot := s.pool.SnapshotAccounts()
 
 	result := make([]*schedule.Account, 0, len(snapshot))
@@ -55,7 +73,12 @@ func (s *poolSource) Accounts(_ context.Context, taskType string) ([]*schedule.A
 		acc := snapshot[i]
 		// Unknown taskType: taskPlatforms returned nil — conservatively match
 		// no platform (empty batch, never a cross-platform misfire).
-		if platforms == nil || !platforms[acc.Platform] {
+		if !scoped && (platforms == nil || !platforms[acc.Platform]) {
+			continue
+		}
+		// Platform-scoped run ("<task>@<platform>"): only that platform's
+		// accounts belong in the batch, whatever the legacy table says.
+		if scoped && acc.Platform != scope {
 			continue
 		}
 		result = append(result, &schedule.Account{
@@ -66,6 +89,54 @@ func (s *poolSource) Accounts(_ context.Context, taskType string) ([]*schedule.A
 		})
 	}
 	return result, nil
+}
+
+// SchedulePlatformTasks resolves the M10-B2 per-platform cron configuration
+// onto schedule.PlatformCrons for every configured source: an empty platform
+// key falls back to the frozen global key (signin_cron / task_cron /
+// token_keepalive_cron), and cat_travel falls back to its code-truth default
+// when cat_travel_cron is unset. Sources are delivered in sorted-id order so
+// the resulting task registration order is deterministic.
+func SchedulePlatformTasks(cfg config.Config) []schedule.PlatformCrons {
+	ids := make([]string, 0, len(cfg.Sources))
+	for id := range cfg.Sources {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	specs := make([]schedule.PlatformCrons, 0, len(ids))
+	for _, id := range ids {
+		specs = append(specs, schedule.PlatformCrons{
+			Platform:       id,
+			Signin:         pickPlatformCron(cfg.Schedule.SigninCronWorkbuddy, cfg.Schedule.SigninCronQoder, cfg.Schedule.SigninCronTrae, id, cfg.Schedule.SigninCron),
+			ActiveCheck:    pickPlatformCron(cfg.Schedule.TaskCronWorkbuddy, cfg.Schedule.TaskCronQoder, cfg.Schedule.TaskCronTrae, id, cfg.Schedule.TaskCron),
+			TokenKeepalive: pickPlatformCron(cfg.Schedule.TokenKeepaliveWorkbuddy, cfg.Schedule.TokenKeepaliveQoder, cfg.Schedule.TokenKeepaliveTrae, id, cfg.Schedule.TokenKeepalive),
+		})
+		if id == WorkbuddyPlatform {
+			specs[len(specs)-1].CatTravel = cfg.Schedule.CatTravelCron
+		}
+	}
+	return specs
+}
+
+// pickPlatformCron returns the platform key's value when non-empty, else the
+// frozen global fallback (旧键冻结不改名：平台键只是叠加层).
+func pickPlatformCron(wb, qoder, trae, id, global string) string {
+	switch id {
+	case WorkbuddyPlatform:
+		if wb != "" {
+			return wb
+		}
+	case QoderPlatform:
+		if qoder != "" {
+			return qoder
+		}
+	case "trae": // no credentials plane yet, so no platform constant exists
+		if trae != "" {
+			return trae
+		}
+	}
+	return global
 }
 
 // NewScheduleStore returns the AccountStore writing task outcomes back into

@@ -35,6 +35,7 @@ import (
 	"all2api/internal/host"
 	"all2api/internal/observability"
 	"all2api/internal/pool"
+	"all2api/internal/router"
 	"all2api/internal/schedule"
 )
 
@@ -53,6 +54,8 @@ func RegisterPanelData(mux *http.ServeMux, h *host.Host, sched TaskSource, stats
 	mux.HandleFunc("GET /api/logs", withAPIKey(handleLogs(ring)))
 	registerAddAccount(mux, h)
 	registerAccountWrite(mux, h)
+	registerAccountLifecycle(mux, h) // M10-B2: row-inline disable/enable
+	registerAccountBatch(mux, h)     // M10-B2: platform-wide batch operations
 	registerGrowth(mux, h)
 	registerPackages(mux, h) // M9a: credits-expiry packages endpoints
 	registerLogin(mux, h)    // M8: browser device-authorization login endpoints
@@ -82,6 +85,8 @@ type TaskSource interface {
 //	paused      — selection pause switch (Select skips paused accounts)
 //	last_success — most recent successful send, null until the first one
 //	credit_total — upstream quota capacity; 0 = unknown/not yet seeded
+//	status_note — M10-B2: the recorded cooldown cause while the account is
+//	              cooling ("429 rate limit" / "task failed"), else ""
 type accountWire struct {
 	Platform     string             `json:"platform"`
 	ID           string             `json:"id"`
@@ -98,18 +103,33 @@ type accountWire struct {
 	Paused       bool               `json:"paused"`
 	LastSuccess  *adapter.TimeLocal `json:"last_success"`
 	CreditTotal  int64              `json:"credit_total"`
+	StatusNote   string             `json:"status_note"`
 }
 
 // accountsResponse: the account array plus the aggregation flattened at the
 // top level (M5a spec: "JSON 数组 + 顶层聚合 {total, active, cooling,
 // disabled, credit_total}").
+//
+// M10-B2 appended three top-level aggregates after credit_total (frozen key
+// order: the pre-M10 keys stay first — credit_total untouched):
+//
+//	paused_count    — accounts with the selection pause switch on
+//	sticky_sessions — live (caller, model) → account bindings (router sticky)
+//	credit_sum      — sum of remaining credits. Naming note: the M5a
+//	                  credit_total already de-facto sums acc.Credit (remaining)
+//	                  at this level — verified before naming, per the M10 spec;
+//	                  its semantics stay unbroken and credit_sum lands with the
+//	                  same value under the unambiguous name.
 type accountsResponse struct {
-	Accounts    []accountWire `json:"accounts"`
-	Total       int           `json:"total"`
-	Active      int           `json:"active"`
-	Cooling     int           `json:"cooling"`
-	Disabled    int           `json:"disabled"`
-	CreditTotal int64         `json:"credit_total"`
+	Accounts       []accountWire `json:"accounts"`
+	Total          int           `json:"total"`
+	Active         int           `json:"active"`
+	Cooling        int           `json:"cooling"`
+	Disabled       int           `json:"disabled"`
+	CreditTotal    int64         `json:"credit_total"`
+	PausedCount    int           `json:"paused_count"`
+	StickySessions int           `json:"sticky_sessions"`
+	CreditSum      int64         `json:"credit_sum"`
 }
 
 func handleAccounts(h *host.Host) http.HandlerFunc {
@@ -129,10 +149,17 @@ func handleAccounts(h *host.Host) http.HandlerFunc {
 				case "active":
 					resp.Active++
 				}
+				if acc.Paused {
+					resp.PausedCount++
+				}
 				resp.CreditTotal += acc.Credit
+				resp.CreditSum += acc.Credit
 			}
 			resp.Total = len(snapshot)
 		}
+		// Sticky session occupancy: live bindings across all callers/models.
+		// Package-level registry, same read pattern as usage.Default.
+		resp.StickySessions = router.DefaultSticky.ActiveBindings()
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
@@ -154,6 +181,7 @@ func accountFromPool(acc pool.Account) accountWire {
 		Paused:       acc.Paused,
 		LastSuccess:  timeLocalPtr(acc.LastSuccess),
 		CreditTotal:  acc.CreditTotal,
+		StatusNote:   acc.StatusNote(),
 	}
 }
 
@@ -171,11 +199,16 @@ type lastRunWire struct {
 	At      adapter.TimeLocal `json:"at"`
 }
 
+// taskWire is one task on the wire. Platform is the M10-B2 addition:
+// per-platform tasks carry their source platform here, split from the
+// (platform-suffixed) task name — the frontend groups by platform and never
+// parses the name itself.
 type taskWire struct {
-	Name    string       `json:"name"`
-	Cron    string       `json:"cron"`
-	Enabled bool         `json:"enabled"`
-	LastRun *lastRunWire `json:"last_run"`
+	Name     string       `json:"name"`
+	Platform string       `json:"platform"`
+	Cron     string       `json:"cron"`
+	Enabled  bool         `json:"enabled"`
+	LastRun  *lastRunWire `json:"last_run"`
 }
 
 type tasksResponse struct {
@@ -190,7 +223,7 @@ func handleTasks(sched TaskSource, stats *schedule.StatsMemory) http.HandlerFunc
 			// Deterministic delivery order: GetTasks ranges a map.
 			sort.Slice(tasks, func(i, j int) bool { return tasks[i].Name < tasks[j].Name })
 			for _, t := range tasks {
-				tw := taskWire{Name: t.Name, Cron: t.CronSpec, Enabled: t.Enabled}
+				tw := taskWire{Name: t.Name, Platform: t.Source, Cron: t.CronSpec, Enabled: t.Enabled}
 				if stats != nil {
 					if s, at, ok := stats.LastRun(t.Name); ok {
 						tw.LastRun = &lastRunWire{

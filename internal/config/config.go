@@ -22,6 +22,10 @@ type Config struct {
 	Sources         map[string]SourceConfig `json:"sources"`
 	Router          RouterConfig            `json:"router"`
 	ModelMap        map[string]string       `json:"model_map"` // model name → platform/model
+	// StickySessionTTLMin is the frozen M10-B2 sticky-session key
+	// (sticky_session_ttl_min, top-level): minutes a (caller API key, model)
+	// → account binding stays reusable; 0 disables stickiness entirely.
+	StickySessionTTLMin int `json:"sticky_session_ttl_min"`
 }
 
 // PoolConfig pool-level settings adapted from Panel's design.
@@ -74,10 +78,34 @@ type SourceConfig struct {
 }
 
 // ScheduleConfig cron schedule definitions.
+//
+// The first three keys are the M2 globals — frozen names, never renamed
+// (config.go:157 freeze note): they stay the fallback whenever the matching
+// per-platform key below is empty. The per-platform keys (M10-B2) follow the
+// "<global key without _cron suffix>_<platform>" shape, plus the first-ever
+// cat_travel key (workbuddy-only task). Empty platform key → global fallback;
+// the scheduling assembly (host.SchedulePlatformTasks) resolves it.
 type ScheduleConfig struct {
 	SigninCron     string `json:"signin_cron"`
 	TaskCron       string `json:"task_cron"`
-	TokenKeepalive string `json:"token_keepalive_cron"`
+	TokenKeepalive string `json:"token_keepalive_cron"` // #nosec G101 -- 值为 cron 表达式，键名属契约冻结面不可改名
+
+	SigninCronWorkbuddy string `json:"signin_cron_workbuddy"`
+	SigninCronQoder     string `json:"signin_cron_qoder"`
+	SigninCronTrae      string `json:"signin_cron_trae"`
+
+	TaskCronWorkbuddy string `json:"task_cron_workbuddy"`
+	TaskCronQoder     string `json:"task_cron_qoder"`
+	TaskCronTrae      string `json:"task_cron_trae"`
+
+	TokenKeepaliveWorkbuddy string `json:"token_keepalive_workbuddy"`
+	TokenKeepaliveQoder     string `json:"token_keepalive_qoder"`
+	TokenKeepaliveTrae      string `json:"token_keepalive_trae"`
+
+	// CatTravelCron is the workbuddy-only quota task's own slot; empty falls
+	// back to the code-truth DefaultCatTravelCron (schedule.go header), not to
+	// a global key — cat_travel never had one.
+	CatTravelCron string `json:"cat_travel_cron"`
 }
 
 // RouterConfig routing and responses API feature flag.
@@ -155,12 +183,18 @@ func defaults() Config {
 			SigninCron:     "0 9,21 * * *",
 			TaskCron:       "0 10 * * *",
 			TokenKeepalive: "0 22 * * *", // #nosec G101 -- 值为 cron 表达式，键名属契约冻结面不可改名
+			// M10-B2 per-platform keys default empty = global fallback; the
+			// restore-defaults path resets them to empty the same way.
 		},
 		Pool: PoolConfig{
 			CreditFloor: 100,
 			MaxRetries:  3,
 			CooldownSec: 60,
 		},
+		// Sticky sessions default ON at 30 minutes (M10-B2 spec: 默认 30,
+		// 0=关). Same-session traffic keeps riding one upstream account, which
+		// is what wb2api's callers expect from a conversational session.
+		StickySessionTTLMin: 30,
 	}
 }
 

@@ -162,11 +162,11 @@ func main() {
 		Upstream:        host.NewScheduleUpstream(creds),
 		Store:           host.NewScheduleStore(gwHost.Pool),
 		FailureCooldown: time.Duration(cfg.Pool.CooldownSec) * time.Second,
-		Crons: schedule.Crons{
-			Signin:         cfg.Schedule.SigninCron,
-			ActiveCheck:    cfg.Schedule.TaskCron,
-			TokenKeepalive: cfg.Schedule.TokenKeepalive,
-		},
+		// M10-B2: per-platform crons (schedule.signin_cron_<platform> et al,
+		// empty → frozen global key) resolve in host.SchedulePlatformTasks
+		// below; the legacy Deps.Crons global override is no longer consulted
+		// by the production registration path.
+		//
 		// ReportStats is called inline per finished batch (including aborted
 		// ones) and must not block: the StatsMemory recorder keeps the latest
 		// RunStats per task for GET /api/tasks (M5a), then keeps the stdout
@@ -191,10 +191,14 @@ func main() {
 	defer appCancel()
 
 	sched := schedule.NewScheduler()
-	for _, task := range schedule.BuildDefaultTasks(schedDeps) {
+	// M10-B2 per-platform task registration: one signin/active_check/
+	// token_keepalive task per configured source (plus workbuddy's cat_travel),
+	// each with its resolved cron — replaces the M2 four-global-task build.
+	schedTasks := schedule.BuildPlatformTasks(host.SchedulePlatformTasks(cfg))
+	for _, task := range schedTasks {
 		sched.AddTask(task)
 	}
-	schedule.RegisterDefaultHandlers(appCtx, sched, schedDeps)
+	schedule.RegisterPlatformHandlers(appCtx, sched, schedDeps, schedTasks)
 
 	api.RegisterPanelData(mux, gwHost, sched, statsMem, panelRing)
 
