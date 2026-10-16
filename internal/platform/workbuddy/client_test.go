@@ -386,7 +386,7 @@ func TestParseResetAfter(t *testing.T) {
 func TestSendChatStreamRelaysFrames(t *testing.T) {
 	frames := []string{
 		"data: {\"id\":\"c1\",\"model\":\"m\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"a\"},\"finish_reason\":null}]}\n\n",
-		"data: {\"id\":\"c1\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"b\"},\"finish_reason\":null}]}\n\n",
+		"data: {\"id\":\"c1\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"b\",\"reasoning_content\":\"chain\"},\"finish_reason\":null}]}\n\n",
 		"data: [DONE]\n\n",
 		"data: {\"after_done\":true}\n\n", // ignored per the reference behavior
 	}
@@ -407,6 +407,9 @@ func TestSendChatStreamRelaysFrames(t *testing.T) {
 	json.Unmarshal(got[1].Choices[0].Delta.Content, &b)
 	if a+b != "ab" {
 		t.Errorf("relay content = %q+%q", a, b)
+	}
+	if got[1].Choices[0].Delta.ReasoningContent != "chain" {
+		t.Errorf("relay reasoning_content = %q, want chain (extension survives)", got[1].Choices[0].Delta.ReasoningContent)
 	}
 	select {
 	case e := <-errCh:

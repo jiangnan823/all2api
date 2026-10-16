@@ -902,6 +902,7 @@ type aggregated struct {
 	created   int64
 	role      string
 	content   strings.Builder
+	reasoning strings.Builder // provider-extension chain-of-thought
 	finish    string
 	usage     *adapter.Usage
 	toolCalls map[int]*toolCall
@@ -935,18 +936,19 @@ func (a *aggregated) scanChunk(chunk *rawChunk) {
 		if c.FinishReason != nil && *c.FinishReason != "" {
 			a.finish = *c.FinishReason
 		}
-		a.scanDelta(c.Delta.Role, c.Delta.Content, c.Delta.ToolCalls)
+		a.scanDelta(c.Delta.Role, c.Delta.Content, c.Delta.ToolCalls, c.Delta.ReasoningContent)
 		// Some upstream frames carry a complete message instead of a delta;
 		// fold it the same way (reference implementations do both). An empty
 		// message frame contributes nothing, so double-scanning is inert.
-		a.scanDelta(c.Message.Role, c.Message.Content, c.Message.ToolCalls)
+		a.scanDelta(c.Message.Role, c.Message.Content, c.Message.ToolCalls, c.Message.ReasoningContent)
 	}
 }
 
-// scanDelta folds one delta-or-message slice into the accumulator. The
-// reasoning_content extension is intentionally not accumulated — see the
-// response() note.
-func (a *aggregated) scanDelta(role string, content json.RawMessage, toolCalls json.RawMessage) {
+// scanDelta folds one delta-or-message slice into the accumulator,
+// reasoning_content included — thinking models ship their chain-of-thought
+// here and the panel's clients expect it relayed (ZCode providers render it
+// as the thinking trace).
+func (a *aggregated) scanDelta(role string, content json.RawMessage, toolCalls json.RawMessage, reasoning string) {
 	if role != "" {
 		a.role = role
 	}
@@ -958,6 +960,9 @@ func (a *aggregated) scanDelta(role string, content json.RawMessage, toolCalls j
 	}
 	if len(toolCalls) > 0 {
 		a.mergeToolCalls(toolCalls)
+	}
+	if reasoning != "" {
+		a.reasoning.WriteString(reasoning)
 	}
 }
 
@@ -1002,12 +1007,11 @@ func (a *aggregated) mergeToolCalls(raw json.RawMessage) {
 // response assembles the final chat.completion object.
 //
 // reasoning_content note: the upstream ships chain-of-thought as the
-// provider-extension delta.reasoning_content (report §5). The gateway's
-// shared ChatMessage type carries only the strict OpenAI fields, so the
-// extension cannot ride the aggregated response; it is folded into the
-// content text via nothing — dropped — and the gap is recorded in
-// docs/upstream/workbuddy-protocol.md §9. The streaming path relays the
-// original frames and loses it the same way.
+// provider-extension delta.reasoning_content (report §5). The shared
+// ChatMessage now carries the extension, so the aggregated response relays
+// the accumulated reasoning verbatim; strict-OpenAI clients ignore the
+// unknown field, agent providers (ZCode et al) render it as the thinking
+// trace. The streaming path passes it through the same field on deltas.
 func (a *aggregated) response() *adapter.ChatResponse {
 	finish := a.finish
 	if finish == "" {
@@ -1015,6 +1019,9 @@ func (a *aggregated) response() *adapter.ChatResponse {
 	}
 	msg := adapter.ChatMessage{Role: "assistant"}
 	msg.Content = json.RawMessage(marshalString(a.content.String()))
+	if a.reasoning.Len() > 0 {
+		msg.ReasoningContent = a.reasoning.String()
+	}
 	if len(a.toolOrder) > 0 {
 		calls := make([]map[string]any, 0, len(a.toolOrder))
 		for _, idx := range a.toolOrder {

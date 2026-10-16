@@ -23,6 +23,11 @@ type ChatMessage struct {
 	Name       string          `json:"name,omitempty"`         // optional participant name
 	ToolCallID string          `json:"tool_call_id,omitempty"` // tool role: which call this answers
 	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`   // assistant role: requested tool calls
+	// ReasoningContent carries the provider-extension chain-of-thought
+	// (delta.reasoning_content) that thinking models ship alongside content.
+	// Strict-OpenAI clients ignore unknown fields; omitempty keeps the wire
+	// clean for platforms without the concept.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 
 // ChatRequest is a chat completion request as received on /v1/chat/completions.

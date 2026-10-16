@@ -204,7 +204,7 @@ Trae（trae.ai，字节跳动 AI IDE，另有国内版 trae.com.cn 与网页版 
 - **凭证面**：`CredentialSource` 接口已定义（token/uid/enterpriseId/domain/realm/过期时间），但没有实现——token 从哪来（auth 文件目录扫描、面板录入、刷新回写）是集成层决策，本批不代作。
 - **token 自动刷新**：`POST /v2/plugin/auth/token/refresh` 协议已实证（§3）但未实现循环——刷新时机（过期前预刷/401 触发）与刷新凭证的存放属于凭证面设计。
 - **`X-Device-Token`/`X-Machine-ID`/`X-Session-ID` 与会话头族（§8）**：未发送。缺省时上游可按「非真实客户端」加权识别（官方自身有缺省降级路径，功能不受阻）；这些头的派生策略（设备指纹口径）属风控决策面，且 `X-Device-Token` 纯服务端不可生成（§8 Turing 结论）。
-- **聚合响应的 `reasoning_content`**：上游思维链扩展字段在聚合（非流式）路径上丢弃——网关共享的 `adapter.ChatMessage` 类型只承载严格 OpenAI 字段；流式路径同样透传为 `delta.content` 之外的未知字段被丢弃。如需透出须先扩展网关 wire 类型（跨仓决策）。
+- ~~**聚合响应的 `reasoning_content`**~~ **已闭合（2026-10-16）**：`adapter.ChatMessage` 扩展了 `ReasoningContent`（`json:"reasoning_content,omitempty"`），聚合（非流式）路径在 message 上透出累加的思维链，流式路径 delta 原样中继；严格 OpenAI 客户端忽略未知字段，agent 供应商（ZCode 等）渲染为思考轨迹。
 - **模型目录/签到/任务端点（§2/§7）**：仅协议记录，未实现为 adapter 任务执行器——对应 `schedule.Upstream` 接口的落地属 M2 调度批次的后续工作。
 
 **验证状态**：gofmt（新文件）/ `go vet ./...` / `go build ./...`（default、`-tags workbuddy`、`-tags full` 三变体）/ `go test -count=1 ./...` 全绿；golangci-lint 0 issues；gosec（severity high）0 issues。参考实现快照存于 `wb_research/src/*.txt`（改后缀防止其干扰模块级 `./...` 构建）。
