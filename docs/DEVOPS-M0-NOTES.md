@@ -993,3 +993,12 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 **实测（热替换安装版）**：/api/tasks 带平台；快照 paused/sticky/credit_sum 上线；/api/models 45 行带 vision（MiniMax-M2.7 未声明如实「—」）；unlock 空池 {"unlocked":0}；浏览器逐屏核对：导航五项、平台任务卡可编辑、KPI/批量/用量列/禁用键就位。
 
 遗留：粘性会话 KPI 为网关级汇总（无平台拆分）；批量按钮已接真上游操作但验收时未真实触发（避免误签到/喂猫）；用量列在网关重启后短时为空（内存环清空）。go 变体门禁注：qoder-only 变体下 growth/packages 路由测试为 main 预存基线失败（非本批引入）。
+
+
+## 9.34 GET /v1/models 补齐 + 模型 ID 双形态（2026-10-16，主人点名「客户端测试连接高发死因」驱动）
+
+- **端点**：`GET /v1/models`（internal/router/models.go）——authorize 与 /v1 同门（X-API-Key / Bearer），OpenAI 信封 `{"object":"list","data":[{id,object:"model",created,owned_by}]}`。lister 注入面：`rt.models`（测试）→ `router.DefaultModelLister`（main 接线到 api.PublicModelList）；lister 为 nil 时如实回空清单仍 200（探测面活着，目录未接而已）。lint 两次小修：测试 httptest.NewRequest→WithContext（noctx）、http.Get→Client.Do。
+- **模型 ID 双形态（主人追问「两家同名模型怎么精准区分」）**：清单同时给出裸名（`deepseek-v4-pro`，跨平台去重先到先得，给只想能跑的客户端）与 `platform/model` 前缀名（`workbuddy/deepseek-v4-pro`、`qoder/DeepSeek-V4-Pro`，逐平台全列，给需要钉死平台的 agent）。路由语义不变：裸名→按注册序首个有账号平台（账号空池会漂移），前缀名→精确路由（dispatch 剥前缀后发上游）。**接入方要稳定就用前缀名**。实测：90 行（45 裸 + 45 前缀），同名模型两平台条目齐备。
+- **共享目录源**：panel_data.go 的 handleModels 行构建抽成 `buildModelRows(ctx,cat,refresh) (rows, source)`（PublicModelList 与面板端点共用，防两套目录漂移）。
+- **集成教训（第 N 次）**：python heredoc 对 CRLF 工作副本做 `\n` 模式替换会**静默不命中**（main.go 接线丢失 → /v1/models 空清单实测才暴露）。判定法：`repr()` 看 `\r\n`；替换一律断言命中（assert in / count）。
+- 实测：`curl /v1/models` 200 + 90 行；裸名与前缀名同列；owned_by 归属正确。
