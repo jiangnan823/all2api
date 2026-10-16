@@ -279,7 +279,10 @@ func (s *responsesStream) feed(chunk adapter.StreamChunk) []map[string]any {
 	}
 	delta := chunk.Choices[0].Delta
 
-	if delta.ReasoningContent != "" {
+	// Termination guard: an upstream that keeps emitting deltas after
+	// finish_reason would re-open items the client has already seen closed —
+	// late deltas for done items are dropped, not relayed.
+	if delta.ReasoningContent != "" && !s.rsDone {
 		events = append(events, s.openReasoning()...)
 		s.rsText.WriteString(delta.ReasoningContent)
 		events = append(events, s.ev("response.reasoning_summary_text.delta",
@@ -287,7 +290,7 @@ func (s *responsesStream) feed(chunk adapter.StreamChunk) []map[string]any {
 			"delta", delta.ReasoningContent))
 	}
 
-	if text := rawText(delta.Content); text != "" {
+	if text := rawText(delta.Content); text != "" && !s.msgDone {
 		events = append(events, s.openMessage()...)
 		s.msgText.WriteString(text)
 		events = append(events, s.ev("response.output_text.delta",

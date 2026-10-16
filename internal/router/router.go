@@ -198,19 +198,23 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 }
 
 // mustJSON marshals a Go string as a JSON string; a plain string cannot fail.
-func mustJSON(s string) json.RawMessage {
-	b, _ := json.Marshal(s)
+// mustJSON marshals any JSON-marshalable value; failures yield null (only
+// exotic channel/func values can fail, never the maps/strings we pass).
+func mustJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
 	return json.RawMessage(b)
 }
 
 // responsesInputToMessages converts the Responses input onto the chat message
 // shape. A plain string becomes one user message; an array may carry either
-// bare chat-shaped message objects (legacy passthrough) or native typed items
-// — {"type":"message","role","content"} whose content parts speak the
-// Responses vocabulary ("input_text"/"input_image"). Those part types reached
-// upstream verbatim once and were rejected ("unsupported content type"), so
-// text parts now flatten to plain string content and image parts map onto
-// chat image_url parts; anything else is a hard error so nothing reaches
+// bare chat-shaped message objects (legacy passthrough) or native typed items:
+// "message" (content parts speak the Responses vocabulary
+// "input_text"/"input_image" — text flattens to strings, images map onto chat
+// image_url parts), "function_call" → an assistant tool_calls message, and
+// "function_call_output" → a tool message keyed by call_id. Those two make the
+// agent tool loop survive turn two — without them every tool-using ZCode
+// provider died right after the first call. "reasoning" items (the model's own
+// prior CoT) are dropped; anything else is a hard error so nothing reaches
 // upstream garbled.
 func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, error) {
 	if len(input) == 0 || string(input) == "null" {
@@ -230,24 +234,69 @@ func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, err
 			Type    string          `json:"type"`
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
+			CallID  string          `json:"call_id"`
+			Name    string          `json:"name"`
+			Args    string          `json:"arguments"`
+			Output  json.RawMessage `json:"output"`
 		}
 		if err := json.Unmarshal(item, &head); err != nil {
 			return nil, fmt.Errorf("input[%d]: %w", i, err)
 		}
-		if head.Type != "" && head.Type != "message" {
-			return nil, fmt.Errorf("input[%d]: unsupported item type %q — only message items are supported on this surface", i, head.Type)
+		switch head.Type {
+		case "", "message":
+			content, err := responsesContentToChat(i, head.Content)
+			if err != nil {
+				return nil, err
+			}
+			role := head.Role
+			if role == "" {
+				role = "user"
+			}
+			out = append(out, adapter.ChatMessage{Role: role, Content: content})
+		case "function_call":
+			if head.CallID == "" || head.Name == "" {
+				return nil, fmt.Errorf("input[%d]: function_call requires call_id and name", i)
+			}
+			calls := []map[string]any{{
+				"id": head.CallID, "type": "function",
+				"function": map[string]any{"name": head.Name, "arguments": head.Args},
+			}}
+			out = append(out, adapter.ChatMessage{
+				Role:      "assistant",
+				ToolCalls: json.RawMessage(mustJSON(calls)),
+			})
+		case "function_call_output":
+			if head.CallID == "" {
+				return nil, fmt.Errorf("input[%d]: function_call_output requires call_id", i)
+			}
+			text := rawJSONString(head.Output)
+			out = append(out, adapter.ChatMessage{
+				Role:       "tool",
+				ToolCallID: head.CallID,
+				Content:    mustJSON(text),
+			})
+		case "reasoning":
+			// The model's own prior chain-of-thought: dropped, never re-sent.
+			continue
+		default:
+			return nil, fmt.Errorf("input[%d]: unsupported item type %q — supported: message, function_call, function_call_output, reasoning", i, head.Type)
 		}
-		content, err := responsesContentToChat(i, head.Content)
-		if err != nil {
-			return nil, err
-		}
-		role := head.Role
-		if role == "" {
-			role = "user"
-		}
-		out = append(out, adapter.ChatMessage{Role: role, Content: content})
 	}
 	return out, nil
+}
+
+// rawJSONString flattens a JSON value to display text: a JSON string yields
+// its contents verbatim; anything else re-renders as compact JSON so tool
+// payloads (objects/arrays) survive the trip to the upstream tool message.
+func rawJSONString(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 // responsesContentToChat maps one message's content onto the chat shape. A

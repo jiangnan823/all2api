@@ -113,8 +113,8 @@ type packagesBackend interface {
 	Packages(ctx context.Context, platform, accountID string) ([]pkgBatch, error)
 }
 
-// registerPackages wires the two endpoints beside the other account routes
-// (same nil-host/nil-store guard as registerGrowth).
+// registerPackages wires the packages endpoints beside the other account
+// routes (same nil-host/nil-store guard as registerGrowth).
 func registerPackages(mux *http.ServeMux, h *host.Host) {
 	if h == nil || h.Creds == nil {
 		return // store not wired — no credential source, no packages surface
@@ -122,6 +122,61 @@ func registerPackages(mux *http.ServeMux, h *host.Host) {
 	b := newPackagesBackend(h)
 	mux.HandleFunc("GET /api/accounts/{id}/packages", withAPIKey(handleAccountPackages(b)))
 	mux.HandleFunc("GET /api/packages", withAPIKey(handlePackagesAgg(b, h)))
+	mux.HandleFunc("POST /api/packages/refresh", withAPIKey(handlePackagesRefresh(b, h)))
+}
+
+// packagesRefreshWire is the frozen M10 wire for POST /api/packages/refresh:
+// the panel's「检查」button fires it, then re-runs GET /api/packages to
+// rebuild the card. refreshed counts the accounts whose live probe succeeded;
+// errors carries failures verbatim (id + reason, no credential material —
+// pkgAggErrorText already strips to the classified reason).
+type packagesRefreshWire struct {
+	Refreshed int               `json:"refreshed"`
+	Errors    []pkgRefreshError `json:"errors"`
+}
+
+type pkgRefreshError struct {
+	ID    string `json:"id"`
+	Error string `json:"error"`
+}
+
+// handlePackagesRefresh re-probes every pooled workbuddy account's packages
+// live (same politeness bound as the GET aggregate) and reports the tally.
+// The probe results themselves are discarded — the client refetches the
+// aggregate right after — so this endpoint is a connectivity/latency check
+// with a fresh-cache side effect, not a second read path to keep in sync.
+func handlePackagesRefresh(b packagesBackend, h *host.Host) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if b == nil {
+			packagesUnavailable(w)
+			return
+		}
+		targets := workbuddyTargets(h)
+		errs := make([]pkgRefreshError, 0)
+		var mu sync.Mutex
+		var refreshed int64
+		sem := make(chan struct{}, packagesProbeConcurrency)
+		var wg sync.WaitGroup
+		for _, a := range targets {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(platform, id string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if _, err := b.Packages(r.Context(), platform, id); err != nil {
+					mu.Lock()
+					errs = append(errs, pkgRefreshError{ID: id, Error: pkgAggErrorText(err)})
+					mu.Unlock()
+					return
+				}
+				mu.Lock()
+				refreshed++
+				mu.Unlock()
+			}(a.Platform, a.ID)
+		}
+		wg.Wait()
+		writeJSON(w, http.StatusOK, packagesRefreshWire{Refreshed: int(refreshed), Errors: errs})
+	}
 }
 
 // packagesTarget parses and validates the account path segment. A malformed

@@ -482,3 +482,45 @@ func TestPackagesRoutesRegistered(t *testing.T) {
 		t.Fatalf("GET /api/packages body = %s, want the empty aggregate", body)
 	}
 }
+
+// TestPackagesRefreshTalliesAndErrors pins the M10 adversarial-review fix:
+// POST /api/packages/refresh probes every workbuddy account live (frontend
+//「检查」button), counts successes, and lists failures verbatim — the route
+// was frozen on the wire but never registered (404) until this batch.
+func TestPackagesRefreshTalliesAndErrors(t *testing.T) {
+	b := &fakePackagesBackend{
+		batches: map[string][]pkgBatch{
+			"uid-1": wbBatches(),
+			"uid-2": wbBatches(),
+		},
+		err: map[string]error{
+			"uid-2": errors.New("upstream timeout"),
+		},
+	}
+	h := newTestHost(t, "qa")
+	h.Creds = host.NewCredentialStore(h.Pool)
+	for _, id := range []string{"uid-1", "uid-2"} {
+		h.Pool.AddAccount(&pool.Account{ID: id, Platform: "workbuddy", Status: "active"})
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/packages/refresh", withAPIKey(handlePackagesRefresh(b, h)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/packages/refresh", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh = %d (body %s)", rec.Code, rec.Body)
+	}
+	var resp struct {
+		Refreshed int               `json:"refreshed"`
+		Errors    []pkgRefreshError `json:"errors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Refreshed != 1 {
+		t.Fatalf("refreshed = %d, want 1", resp.Refreshed)
+	}
+	if len(resp.Errors) != 1 || resp.Errors[0].ID != "uid-2" || resp.Errors[0].Error == "" {
+		t.Fatalf("errors = %+v, want one uid-2 row with the reason", resp.Errors)
+	}
+}

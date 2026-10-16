@@ -105,10 +105,13 @@ func TestResponsesInputBareChatShapeStillPasses(t *testing.T) {
 }
 
 func TestResponsesInputRejectsUntypedPartsAndForeignItems(t *testing.T) {
+	// function_call / function_call_output / reasoning are SUPPORTED since the
+	// M10 adversarial review (the agent tool loop needs them); genuinely
+	// foreign item types still hard-error.
 	if _, err := responsesInputToMessages(json.RawMessage(
-		`[{"type":"function_call_output","call_id":"c","output":"{}"}]`)); err == nil ||
+		`[{"type":"item_reference","id":"x"}]`)); err == nil ||
 		!strings.Contains(err.Error(), "unsupported item type") {
-		t.Fatalf("function_call_output should be a clear item-type error, got %v", err)
+		t.Fatalf("item_reference should be a clear item-type error, got %v", err)
 	}
 	if _, err := responsesInputToMessages(json.RawMessage(
 		`[{"type":"message","role":"user","content":[{"type":"audio","input_audio":{"data":"..."}}]}]`)); err == nil ||
@@ -122,5 +125,41 @@ func TestResponsesInputRejectsUntypedPartsAndForeignItems(t *testing.T) {
 	}
 	if _, err := responsesInputToMessages(nil); err == nil {
 		t.Fatalf("nil input should error")
+	}
+}
+
+// TestResponsesInputToolLoopItems pins the M10 adversarial-review fix: the
+// agent tool loop survives turn two — function_call becomes an assistant
+// tool_calls message, function_call_output becomes a tool message keyed by
+// call_id, and reasoning items are dropped silently.
+func TestResponsesInputToolLoopItems(t *testing.T) {
+	input := json.RawMessage(`[
+		{"type":"message","role":"user","content":"list files"},
+		{"type":"function_call","call_id":"call_1","name":"list_files","arguments":"{\"path\":\".\"}"},
+		{"type":"reasoning","summary":[{"type":"summary_text","text":"cot"}]},
+		{"type":"function_call_output","call_id":"call_1","output":{"files":["a.go"],"n":2}}
+	]`)
+	msgs, err := responsesInputToMessages(input)
+	if err != nil {
+		t.Fatalf("tool loop input: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("messages = %d (reasoning dropped), want 3", len(msgs))
+	}
+	if msgs[1].Role != "assistant" || msgs[1].ToolCalls == nil {
+		t.Fatalf("turn-2 assistant = %+v, want tool_calls", msgs[1])
+	}
+	var calls []map[string]any
+	if err := json.Unmarshal(msgs[1].ToolCalls, &calls); err != nil {
+		t.Fatalf("tool_calls decode: %v", err)
+	}
+	if len(calls) != 1 || calls[0]["id"] != "call_1" {
+		t.Fatalf("calls = %v, want one call_1", calls)
+	}
+	if msgs[2].Role != "tool" || msgs[2].ToolCallID != "call_1" {
+		t.Fatalf("turn-3 tool = %+v, want call_id call_1", msgs[2])
+	}
+	if !strings.Contains(string(msgs[2].Content), "a.go") {
+		t.Fatalf("tool content = %s, want object payload preserved", msgs[2].Content)
 	}
 }
