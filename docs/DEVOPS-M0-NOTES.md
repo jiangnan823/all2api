@@ -1073,5 +1073,6 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 主人报 qoder/DeepSeek-Flash 失败。排查链：账号被上游 401/403 "Login expired" 自动禁用（fail 计数与 status 禁用联动正确）；换新 PAT（pt-3s0a…，20:25 面板录入）后**重启网关全新加载仍被拒**。决定性实验：编译参考实现 Qoder-2API-Go，同机同时刻用同一张 PAT 直打——参考实现连交换都过不了（`HTTP 401 personal token is invalid`），我方反而交换通过、进聊天流才被拒。**结论：上游判定该 PAT 无效，与网关实现无关**（参考实现拒绝得更早更干脆）。
 
 - 排查方法沉淀：**"用参考实现同输入复测"是最高效的实现vs凭证归因手段**——一次实验同时排除/坐实整条客户端链。
-- **已确认（主人提供 PAT 来源页）**：PAT 生成于 `https://qoder.com/account/integrations` ——**国际站**。国际 OpenAPI 平面（openapi.qoder.sh）认这张令牌（交换+userinfo 成功），但 agent 对话端点只存在于 CN 网关（gateway.qoder.com.cn），且国际侧无同构对话域名（gateway.qoder.com DNS 不存在）。**qoder 对话当前仅支持 CN 站 PAT**；国际站令牌只能配额/用户信息。国际站对话 API 若存在，需抓包国际版 IDE 才能逆向——记入平台协议批研究项。
+- **站别假设已撤回（主人纠正：其账号就是国内站）**：qoder.com 即产品主域（.com/.com.cn 双域均服务国内产品）。修正后的事实链：PAT 在 .sh REST 交换成功 + userinfo 成功（令牌在交换平面有效）→ 聊天流内 401/403 body code=**105** "Login expired"（诊断增强：报错现在携带业务码原文）。参考实现在 com.cn 传统交换上直接 401 "personal token is invalid"。两侧引导链结构一致后仍分歧，指向**官方客户端的令牌链已演进**（新格式 PAT 的会话建立步骤与两份实现的旧协议有差）——归入平台协议批的 IDE 抓包研究项：抓一次官方 Qoder IDE 的对话流（host + 令牌链），对齐后即可修复。
+- 附带发现：面板「添加账号」重录同一 PAT 会生成新账号 ID（27f7f35a→7c024efa，PAT 哈希派生）——旧 ID 的禁用状态不会遗传到新 ID，误打误撞是自愈的；记档。
 - 附带发现：台账 20:05:59 的 6 连 0ms 错误 = 账号禁用期间的模型遍历秒 503；"Model request was cancelled" 是 ZCode 对「SSE 流中途断开」的包装措辞，根因同上。

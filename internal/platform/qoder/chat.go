@@ -888,6 +888,18 @@ func errorMessage(status int, body []byte) string {
 	return "HTTP " + strconv.Itoa(status)
 }
 
+// authCodeSuffix renders the business envelope's code, when present, as a
+// bracketed suffix for diagnosability.
+func authCodeSuffix(body []byte) string {
+	var probe struct {
+		Code json.RawMessage `json:"code"`
+	}
+	if json.Unmarshal(body, &probe) != nil || len(probe.Code) == 0 {
+		return ""
+	}
+	return " (code " + string(probe.Code) + ")"
+}
+
 // retryAfterHeader parses a numeric Retry-After header into a duration; 0
 // means absent/unparseable.
 func retryAfterHeader(h http.Header) time.Duration {
@@ -941,8 +953,11 @@ func classifyInStream(statusValue int, bodyJSON string) error {
 		if busy := busyFromBody(statusValue, []byte(bodyJSON)); busy != nil {
 			return busyToUpstream(busy)
 		}
+		// The body code discriminates rejection families sharing one human
+		// text ("Login expired" covers 105 and plain 401s) — carry it verbatim
+		// so panel-side diagnosis reads facts, not guesses.
 		return &adapter.UpstreamError{Status: statusValue, Reason: adapter.ReasonAuthExpired,
-			Message: "qoder: in-stream auth failure: " + errorMessage(statusValue, []byte(bodyJSON))}
+			Message: "qoder: in-stream auth failure: " + errorMessage(statusValue, []byte(bodyJSON)) + authCodeSuffix([]byte(bodyJSON))}
 	}
 	return classifyUpstream(statusValue, []byte(bodyJSON), nil)
 }
