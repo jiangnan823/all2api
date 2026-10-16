@@ -195,7 +195,8 @@ func validatePatch(patch []patchEntry) []adapter.FieldError {
 // the frozen surface is integer-semantics (G1: rpm 整数), and a silent
 // 4.5→4 truncation would report success for a value the panel never meant.
 // Note number_array: min_gap_ms is one array-valued field [lo,hi] (M2 B2
-// ruling 2).
+// ruling 2). cron_or_empty is the M10-B2 per-platform cron shape: "" resets
+// the platform to the global-key fallback, anything else must be a full cron.
 func valueMatchesType(v any, kind string) bool {
 	switch kind {
 	case "number":
@@ -210,6 +211,9 @@ func valueMatchesType(v any, kind string) bool {
 	case "cron":
 		s, ok := v.(string)
 		return ok && validCron(s)
+	case "cron_or_empty":
+		s, ok := v.(string)
+		return ok && (s == "" || validCron(s))
 	case "number_array":
 		arr, ok := v.([]any)
 		if !ok || len(arr) != 2 {
@@ -255,6 +259,14 @@ func patchTargetType(key string) (string, bool) {
 		if key == s {
 			return "cron", true
 		}
+	}
+	for _, s := range platformCronSpecs {
+		if key == s {
+			return "cron_or_empty", true
+		}
+	}
+	if key == stickySessionSpec.key {
+		return "number", true
 	}
 	for _, sp := range poolSpecs {
 		if key == sp.key {
@@ -376,6 +388,54 @@ func applyOne(cfg *config.Config, e patchEntry) *adapter.FieldError {
 		case "schedule.token_keepalive_cron":
 			cfg.Schedule.TokenKeepalive = s
 		}
+		return nil
+	}
+	// M10-B2 per-platform crons: "" legally resets to the global-key
+	// fallback, anything else must be a full cron (same shape gate as
+	// validatePatch — the two can never disagree).
+	for _, k := range platformCronSpecs {
+		if e.Key != k {
+			continue
+		}
+		s, _ := v.(string)
+		if s != "" && !validCron(s) {
+			fe := fieldErr(k, "config.invalid_cron", "")
+			return &fe
+		}
+		switch k {
+		case "schedule.signin_cron_workbuddy":
+			cfg.Schedule.SigninCronWorkbuddy = s
+		case "schedule.signin_cron_qoder":
+			cfg.Schedule.SigninCronQoder = s
+		case "schedule.signin_cron_trae":
+			cfg.Schedule.SigninCronTrae = s
+		case "schedule.task_cron_workbuddy":
+			cfg.Schedule.TaskCronWorkbuddy = s
+		case "schedule.task_cron_qoder":
+			cfg.Schedule.TaskCronQoder = s
+		case "schedule.task_cron_trae":
+			cfg.Schedule.TaskCronTrae = s
+		case "schedule.token_keepalive_workbuddy":
+			cfg.Schedule.TokenKeepaliveWorkbuddy = s
+		case "schedule.token_keepalive_qoder":
+			cfg.Schedule.TokenKeepaliveQoder = s
+		case "schedule.token_keepalive_trae":
+			cfg.Schedule.TokenKeepaliveTrae = s
+		case "schedule.cat_travel_cron":
+			cfg.Schedule.CatTravelCron = s
+		}
+		return nil
+	}
+	if e.Key == stickySessionSpec.key {
+		n, _ := v.(float64)
+		if fe := integralOrErr(e.Key, n); fe != nil {
+			return fe
+		}
+		if n < stickySessionSpec.min || n > stickySessionSpec.max {
+			fe := fieldErr(e.Key, "config.out_of_range", adapter.CodeRange)
+			return &fe
+		}
+		cfg.StickySessionTTLMin = int(n)
 		return nil
 	}
 	for i := range poolSpecs {

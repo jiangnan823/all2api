@@ -259,8 +259,10 @@ func TestUsageWireShapeAndAggregates(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
+	// M10-B2 appended "accounts" to the frozen M8 key set (keys stay first in
+	// delivery order; accounts aggregates the same ledger per account).
 	if !keysMatch(wireKeys(t, rec.Body.Bytes()),
-		"window", "requests", "fail", "prompt_tokens", "completion_tokens", "by_platform", "by_model") {
+		"window", "requests", "fail", "prompt_tokens", "completion_tokens", "by_platform", "by_model", "accounts") {
 		t.Fatalf("usage keys = %v (frozen wire drift)", wireKeys(t, rec.Body.Bytes()))
 	}
 	if !keysMatch(wireKeys(t, rec.Body.Bytes(), "by_platform", "workbuddy"), "requests", "fail") {

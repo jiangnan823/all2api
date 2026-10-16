@@ -8,7 +8,10 @@ package api
 //	    latency_ms, prompt_tokens, completion_tokens, request_id}]}  (old→new)
 //	GET /api/usage
 //	  → 200 {"window":"process","requests":N,"fail":N,"prompt_tokens":N,
-//	    "completion_tokens":N,"by_platform":{...},"by_model":{...}}
+//	    "completion_tokens":N,"by_platform":{...},"by_model":{...},
+//	    "accounts":{"<shortId>":{"requests":N,"tokens":N,"duration_sec":f,
+//	    "tok_per_sec":f}}}   (accounts is the M10-B2 addition; the frozen M8
+//	    keys above keep their order and semantics)
 //
 // Both are withAPIKey-guarded and read-only over the in-process ledger
 // (internal/usage): no persistence, counters reset on restart — the usage
@@ -156,5 +159,57 @@ func handleUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, usage.Default.Aggregate())
+	writeJSON(w, http.StatusOK, usageResponse{
+		Aggregate: usage.Default.Aggregate(),
+		Accounts:  usageAccounts(usage.Default.Snapshot()),
+	})
+}
+
+// usageAccountWire is the M10-B2 per-account aggregation cell on the
+// /api/usage wire: {"requests","tokens","duration_sec","tok_per_sec"}. Tokens
+// sum the prompt+completion pairs that actually carried a usage block (-1
+// unknowns contribute nothing, matching the window counters' semantics);
+// duration sums every dispatch attributed to the account; tok_per_sec is the
+// derived throughput (0 when no measurable duration accumulated).
+type usageAccountWire struct {
+	Requests    int64   `json:"requests"`
+	Tokens      int64   `json:"tokens"`
+	DurationSec float64 `json:"duration_sec"`
+	TokPerSec   float64 `json:"tok_per_sec"`
+}
+
+// usageResponse is the frozen M8 usage wire extended with the M10-B2
+// "accounts" map. The embedded Aggregate keeps every frozen key exactly where
+// it was; accounts aggregates the request ring (same window semantics as the
+// table viewport: entries fall out at RingCapacity, so per-account rows can
+// under-count the window counters on a busy process).
+type usageResponse struct {
+	usage.Aggregate
+	Accounts map[string]usageAccountWire `json:"accounts"`
+}
+
+// usageAccounts folds the request ring into per-account cells keyed by the
+// short account id the ledger stores (entries predating account attribution —
+// failed before any account was selected — carry no id and are skipped).
+func usageAccounts(entries []usage.RequestEntry) map[string]usageAccountWire {
+	out := make(map[string]usageAccountWire)
+	for _, e := range entries {
+		if e.AccountID == "" {
+			continue
+		}
+		cell := out[e.AccountID]
+		cell.Requests++
+		cell.DurationSec += e.Latency.Seconds()
+		if e.PromptTokens >= 0 {
+			cell.Tokens += int64(e.PromptTokens)
+		}
+		if e.CompletionTokens >= 0 {
+			cell.Tokens += int64(e.CompletionTokens)
+		}
+		if cell.DurationSec > 0 {
+			cell.TokPerSec = float64(cell.Tokens) / cell.DurationSec
+		}
+		out[e.AccountID] = cell
+	}
+	return out
 }

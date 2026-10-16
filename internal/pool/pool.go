@@ -33,7 +33,22 @@ type Account struct {
 	InFlight     int64     `json:"in_flight"`
 	Paused       bool      `json:"paused"`
 	LastSuccess  time.Time `json:"last_success"`
+
+	// CooldownReason records why the account most recently entered cooldown
+	// (M10-B2 status_note wire surface): CooldownReasonRateLimit on the 429
+	// path, CooldownReasonTaskFailed on the scheduled-task/manual-batch
+	// failure path, "" when the cooldown carries no recorded cause. It is
+	// diagnostic memory like the counters above — never persisted.
+	CooldownReason string `json:"cooldown_reason,omitempty"`
 }
+
+// Cooldown reasons — the status_note phrases the panel shows while an account
+// is cooling. The 429 phrase matches the M9b model-lock reason string on
+// purpose: one rate-limit hit reads the same in both panel surfaces.
+const (
+	CooldownReasonRateLimit  = "429 rate limit"
+	CooldownReasonTaskFailed = "task failed"
+)
 
 // SetStatus updates the account status.
 func (a *Account) SetStatus(s string) {
@@ -45,10 +60,30 @@ func (a *Account) IsCooling() bool {
 	return !a.CooldownEnd.IsZero() && time.Now().Before(a.CooldownEnd)
 }
 
-// TriggerCooldown sets the cooldown end time.
+// TriggerCooldown sets the cooldown end time (no recorded cause — use
+// TriggerCooldownReason when the trigger is known).
 func (a *Account) TriggerCooldown(dur time.Duration) {
+	a.TriggerCooldownReason(dur, "")
+}
+
+// TriggerCooldownReason sets the cooldown end time and records the cause that
+// the panel's status_note column renders for as long as the account stays
+// cooling (M10-B2 snapshot extension).
+func (a *Account) TriggerCooldownReason(dur time.Duration, reason string) {
 	a.CooldownEnd = time.Now().Add(dur)
 	a.Status = "cooling"
+	a.CooldownReason = reason
+}
+
+// StatusNote is the wire value of the account's current cooldown cause: the
+// recorded reason while cooling, empty otherwise (a stale reason must not
+// outlive the cooldown it described). The M10-B2 snapshot surface
+// (GET /api/accounts status_note) renders it verbatim.
+func (a *Account) StatusNote() string {
+	if !a.IsCooling() {
+		return ""
+	}
+	return a.CooldownReason
 }
 
 // Selector selects one account from the pool for a given request.
@@ -210,6 +245,41 @@ func (s *WeightedRandomSelector) ReleaseLease(accountID string) {
 	s.mu.Unlock()
 }
 
+// LeaseIfEligible is the sticky-session reuse seam (M10-B2): it checks one
+// named account against exactly the same eligibility filters Select applies
+// (active status, credit floor, not cooling, not leased, not paused) and,
+// when eligible, takes the same anti-thundering lease Select would have
+// taken — so a sticky-reused account is indistinguishable from a freshly
+// selected one to the dispatch loop's release discipline. A nil return means
+// "not reusable this time": the caller falls back to Select and rebinds.
+// The returned pointer aliases the pool's live account, same as Select.
+func (s *WeightedRandomSelector) LeaseIfEligible(platform, accountID string) *Account {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	acc, ok := s.accounts[platform][accountID]
+	if !ok {
+		return nil
+	}
+	if acc.Status != "active" || acc.Credit < s.creditFloor || acc.IsCooling() || acc.Paused {
+		return nil
+	}
+	if _, leased := s.leases[acc.ID]; leased {
+		return nil
+	}
+	token := fmt.Sprintf("%016x", s.rng.Uint64())
+	s.leases[acc.ID] = token
+	go func(id, tok string) {
+		time.Sleep(s.leaseTTL)
+		s.mu.Lock()
+		if s.leases[id] == tok {
+			delete(s.leases, id)
+		}
+		s.mu.Unlock()
+	}(acc.ID, token)
+	return acc
+}
+
 // Round deducts cost from selected account.
 func (s *WeightedRandomSelector) Round(account *Account, cost float64) {
 	s.mu.Lock()
@@ -246,7 +316,7 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 	case "rate_limited":
 		account.FailCount++
 		account.Health = max(0.0, account.Health-0.1)
-		account.TriggerCooldown(2 * time.Minute)
+		account.TriggerCooldownReason(2*time.Minute, CooldownReasonRateLimit)
 	case "auth_error":
 		account.FailCount++
 		account.Health = 0.0
@@ -372,11 +442,15 @@ func (s *WeightedRandomSelector) SetAccountStatus(platform, accountID, status st
 
 // SetAccountCooldown puts the account into cooldown until the given time and
 // sets its status to "cooling" (Account.TriggerCooldown parity, absolute-time
-// form). Returns false when the account is unknown.
+// form). The only callers are the task-failure write-backs (scheduled batch
+// and the panel batch-op), so the recorded status_note cause is
+// CooldownReasonTaskFailed — 429s reach TriggerCooldownReason through
+// UpdateHealth instead. Returns false when the account is unknown.
 func (s *WeightedRandomSelector) SetAccountCooldown(platform, accountID string, until time.Time) bool {
 	return s.applyAccount(platform, accountID, func(acc *Account) {
 		acc.CooldownEnd = until
 		acc.SetStatus("cooling")
+		acc.CooldownReason = CooldownReasonTaskFailed
 	})
 }
 

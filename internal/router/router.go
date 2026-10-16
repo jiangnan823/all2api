@@ -46,12 +46,15 @@ type Router struct {
 	// locks is the M9b (model, account) 429 registry; all its methods are
 	// nil-receiver safe, so a zero-value Router means "no model locks".
 	locks *ModelLockRegistry
+	// sticky is the M10-B2 (caller, model) → account binding registry; same
+	// nil-receiver safety — a Router without one just never sticks.
+	sticky *StickyRegistry
 }
 
 // Register wires POST /v1/chat/completions and POST /v1/responses onto mux.
 // Non-POST methods are answered 405 by the ServeMux method patterns.
 func Register(mux *http.ServeMux, h *host.Host, lookup AdapterLookup) {
-	rt := &Router{host: h, lookup: lookup, locks: DefaultModelLocks}
+	rt := &Router{host: h, lookup: lookup, locks: DefaultModelLocks, sticky: DefaultSticky}
 	mux.HandleFunc("POST /v1/chat/completions", rt.handleChatCompletions)
 	mux.HandleFunc("POST /v1/responses", rt.handleResponses)
 }
@@ -280,6 +283,11 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 	}()
 
 	var lastErr error
+	// M10-B2 sticky sessions: the TTL is read hot from the frozen
+	// sticky_session_ttl_min key (minutes, 0 = off), so a config save lands on
+	// the next request. model is the bare name — the ledger's model key — so
+	// prefixed and bare addressing share one binding per session.
+	stickyTTL := stickyTTL(config.Shared.Get().StickySessionTTLMin)
 	for {
 		if err := r.Context().Err(); err != nil {
 			ledger.Result = usage.ResultInterrupted
@@ -293,7 +301,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			})
 			return
 		}
-		acct, err := rt.host.Pool.Select(r.Context(), platform)
+		acct, err := rt.selectAccount(r, platform, ledger.Model, stickyTTL)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, apiError{
 				Message: "account selection failed: " + err.Error(),

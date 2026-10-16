@@ -302,6 +302,79 @@ func RegisterDefaultHandlers(base context.Context, s *Scheduler, d *Deps) {
 	s.RegisterHandler(TaskTokenKeepalive, injectContext(base, NewTokenKeepaliveHandler(d)))
 }
 
+// PlatformTaskName is the M10-B2 per-platform task naming convention:
+// "<task>@<platform>" (e.g. "signin@workbuddy"). Scheduler task names are the
+// map key and must be unique, so per-platform tasks are distinguished by this
+// suffix; GET /api/tasks carries the plain platform in its own wire field,
+// split from the name by the wire layer.
+func PlatformTaskName(task, platform string) string {
+	return task + "@" + platform
+}
+
+// platformOfTaskName splits PlatformTaskName back into its parts. ok=false
+// for bare legacy names ("signin") — those never carried a platform suffix.
+func platformOfTaskName(name string) (task, platform string, ok bool) {
+	task, platform, found := strings.Cut(name, "@")
+	if !found || task == "" || platform == "" {
+		return name, "", false
+	}
+	return task, platform, true
+}
+
+// BuildPlatformTasks assembles the per-platform M10-B2 task entries: one
+// signin / active_check / token_keepalive per given platform plus cat_travel
+// only for workbuddy (the capability table in host.taskPlatforms is the
+// product truth — other platforms get no such task rather than a forever-
+// skipped one). Names follow PlatformTaskName, Source carries the platform
+// (GET /api/tasks wire field "platform"), and an empty spec value falls back
+// to the code-truth default exactly like Deps.Crons did.
+func BuildPlatformTasks(specs []PlatformCrons) []*Task {
+	tasks := make([]*Task, 0, len(specs)*4)
+	for _, sp := range specs {
+		if sp.Platform == "" {
+			continue // unnamed platform stanza: nothing to register it under
+		}
+		tasks = append(tasks,
+			&Task{Name: PlatformTaskName(TaskSignin, sp.Platform), Source: sp.Platform,
+				CronSpec: pickCron(sp.Signin, DefaultSigninCron), Enabled: true},
+			&Task{Name: PlatformTaskName(TaskActiveCheck, sp.Platform), Source: sp.Platform,
+				CronSpec: pickCron(sp.ActiveCheck, DefaultActiveCheckCron), Enabled: true},
+			&Task{Name: PlatformTaskName(TaskTokenKeepalive, sp.Platform), Source: sp.Platform,
+				CronSpec: pickCron(sp.TokenKeepalive, DefaultTokenKeepaliveCron), Enabled: true},
+		)
+		if sp.Platform == "workbuddy" {
+			tasks = append(tasks, &Task{Name: PlatformTaskName(TaskCatTravel, sp.Platform), Source: sp.Platform,
+				CronSpec: pickCron(sp.CatTravel, DefaultCatTravelCron), Enabled: true})
+		}
+	}
+	return tasks
+}
+
+// RegisterPlatformHandlers binds the per-platform handler for every task in
+// tasks: the task's name suffix selects the platform, the task's base name
+// selects which of the four handlers runs. Tasks built by BuildPlatformTasks
+// (BuildDefaultTasks' siblings) share the same Deps — the account source
+// resolves the platform from the task name it is handed at run time.
+func RegisterPlatformHandlers(base context.Context, s *Scheduler, d *Deps, tasks []*Task) {
+	builders := map[string]func(*Deps) TaskHandler{
+		TaskSignin:         NewSigninHandler,
+		TaskActiveCheck:    NewActiveCheckHandler,
+		TaskCatTravel:      NewCatTravelHandler,
+		TaskTokenKeepalive: NewTokenKeepaliveHandler,
+	}
+	for _, t := range tasks {
+		taskName, _, ok := platformOfTaskName(t.Name)
+		if !ok {
+			continue // legacy bare name: RegisterDefaultHandlers' territory
+		}
+		build, ok := builders[taskName]
+		if !ok {
+			continue // unknown base task: never bind a guess
+		}
+		s.RegisterHandler(t.Name, injectContext(base, build(d)))
+	}
+}
+
 // injectContext returns a TaskHandler that runs h with base when the
 // scheduler handed it nil (today's execute(): handler(nil)); a real context
 // from a future scheduler revision still wins.

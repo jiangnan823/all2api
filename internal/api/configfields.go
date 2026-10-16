@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"sort"
+	"strings"
 
 	"all2api/internal/config"
 )
@@ -81,6 +82,30 @@ var poolSpecs = []throttleBoundSpec{
 	{key: "pool.credit_floor", label: "config.field.credit_floor.label", unit: "credit", min: 0, max: 1000000},
 	{key: "pool.max_retries", label: "config.field.max_retries.label", unit: "count", min: 0, max: 10},
 	{key: "pool.cooldown_sec", label: "config.field.pool_cooldown_sec.label", unit: "sec", min: 0, max: 86400},
+}
+
+// stickySessionSpec: the M10-B2 sticky-session TTL — a top-level global
+// numeric field delivered in the pooling group (it governs account selection,
+// like the pool keys). 0 disables stickiness entirely.
+var stickySessionSpec = throttleBoundSpec{key: "sticky_session_ttl_min", label: "config.field.sticky_session_ttl_min.label",
+	unit: "min", min: 0, max: 1440, desc: "config.field.sticky_session_ttl_min.desc"}
+
+// platformCronSpecs: M10-B2 per-platform cron keys (schedule group, frozen
+// names). An empty saved value means "fall back to the frozen global key"
+// (signin_cron / task_cron / token_keepalive_cron) — which is why these
+// validate as cron-or-empty, unlike the globals above that must be a full
+// cron. cat_travel_cron is workbuddy-only by capability.
+var platformCronSpecs = []string{
+	"schedule.signin_cron_workbuddy",
+	"schedule.signin_cron_qoder",
+	"schedule.signin_cron_trae",
+	"schedule.task_cron_workbuddy",
+	"schedule.task_cron_qoder",
+	"schedule.task_cron_trae",
+	"schedule.token_keepalive_workbuddy",
+	"schedule.token_keepalive_qoder",
+	"schedule.token_keepalive_trae",
+	"schedule.cat_travel_cron",
 }
 
 // globalStringSpecs: global string fields (gateway group). Config-save
@@ -168,12 +193,14 @@ func handleConfigFields(w http.ResponseWriter, r *http.Request) {
 		{Group: "routing", Fields: []fieldDef{
 			{Key: "router.responses_api.enabled", Label: "config.field.responses_api.label", Type: "boolean", Effect: "next_request"},
 		}},
-		{Group: "pooling", Fields: numericFieldDefs(poolPointers(), "", "next_request")},
-		{Group: "schedule", Fields: []fieldDef{
+		{Group: "pooling", Fields: append(numericFieldDefs(poolPointers(), "", "next_request"),
+			fnumWithDesc(stickySessionSpec.key, stickySessionSpec.label, stickySessionSpec.unit,
+				stickySessionSpec.min, stickySessionSpec.max, stickySessionSpec.desc, "next_request"))},
+		{Group: "schedule", Fields: append([]fieldDef{
 			{Key: "schedule.signin_cron", Label: "config.field.signin_cron.label", Type: "cron", Effect: "next_request"},
 			{Key: "schedule.task_cron", Label: "config.field.task_cron.label", Type: "cron", Effect: "next_request"},
 			{Key: "schedule.token_keepalive_cron", Label: "config.field.token_keepalive_cron.label", Type: "cron", Effect: "next_request"},
-		}},
+		}, platformCronFieldDefs()...)},
 	}
 
 	// Deterministic delivery order (M2 B2 ruling 7): fixed global groups first,
@@ -224,6 +251,25 @@ func numericFieldDefs(specs []*throttleBoundSpec, prefix, effect string) []field
 	fields := make([]fieldDef, 0, len(specs))
 	for _, sp := range specs {
 		fields = append(fields, fnumWithDesc(prefix+sp.key, sp.label, sp.unit, sp.min, sp.max, sp.desc, effect))
+	}
+	return fields
+}
+
+// platformCronFieldDefs renders the M10-B2 per-platform cron keys as cron
+// FieldDefs. Label/description copy keys derive from the key itself
+// (config.field.<name>.label / .desc); every description explains the
+// empty-value = global-fallback semantics the save side enforces.
+func platformCronFieldDefs() []fieldDef {
+	fields := make([]fieldDef, 0, len(platformCronSpecs))
+	for _, key := range platformCronSpecs {
+		name := strings.TrimPrefix(key, "schedule.")
+		fields = append(fields, fieldDef{
+			Key:         key,
+			Label:       "config.field." + name + ".label",
+			Type:        "cron",
+			Description: "config.field." + name + ".desc",
+			Effect:      "next_request",
+		})
 	}
 	return fields
 }

@@ -45,8 +45,10 @@ const (
 	maxModelLockTTL = 2 * time.Hour
 
 	// ModelLockReason is the frozen wire reason every /api/model-locks row
-	// carries: locks are only ever created from 429 observations.
-	ModelLockReason = "429 rate limit"
+	// carries: locks are only ever created from 429 observations. Aliases
+	// pool.CooldownReasonRateLimit so both panel surfaces spell the phrase
+	// identically from one source of truth.
+	ModelLockReason = pool.CooldownReasonRateLimit
 )
 
 // modelLockKey identifies one locked (model, platform, account) triple. The

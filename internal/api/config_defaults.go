@@ -33,6 +33,7 @@ func handleRestoreDefaults(w http.ResponseWriter, r *http.Request) {
 	next.ModelMap = defaults.ModelMap
 	next.ExternalBaseURL = defaults.ExternalBaseURL
 	next.NoticeVersion = defaults.NoticeVersion
+	next.StickySessionTTLMin = defaults.StickySessionTTLMin // M10-B2: sticky back to 30min (0 stays user-choosable via save)
 	next.Listen, next.APIKey = listen, key
 	next.AuthDir, next.StateFile = authDir, stateFile
 
