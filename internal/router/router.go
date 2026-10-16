@@ -263,7 +263,7 @@ func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, err
 			}}
 			out = append(out, adapter.ChatMessage{
 				Role:      "assistant",
-				ToolCalls: json.RawMessage(mustJSON(calls)),
+				ToolCalls: mustJSON(calls),
 			})
 		case "function_call_output":
 			if head.CallID == "" {
