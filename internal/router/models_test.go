@@ -12,6 +12,16 @@ import (
 	"all2api/internal/config"
 )
 
+// getV1Models builds the GET request through the noctx-approved path.
+func getV1Models(t *testing.T, base string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return req
+}
+
 func TestV1ModelsListsCatalog(t *testing.T) {
 	rt := &Router{models: func(context.Context) []PublicModel {
 		return []PublicModel{
@@ -28,7 +38,7 @@ func TestV1ModelsListsCatalog(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/models")
+	resp, err := http.DefaultClient.Do(getV1Models(t, srv.URL))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -77,7 +87,7 @@ func TestV1ModelsEnforcesAPIKey(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/models")
+	resp, err := http.DefaultClient.Do(getV1Models(t, srv.URL))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -115,7 +125,7 @@ func TestV1ModelsNilListerYieldsEmptyList(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/models")
+	resp, err := http.DefaultClient.Do(getV1Models(t, srv.URL))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
