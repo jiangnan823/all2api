@@ -108,7 +108,12 @@ export function OverviewScreen(props: { onOpen: (p: 'workbuddy' | 'qoder' | 'tra
         </li>
         <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_CREDIT}</span>
-          <span className="pool-card__value">{data.creditTotal === null ? '—' : data.creditTotal.toLocaleString()}</span>
+          {/* M10：剩余/总额双值（credit_sum/credit_total），与明细页 KPI 同口径 */}
+          <span className="pool-card__value">
+            {data.creditSum === null && data.creditTotal === null
+              ? '—'
+              : `${(data.creditSum ?? 0).toLocaleString()} / ${(data.creditTotal ?? 0).toLocaleString()}`}
+          </span>
         </li>
       </ul>
 
