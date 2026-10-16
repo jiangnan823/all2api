@@ -1094,3 +1094,19 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 - 中期出路 A：主人如有**可用传统路径的 qoder 账号**（参考项目用户群那种），换号即通。
 - 中期出路 B：**新 OpenAPI/云端 agent 平面对话协议研究**——需在桌面版里抓到一次完整的模型完成流（本轮两次均未出现，可能需特定入口如 remote agent 会话）。
 - 环境已全部还原：hosts 条目已摘、系统代理已关、mitmdump 已停、Qoder 已正常（无参数）重启。mitmproxy CA 留在机器+用户根库（无害，后续抓包复用）。
+
+
+## 9.43 qoder 设备令牌交换落地 + 完成流挂起（2026-10-17 凌晨，B 路线首轮）
+
+主人拍板 B 路线并授权全程代操作。计算机使用（CUA）驱动 Qoder 桌面版完成对话触发，三层抓包（8080 代理 / 443 反代+hosts / netstat 直连探测）结果：
+
+**已落地并验证**：
+- **设备令牌交换**：`exchangeDevice`（qoder/client.go）——`POST openapi.qoder.com.cn/api/v1/me/jobToken`，Bearer dt-，body `{"clientId":…}` → jt-/jrt- 会话。dt-+clientId 从抓包提取存 `auths/qoder-device.json`（0600），加载器 `loadQoderDevice` 注册独立账号（fingerprint uid）。dt- 前缀在 exchangePAT 分流。**实测：交换 200、聊天鉴权通过（105/401 消失）**。
+- 坑三件： mitmdump 多实例同名互杀（要用 PID 管理或分名）； heredoc 三层转义把 Printf 的 \n 写成真换行（编译错）——复杂脚本一律 Write 工具； 反代上游连自己也回环——addon `server_connect` 钉真实 IP + `keep_host_header=true`（alb 按 Host 路由，IP Host 直接 503）+ SNI 保持域名。
+
+**剩余缺口（对话完成流挂起）**：
+- 鉴权通过后 `agent_chat_generation` 连接建立但**零字节挂起**（跨模型、120s 窗口），上游不报错也不出帧。
+- 解码我方请求体（230KB，Encode 逆旋转+base64）成功：顶层 21 字段（request_id/chat_context/model_config/aliyun_user_type/business…），`aliyun_user_type=""`（user/status 平面错配 → fallback personal_standard 未达 body？待查 buildChatBody 实参链）。
+- **官方成功对话的请求体未捕获**——桌面版完成流绕过系统代理与 hosts（两路抓包均无），netstat 探测器本轮失效（解析问题待修）。下一轮：修探测器 → 主人在桌面版成功完成一次对话 → netstat 找到真实完成端点 → 针对该端点布抓包 → 解码官方请求体逐字段对齐。
+
+**环境还原确认**：系统代理关、hosts 摘除、mitmdump 停、Qoder 正常重启、网关 healthz 200。mitmproxy CA 留存机器+用户根库。WorkBuddy 主链不受影响。

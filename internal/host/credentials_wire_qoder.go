@@ -14,6 +14,7 @@
 package host
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"fmt"
@@ -46,7 +47,15 @@ func (q qoderCredSource) CredentialFor(_ context.Context, acct *pool.Account) (*
 	if !ok {
 		return nil, fmt.Errorf("credential store: no credential for %s/%s", acct.Platform, acct.ID)
 	}
-	return &qoder.PATCredential{PAT: cred.AccessToken}, nil
+	out := qoder.PATCredential{PAT: cred.AccessToken}
+	if strings.HasPrefix(cred.AccessToken, "dt-") {
+		// Device-login credential: the dt- token rides DeviceToken and the
+		// PAT stays empty — the exchange branches on it (chat-capable path).
+		out.DeviceToken = cred.AccessToken
+		out.ClientID = cred.ClientID
+		out.PAT = ""
+	}
+	return &out, nil
 }
 
 // WireQoderSender injects the store into the registered qoder adapter as the

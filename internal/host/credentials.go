@@ -51,6 +51,8 @@ const (
 	authFilePrefix = "workbuddy-"
 	authFileSuffix = ".json"
 	qoderPatFile   = "qoder-pat.txt"
+	qoderDeviceFile   = "qoder-device.json"
+	qoderDevicePrefix = "dt-"
 	qoderPatPrefix = "pt-"
 )
 
@@ -64,6 +66,7 @@ const (
 type fileCred struct {
 	AccessToken  string
 	RefreshToken string
+	ClientID     string // qoder device credential: the desktop app's clientId
 	UID          string
 	Nickname     string // display name from the auth file (account.nickname); empty for PAT accounts
 	EnterpriseID string
@@ -216,7 +219,48 @@ func (s *CredentialStore) LoadAuthDir(dir string) (int, error) {
 	if n := s.loadQoderPAT(dir); n > 0 {
 		loaded += n
 	}
+	if n := s.loadQoderDevice(dir); n > 0 {
+		loaded += n
+	}
 	return loaded, nil
+}
+
+// loadQoderDevice loads auth_dir/qoder-device.json — the Qoder desktop app's
+// device-login credential {"device_token":"dt-…","client_id":"…"} captured
+// from the official client. Device tokens yield chat-capable jobTokens on
+// /api/v1/me/jobToken; PAT-exchanged sessions are rejected by the chat
+// gateway (105) for app-login accounts. The account ID is the first 8 hex
+// chars of the device token's SHA-256 fingerprint. Returns 1 on success.
+func (s *CredentialStore) loadQoderDevice(dir string) int {
+	raw, err := os.ReadFile(filepath.Join(dir, qoderDeviceFile))
+	if err != nil {
+		return 0
+	}
+	var doc struct {
+		DeviceToken string `json:"device_token"`
+		ClientID    string `json:"client_id"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		fmt.Printf("credentials: skip %s: %v\n", qoderDeviceFile, err)
+		return 0
+	}
+	dt := strings.TrimSpace(doc.DeviceToken)
+	cid := strings.TrimSpace(doc.ClientID)
+	if !strings.HasPrefix(dt, qoderDevicePrefix) || cid == "" {
+		fmt.Printf("credentials: skip %s: expected a %q-prefixed device_token and a client_id\n", qoderDeviceFile, qoderDevicePrefix)
+		return 0
+	}
+	cred := fileCred{AccessToken: dt, ClientID: cid, UID: patFingerprint(dt)}
+	s.put(credKey(QoderPlatform, cred.UID), cred)
+	if s.pool != nil {
+		s.pool.AddAccount(&pool.Account{
+			ID:       cred.UID,
+			Platform: QoderPlatform,
+			Status:   "active",
+		})
+	}
+	fmt.Printf("credentials: qoder device credential registered (%s)\n", qoderDeviceFile)
+	return 1
 }
 
 // loadQoderPAT loads auth_dir/qoder-pat.txt (one "pt-"-prefixed line) and

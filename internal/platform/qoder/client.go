@@ -62,6 +62,9 @@ import (
 const (
 	prodAuthBase    = "https://gateway.qoder.com.cn"
 	prodOpenAPIBase = "https://openapi.qoder.sh"
+	// prodOpenAPICNBase serves the desktop app's device-token exchange
+	// (/api/v1/me/jobToken); the .sh host rejects that route with 401.
+	prodOpenAPICNBase = "https://openapi.qoder.com.cn"
 )
 
 // Wire paths. Auth-family paths carry the machine signature; the REST paths
@@ -71,6 +74,7 @@ const (
 	pathJobToken     = "/algo/api/v3/user/jobToken?Encode=1" // #nosec G101 -- endpoint path, not credential material
 	pathUserStatus   = "/algo/api/v3/user/status?Encode=1"
 	pathRESTExchange = "/api/v1/jobToken/exchange"
+	pathDeviceJobToken = "/api/v1/me/jobToken" // desktop-app device-token exchange (official client)
 	pathRESTUserinfo = "/api/v1/userinfo"
 	pathQuotaUsage   = "/api/v2/quota/usage"
 )
@@ -106,6 +110,13 @@ func ResolveRegion(_ string) *Region {
 // personal access token. Qoder PATs carry no refresh token and no expiry.
 type PATCredential struct {
 	PAT string
+	// DeviceToken/ClientID carry the Qoder desktop app's device-login
+	// credential (dt- token + clientId). When DeviceToken is set the PAT
+	// field stays empty and the exchange goes through the official
+	// /api/v1/me/jobToken endpoint — PAT-exchanged sessions are rejected by
+	// the chat gateway with 105 "Login expired" for app-login accounts.
+	DeviceToken string
+	ClientID    string
 }
 
 // CredentialSource supplies the credential for one pool account. An error (or
@@ -153,6 +164,7 @@ type senderImpl struct {
 // sends per account with code 10605, so further sends queue locally).
 type acctState struct {
 	machineID, machineToken, machineType string
+	clientID                             string // device-login clientId (dt- credential only)
 
 	refreshMu sync.Mutex // serializes renewal network calls
 	cur       atomic.Pointer[sessionData]
@@ -263,7 +275,15 @@ func (s *senderImpl) patFor(ctx context.Context, acct *pool.Account) (string, er
 	if err != nil {
 		return "", &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: credential lookup: " + err.Error()}
 	}
-	if cred == nil || cred.PAT == "" {
+	if cred == nil {
+		return "", &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: account " + acct.ID + " has no credential"}
+	}
+	st := s.state(acct.ID)
+	st.clientID = cred.ClientID
+	if cred.DeviceToken != "" {
+		return cred.DeviceToken, nil
+	}
+	if cred.PAT == "" {
 		return "", &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: account " + acct.ID + " has no PAT"}
 	}
 	return cred.PAT, nil
@@ -287,6 +307,11 @@ type jobToken struct {
 // fallback the reference keeps for older sessions. The account state supplies
 // the machine identity the legacy signature family presents.
 func (s *senderImpl) exchangePAT(ctx context.Context, st *acctState, pat string) (*jobToken, error) {
+	// dt- = the desktop app's device-login credential: the chat gateway only
+	// accepts sessions from the official /api/v1/me/jobToken exchange for it.
+	if strings.HasPrefix(pat, "dt-") {
+		return s.exchangeDevice(ctx, st, pat, st.clientID)
+	}
 	jt, err := s.exchangeREST(ctx, pat)
 	if err == nil {
 		return jt, nil
@@ -334,6 +359,63 @@ func (s *senderImpl) exchangeREST(ctx context.Context, pat string) (*jobToken, e
 	if err := json.Unmarshal(raw, &er); err != nil || er.Token == "" {
 		return nil, &adapter.UpstreamError{Status: http.StatusBadGateway, Reason: adapter.ReasonPlatformDown,
 			Message: "qoder: jobToken/exchange response shape unexpected"}
+	}
+	jt := &jobToken{Token: er.Token, RefreshToken: er.RefreshToken}
+	if er.ExpiresIn > 0 {
+		jt.ExpireAtMs = s.nowMs() + er.ExpiresIn
+	} else if t, perr := time.Parse(time.RFC3339, er.ExpiresAt); perr == nil {
+		jt.ExpireAtMs = t.UnixMilli()
+	}
+	s.enrichUserinfo(ctx, jt)
+	return jt, nil
+}
+
+// exchangeDevice trades the desktop app's device-login token for a chat
+// session on POST {openapi}/api/v1/me/jobToken (Bearer dt-, JSON clientId).
+// This is the exchange the official client uses; its jt- jobToken is the only
+// kind the chat gateway accepts for app-login accounts — the PAT exchange
+// planes yield sessions the gateway rejects with 105 "Login expired".
+func (s *senderImpl) exchangeDevice(ctx context.Context, st *acctState, deviceToken, clientID string) (*jobToken, error) {
+	if clientID == "" {
+		return nil, &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired,
+			Message: "qoder: device credential carries no clientId"}
+	}
+	body, err := json.Marshal(map[string]string{"clientId": clientID})
+	if err != nil {
+		return nil, &adapter.UpstreamError{Status: http.StatusBadRequest, Reason: adapter.ReasonNotFound,
+			Message: "qoder: build device exchange body: " + err.Error()}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, prodOpenAPICNBase+pathDeviceJobToken, bytes.NewReader(body))
+	if err != nil {
+		return nil, &adapter.UpstreamError{Status: http.StatusBadRequest, Reason: adapter.ReasonNotFound,
+			Message: "qoder: build device exchange request: " + err.Error()}
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+deviceToken)
+	resp, err := s.shortClient().Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, &adapter.UpstreamError{Status: http.StatusGatewayTimeout, Reason: adapter.ReasonTimeout, Message: "qoder: device exchange: " + ctx.Err().Error()}
+		}
+		return nil, &adapter.UpstreamError{Status: http.StatusBadGateway, Reason: adapter.ReasonPlatformDown,
+			Message: "qoder: device exchange transport: " + err.Error()}
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, errBodyCap))
+	drainBody(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, classifyUpstream(resp.StatusCode, raw, resp.Header)
+	}
+	var er struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"` // milliseconds
+		ExpiresAt    string `json:"expires_at"`
+	}
+	if err := json.Unmarshal(raw, &er); err != nil || er.Token == "" {
+		return nil, &adapter.UpstreamError{Status: http.StatusBadGateway, Reason: adapter.ReasonPlatformDown,
+			Message: "qoder: device exchange response shape unexpected"}
 	}
 	jt := &jobToken{Token: er.Token, RefreshToken: er.RefreshToken}
 	if er.ExpiresIn > 0 {
