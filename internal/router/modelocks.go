@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"all2api/internal/adapter"
+	"all2api/internal/pool"
 )
 
 // DefaultModelLocks is the process-wide registry: /v1 dispatch books into it
@@ -65,14 +66,29 @@ type modelLock struct {
 }
 
 // ModelLockRegistry tracks per-(model, account) 429 locks and answers the
-// two consumer questions: "may this pair send?" (Locked) and "what does the
-// panel show?" (Snapshot). All methods are nil-receiver safe so a Router
-// built without a registry degrades to "no model locks", never a panic.
+// consumer questions: "may this pair send?" (Locked), "what does the panel
+// show?" (Snapshot, with the M10 availability columns joined from the bound
+// pool view), and "clear the pool" (Unlock / UnlockAll). All methods are
+// nil-receiver safe so a Router built without a registry degrades to "no
+// model locks", never a panic.
 type ModelLockRegistry struct {
 	mu         sync.Mutex
 	locks      map[modelLockKey]modelLock
 	defaultTTL time.Duration
 	now        func() time.Time // injectable clock for tests
+
+	// pool is the optional read-only account-state view behind the M10
+	// available/total columns (BindPool). nil = no join source: the
+	// aggregates keep zeroed availability columns instead of guessing.
+	pool poolView
+}
+
+// poolView is the read-only pool face the registry needs for the M10
+// available/total columns: which accounts exist per platform and whether they
+// look selectable right now. *pool.WeightedRandomSelector satisfies it via
+// SnapshotAccounts; router tests inject fakes through the unexported field.
+type poolView interface {
+	SnapshotAccounts() []pool.Account
 }
 
 // NewModelLockRegistry builds an empty registry on the wall clock.
@@ -82,6 +98,24 @@ func NewModelLockRegistry() *ModelLockRegistry {
 		defaultTTL: DefaultModelLockTTL,
 		now:        time.Now,
 	}
+}
+
+// BindPool attaches the availability-join source for the M10 available/total
+// columns. The concrete parameter keeps a typed-nil *pool.WeightedRandomSelector
+// out of the interface (the models_wire.go constructor guards the same trap):
+// a nil selector binds nothing and the aggregates report zeroed availability
+// rather than panicking. Called at panel-handler construction; safe to re-call.
+func (m *ModelLockRegistry) BindPool(p *pool.WeightedRandomSelector) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p == nil {
+		m.pool = nil
+		return
+	}
+	m.pool = p
 }
 
 // NoteRateLimited books (or re-books) a 429 lock for the pair. retryAfter is
@@ -134,14 +168,21 @@ func (m *ModelLockRegistry) Locked(model, platform, account string) bool {
 
 // ModelLockAggregate is the panel-facing view of one (model, platform) group:
 // how many of the platform's accounts are locked for this model, and when the
-// first of them unlocks. TotalAccounts is intentionally absent — it is pool
-// state, joined by the wire layer (api.handleModelLocks), not registry state.
+// first of them unlocks. M10-B1 adds the availability columns: Available counts
+// the platform accounts the pool would select right now (active, not paused,
+// not cooling) minus the ones this model itself has locked, and Total is
+// Available + LockedAccounts — the model's usable breadth, not the raw pool
+// size. Both stay 0 when no pool view is bound (BindPool); the legacy wire
+// total_accounts keeps being joined by the wire layer (api.handleModelLocks).
 type ModelLockAggregate struct {
 	Model          string
 	Platform       string
 	LockedAccounts int
 	EarliestUnlock time.Time // zero only in the impossible empty-group case
 	Reason         string
+
+	Available int // selectable now and not locked for this model (needs a bound pool view)
+	Total     int // Available + LockedAccounts
 }
 
 // Snapshot returns the aggregate per-(model, platform) view, pruning expired
@@ -156,6 +197,7 @@ func (m *ModelLockRegistry) Snapshot() []ModelLockAggregate {
 	type aggKey struct{ model, platform string }
 	m.mu.Lock()
 	aggs := make(map[aggKey]*ModelLockAggregate)
+	lockedBy := make(map[aggKey]map[string]bool)
 	for k, l := range m.locks {
 		if !now.Before(l.unlockAt) {
 			delete(m.locks, k) // prune expired so the panel never lists ghosts
@@ -168,11 +210,46 @@ func (m *ModelLockRegistry) Snapshot() []ModelLockAggregate {
 			aggs[ak] = a
 		}
 		a.LockedAccounts++
+		if lockedBy[ak] == nil {
+			lockedBy[ak] = make(map[string]bool)
+		}
+		lockedBy[ak][k.account] = true
 		if a.EarliestUnlock.IsZero() || l.unlockAt.Before(a.EarliestUnlock) {
 			a.EarliestUnlock = l.unlockAt
 		}
 	}
+	pv := m.pool
 	m.mu.Unlock()
+
+	// Availability join: one pool snapshot serves every group. selectable
+	// remembers, per platform, which account ids the pool would hand out right
+	// now — Select's eligibility (active, not paused, not cooling) minus the
+	// anti-thundering lease, which lasts one in-flight send and must not make
+	// the panel flicker. The pool's credit floor stays pool-private (the
+	// snapshot carries no floor); availability here is the lock layer's view.
+	if pv != nil {
+		selectable := make(map[string]map[string]bool)
+		for _, acc := range pv.SnapshotAccounts() {
+			if acc.Status != "active" || acc.Paused {
+				continue
+			}
+			if !acc.CooldownEnd.IsZero() && now.Before(acc.CooldownEnd) {
+				continue
+			}
+			if selectable[acc.Platform] == nil {
+				selectable[acc.Platform] = make(map[string]bool)
+			}
+			selectable[acc.Platform][acc.ID] = true
+		}
+		for ak, a := range aggs {
+			for id := range selectable[a.Platform] {
+				if !lockedBy[ak][id] {
+					a.Available++
+				}
+			}
+			a.Total = a.Available + a.LockedAccounts
+		}
+	}
 
 	out := make([]ModelLockAggregate, 0, len(aggs))
 	for _, a := range aggs {
@@ -185,6 +262,49 @@ func (m *ModelLockRegistry) Snapshot() []ModelLockAggregate {
 		return out[i].Platform < out[j].Platform
 	})
 	return out
+}
+
+// Unlock drops every lock booked for the model (all platforms, all accounts)
+// and returns how many live locks it removed. Expired entries in the same
+// family are pruned silently — the TTL already released them, so counting
+// them would overstate the unlock.
+func (m *ModelLockRegistry) Unlock(model string) int {
+	if m == nil {
+		return 0
+	}
+	now := m.now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k, l := range m.locks {
+		if k.model != model {
+			continue
+		}
+		delete(m.locks, k)
+		if now.Before(l.unlockAt) {
+			n++
+		}
+	}
+	return n
+}
+
+// UnlockAll is Unlock across every model: the panel's "clear the whole lock
+// pool" action (POST /api/model-locks/unlock with an empty model).
+func (m *ModelLockRegistry) UnlockAll() int {
+	if m == nil {
+		return 0
+	}
+	now := m.now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k, l := range m.locks {
+		delete(m.locks, k)
+		if now.Before(l.unlockAt) {
+			n++
+		}
+	}
+	return n
 }
 
 // retryHintFromError best-effort recovers the upstream retry hint from a

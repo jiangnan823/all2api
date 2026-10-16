@@ -228,6 +228,28 @@ var workbuddyDefaultModels = []string{
 	"hunyuan",
 }
 
+// qoderVisionModels is the static vision-capability table for the known qoder
+// display names, mirroring the reference implementation's DefaultVisionModels
+// (Qoder-2API-Go models/models.go — display_name → capable). The reference
+// itself caveats that the upstream is_vl flags have proven unreliable, so the
+// table stays a display hint, not an authoritative matrix: a name absent from
+// it is undeclared and goes out as null on the wire (supports_vision), never
+// as a fabricated false. Unknown models → null.
+var qoderVisionModels = map[string]bool{
+	"Qwen3.8-Max":       true,
+	"Qwen3.8-Flash":     true,
+	"Qwen3.7-Max":       true,
+	"Qwen3.7-Plus":      true,
+	"Qwen3.7-Flash":     true,
+	"DeepSeek-V4-Pro":   true,
+	"DeepSeek-Flash":    true,
+	"GLM-5.3":           true,
+	"GLM-5.3-Flash":     true,
+	"GLM-5.2":           true,
+	"Kimi-K3":           true,
+	"Kimi-K2.8-Preview": true,
+}
+
 // handleModels serves GET /api/models over the production catalog seam
 // (nil without a credential store — the static tables answer, source local).
 func handleModels(h *host.Host) http.HandlerFunc {
@@ -257,17 +279,22 @@ func modelsEndpointHandler(cat upstreamCatalog) http.HandlerFunc {
 					if m == nil {
 						continue
 					}
-					// The static table only names models and marks streaming;
+					// The static table names models, marks streaming, and
+					// declares vision for the known rows (qoderVisionModels);
 					// every other fact stays null (undeclared, not false).
 					stream := m.SupportsStream
-					resp.Models = append(resp.Models, modelWire{
+					row := modelWire{
 						Platform:       "qoder",
 						Provider:       "qoder",
 						ID:             m.ID,
 						Name:           m.Name,
 						Model:          strings.TrimPrefix(m.ID, "qoder/"),
 						SupportsStream: &stream,
-					})
+					}
+					if v, ok := qoderVisionModels[m.Name]; ok {
+						row.SupportsVision = &v
+					}
+					resp.Models = append(resp.Models, row)
 				}
 			}
 		}
