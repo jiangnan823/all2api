@@ -971,3 +971,25 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 - **边界如实记录**：流式下 `/v1/responses` 吐的仍是 chat.completion.chunk SSE，不是原生 `response.output_text.delta` 事件流。非流式 Responses 已全通；严格校验 Responses 事件流的客户端需关流式或走 /v1/chat/completions。原生信封（object:"response" + output 数组 + Responses SSE 事件）整体归入平台协议批。
 - **热替换第 N 次验证**：kill PID → netstat 确认释放 → `go build -o "D:\Program Files\all2api\all2api.exe" ./cmd/gateway` → Start-Process → healthz 200 → 原生格式实测模型回复 "OK"。仓库根目录无 main 包（入口在 ./cmd/gateway），`go build .` 会报 no Go files——构建命令要带包路径。
 - gofmt -l 本地列出全部旧文件是 CRLF 检出噪音（新写的 LF 文件不在列表内），CI 按 LF 检出运行门禁为准。
+
+## 9.33 M10 四支并行：任务中心拆散 + wb2api 账号池全面对齐（2026-10-16，主人对照参考实现点名缺口驱动）
+
+主人两条验收意见（任务中心拆散/模型视觉列）+ 一张 wb2api 对照截图，拆成四支并行子 agent（文件所有权严格互斥，wire 契约先行冻结）：
+
+- **m10-ia（fae3610）**：顶层「任务中心」删除；任务按平台拆进 账号池→WorkBuddy/Qoder/Trae 二级页（AccountsScreen props 不变 + PlatformTasksCard 上下组合）；配置页定时任务区整组下放；TimeSlotPicker 抽共享组件。
+- **m10-models（f7f9041+c3ce3a3）**：modelWire += supports_vision（上游 supportsImages 显式字段 > tags 含 vision > nil，qoder 静态能力表照抄参考实现）；锁池 += scope/available/total + POST /api/model-locks/unlock（单模型/全池）。顺手修掉 unlock handler 先 UnlockAll 再覆盖的自引入 bug。
+- **m10-pool（075885c）**：批量操作 POST /api/accounts/{platform}/batch-op（复用调度器四上游操作，逐账号 30s 预算）；行内 disable/enable；usage accounts 聚合；粘性会话（(key,model)→account 绑定，TTL 默认 30min，咨询式复用）；快照 += paused_count/sticky_sessions/credit_sum/status_note（pool 记冷却原因）；10 个每平台 cron 键（空=回落冻结全局键）+ 任务按平台注册（signin@workbuddy 命名）+ taskWire += platform。
+- **m10-panel（5875b03）**：账号池 7 KPI、批量四键（travel 仅 workbuddy）、用量四徽章列、status_note 副行、行内禁用、最近成功相对时间、PackagesCard「检查」实时查询、锁池 域/可选总数列+全池解锁。
+
+**合并期集成修复（四支之外）**：
+1. **modelWire 抽文件**（fc34ed2，合并前）：panel_data.go 的模型 wire 面抽到 models_wire_def.go——B1/B2 同文件分区共享是唯一冲突点，抽走后零冲突合并。
+2. **credit_total 语义纠偏**：wb2api「积分剩余/总额」是双值（14268/19617），顶层 credit_total 原本错误地累计 remain；修正为累计容量，credit_sum 才是剩余。**实测热替换后 14268/19617 与参考完全一致**。
+3. **面板包搬运缝**：`npm run build` 只落 web-panel/dist，**必须拷进 internal/web/dist 才被 go:embed**——第一轮热替换漏搬，浏览器仍是旧包（导航还挂任务中心）。
+4. **任务名对接**：任务名带平台后缀（signin@workbuddy），A 的冻结键映射只认裸名→全落只读；映射前剥 @后缀（教训：`slice(0, indexOf('@'))` 在 -1 时是 off-by-one）。
+5. **空串回落**：平台 cron 键未下发是空串（=回落全局），`??` 不跳空串致编辑框空白；改 `||` 回落任务实况 cron，24 时点选择器正确回显（cat_travel 09/21、signin 09/21、keepalive 22）。
+6. **视觉列前端**（18d19b4 侧翼）：分派时视觉列只划给后端支，ModelsScreen 渲染漏配，集成时补。**教训：冻结 wire 时要连「谁渲染」一起冻结。**
+7. 总览「积分剩余」KPI 同步双值；panel.css 孤儿 tasks-screen 块清理（1b5ddbd）。
+
+**实测（热替换安装版）**：/api/tasks 带平台；快照 paused/sticky/credit_sum 上线；/api/models 45 行带 vision（MiniMax-M2.7 未声明如实「—」）；unlock 空池 {"unlocked":0}；浏览器逐屏核对：导航五项、平台任务卡可编辑、KPI/批量/用量列/禁用键就位。
+
+遗留：粘性会话 KPI 为网关级汇总（无平台拆分）；批量按钮已接真上游操作但验收时未真实触发（避免误签到/喂猫）；用量列在网关重启后短时为空（内存环清空）。go 变体门禁注：qoder-only 变体下 growth/packages 路由测试为 main 预存基线失败（非本批引入）。
