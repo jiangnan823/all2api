@@ -1056,3 +1056,13 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 
 **查过无虞（对抗清单存档）**：面板全部 20+ 路由 withAPIKey 覆盖（含 M10 新增五端点）；usage accounts 聚合除零有守卫（DurationSec>0 才除，无 Inf 进 JSON）；error message 全链 200 字截断且只取上游业务信封 message（无 token 通道）；凭据日志旁路无命中（Printf/observability 参数审计）；auth 文件含 token 属设计（0600 + 临时文件 + rename 原子）；restore-defaults 连接四项保留代码验证；splitAccountID 冒号切分对怪输入只会 404 不会错位；sticky 键空间实际有界（caller×model，惰性 TTL）；batch-op 每账号 30s 预算 × 串行已文档化；前端 localStorage/sessionStorage/dangerouslySetInnerHTML 零命中；usage join 的 ShortID 前缀回落歧义风险记 P3（同前缀账号并存才触发）。
 **记档不修**：/api/packages GET 每次实时全量探测（面板 60s 轮询 × 4 账号，上游礼貌上限内）；双面板并发 batch-op 各自串行（上游 2×）；Responses 流式 usage 缺失（M8 挂账不变）。
+
+
+## 9.40 卡片平台归属修复（2026-10-16，主人截图「qoder 下面怎么也有积分到期提醒」驱动）
+
+M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面，上游只有它有积分包）在 qoder/trae 页也渲染 WorkBuddy 账号的数据；锁池卡全平台混显。修复：
+
+- **PackagesCard 仅 workbuddy 页挂载**（`filter === 'workbuddy'` 条件渲染）。
+- **ModelLocksCard 按 platform 过滤**（load 时按 wire platform 键丢弃他域锁；组件新增 platform 可选 prop，总览 undefined=全量语义不变）。
+- **「全部解锁」收窄作用域**（后端 UnlockAll(platform) + unlock body 新增 platform 键）：qoder 页的全部解锁只清 qoder 锁，此前会越界清掉 workbuddy 的锁——审查视角的 scope leak，主人截图连带揪出来的。
+- 测试：scoped UnlockAll 新例；352 前端用例全绿。教训：**分平台 IA 下每个挂载件都要问「这块在别的平台页该不该出现」**——M10-C 的验收截图恰好只看了 WorkBuddy 页，Qoder 页的串台漏网到主人手里。
