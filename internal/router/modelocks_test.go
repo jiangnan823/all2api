@@ -5,8 +5,10 @@ package router
 // earliest unlock, deterministic order, expired pruning) and the two dispatch
 // hooks — Select skips a locked (model, account) pair without a send, and a
 // classified 429 from any failure branch (non-stream, stream-start, mid-stream)
-// books a lock alongside the untouched breaker. Registries are always injected
-// (Router.locks / fake clock) — never the process-wide DefaultModelLocks.
+// books a lock alongside the untouched breaker. M10-B1 adds Unlock/UnlockAll
+// and the availability columns (available/total joined from the pool view the
+// panel handler binds). Registries are always injected (Router.locks / fake
+// clock) — never the process-wide DefaultModelLocks.
 
 import (
 	"context"
@@ -164,6 +166,140 @@ func TestModelLockRegistryNilSafety(t *testing.T) {
 	m.NoteRateLimited("m", "wb", "a", 0) // must not panic
 	if got := m.Snapshot(); got != nil {
 		t.Fatalf("nil registry snapshot = %+v, want nil", got)
+	}
+	if n := m.Unlock("m"); n != 0 {
+		t.Fatalf("nil registry unlock = %d, want 0", n)
+	}
+	if n := m.UnlockAll(); n != 0 {
+		t.Fatalf("nil registry unlock-all = %d, want 0", n)
+	}
+	m.BindPool(nil) // must not panic
+}
+
+// ---------- M10-B1: Unlock / UnlockAll ----------
+
+func TestModelLockUnlockSingleModel(t *testing.T) {
+	c := newFakeClock()
+	m := newTestRegistry(c)
+
+	m.NoteRateLimited("m1", "wb", "a1", time.Minute)
+	m.NoteRateLimited("m1", "qoder", "a2", time.Minute) // other platform, same model
+	m.NoteRateLimited("m2", "wb", "a3", time.Minute)
+
+	if n := m.Unlock("m1"); n != 2 {
+		t.Fatalf("Unlock(m1) = %d, want 2 (both platforms)", n)
+	}
+	if m.Locked("m1", "wb", "a1") || m.Locked("m1", "qoder", "a2") {
+		t.Fatal("m1 locks must be gone after Unlock(m1)")
+	}
+	if !m.Locked("m2", "wb", "a3") {
+		t.Fatal("m2 must survive an m1-scoped unlock")
+	}
+	if n := m.Unlock("m1"); n != 0 {
+		t.Fatalf("repeated Unlock(m1) = %d, want 0", n)
+	}
+	if n := m.Unlock("never-locked"); n != 0 {
+		t.Fatalf("Unlock of an unknown model = %d, want 0", n)
+	}
+}
+
+func TestModelLockUnlockSkipsExpiredGhosts(t *testing.T) {
+	c := newFakeClock()
+	m := newTestRegistry(c)
+
+	m.NoteRateLimited("m1", "wb", "ghost", 0) // default 2m cooldown
+	c.Advance(3 * time.Minute)                // TTL ran out; entry not yet pruned
+	m.NoteRateLimited("m1", "wb", "live", 0)  // fresh lock re-books the model
+
+	if n := m.Unlock("m1"); n != 1 {
+		t.Fatalf("Unlock(m1) = %d, want 1 (expired ghost must not inflate)", n)
+	}
+	if len(m.locks) != 0 {
+		t.Fatalf("unlock must also drop the expired ghost, %d entries remain", len(m.locks))
+	}
+
+	m.NoteRateLimited("m1", "wb", "a1", 0)
+	c.Advance(3 * time.Minute)
+	if n := m.UnlockAll(); n != 0 {
+		t.Fatalf("UnlockAll over expired-only entries = %d, want 0", n)
+	}
+	if len(m.locks) != 0 {
+		t.Fatalf("UnlockAll must clear expired ghosts too, %d remain", len(m.locks))
+	}
+}
+
+func TestModelLockUnlockAll(t *testing.T) {
+	c := newFakeClock()
+	m := newTestRegistry(c)
+
+	m.NoteRateLimited("m1", "wb", "a1", 0)
+	m.NoteRateLimited("m2", "qoder", "a2", 0)
+	m.NoteRateLimited("m3", "trae", "a3", 0)
+
+	if n := m.UnlockAll(); n != 3 {
+		t.Fatalf("UnlockAll = %d, want 3", n)
+	}
+	if got := m.Snapshot(); len(got) != 0 {
+		t.Fatalf("UnlockAll left %d rows", len(got))
+	}
+}
+
+// ---------- M10-B1: availability columns (BindPool join) ----------
+
+func TestModelLockSnapshotAvailabilityColumns(t *testing.T) {
+	c := newFakeClock()
+	m := newTestRegistry(c)
+	sel := pool.NewWeightedRandomSelector(0, 1, 60)
+	cooling := c.Now().Add(time.Minute)
+	sel.AddAccount(&pool.Account{ID: "a1", Platform: "wb", Status: "active", Credit: 1000})                       // locked for m1
+	sel.AddAccount(&pool.Account{ID: "a2", Platform: "wb", Status: "active", Credit: 1000})                       // free → available
+	sel.AddAccount(&pool.Account{ID: "a3", Platform: "wb", Status: "active", Credit: 1000, CooldownEnd: cooling}) // cooling → neither column
+	sel.AddAccount(&pool.Account{ID: "a4", Platform: "wb", Status: "disabled", Credit: 1000})                     // disabled → neither
+	sel.AddAccount(&pool.Account{ID: "a5", Platform: "wb", Status: "active", Credit: 1000, Paused: true})         // paused → neither
+	sel.AddAccount(&pool.Account{ID: "q1", Platform: "qoder", Status: "active", Credit: 1000})                    // other platform
+	m.BindPool(sel)
+
+	m.NoteRateLimited("m1", "wb", "a1", 0)
+	got := m.Snapshot()
+	if len(got) != 1 {
+		t.Fatalf("want 1 row, got %+v", got)
+	}
+	g := got[0]
+	if g.LockedAccounts != 1 || g.Available != 1 || g.Total != 2 {
+		t.Fatalf("columns = locked %d / available %d / total %d, want 1/1/2", g.LockedAccounts, g.Available, g.Total)
+	}
+
+	// After the unlock the freed account returns to the available column.
+	if n := m.Unlock("m1"); n != 1 {
+		t.Fatalf("Unlock(m1) = %d, want 1", n)
+	}
+	m.NoteRateLimited("m2", "wb", "a2", 0)
+	got = m.Snapshot()
+	if len(got) != 1 || got[0].Model != "m2" {
+		t.Fatalf("post-unlock rows = %+v, want only m2", got)
+	}
+	if got[0].LockedAccounts != 1 || got[0].Available != 1 || got[0].Total != 2 {
+		t.Fatalf("post-unlock columns = %d/%d/%d, want 1/1/2 (a1 back available, a2 locked)",
+			got[0].LockedAccounts, got[0].Available, got[0].Total)
+	}
+
+	// BindPool(nil) detaches: the columns zero out instead of guessing.
+	m.BindPool(nil)
+	got = m.Snapshot()
+	if got[0].Available != 0 || got[0].Total != 0 {
+		t.Fatalf("unbound registry must zero the availability columns, got %+v", got[0])
+	}
+	if got[0].LockedAccounts != 1 {
+		t.Fatalf("lock facts must survive the detach, got %+v", got[0])
+	}
+}
+
+func TestModelLockSnapshotUnboundPoolZeroesColumns(t *testing.T) {
+	m := newTestRegistry(newFakeClock())
+	m.NoteRateLimited("m1", "wb", "a1", 0)
+	got := m.Snapshot()
+	if got[0].Available != 0 || got[0].Total != 0 {
+		t.Fatalf("never-bound registry must zero availability, got %+v", got[0])
 	}
 }
 
