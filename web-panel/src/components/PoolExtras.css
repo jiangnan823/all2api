@@ -1,0 +1,172 @@
+/*
+ * M10-C 账号池页 wb2api 对齐补充样式（本批独占文件，不改动 panel.css——
+ * 该文件由并行分支共享，避免合并冲突；AccountsScreen.tsx 单点 import）。
+ * 只覆盖本批新增 BEM 类 + packages/modelocks 两卡此前缺省的容器样式；
+ * 全部取值来自 tokens.css 冻结 token。
+ */
+
+/* ---- 状态列：徽标 + status_note 副行 ---- */
+.pool-status {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.pool-status__note {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ---- 用量列：四小徽章组（次数 / tok / 秒 / tok每秒）---- */
+.pool-usage {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  max-width: 260px;
+}
+
+.pool-usage__badge {
+  display: inline-block;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-divider);
+  background: var(--bg-surface-2);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pool-usage__badge--empty {
+  color: var(--text-tertiary);
+  border-style: dashed;
+}
+
+/* ---- 到期列：绝对日期 + 相对天数双值 ---- */
+.pool-exp {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.pool-exp__rel {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ---- KPI 卡：已暂停选号弱化值 + 积分剩余/总额双值副串 ---- */
+.pool-card__value--dim {
+  color: var(--text-secondary);
+}
+
+.pool-card__sub {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+/* ---- 批量操作（账号池卡头）：按钮行 + 结果 + 失败可折叠 ---- */
+.pool-batch {
+  margin: 0 0 var(--sp-3);
+}
+
+.pool-batch__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.pool-batch__error {
+  margin: var(--sp-2) 0 0;
+  color: var(--status-danger);
+  font-size: var(--fs-sm);
+}
+
+.pool-batch__summary {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.pool-batch__fails {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.pool-batch__fails summary {
+  cursor: pointer;
+  color: var(--status-danger);
+}
+
+.pool-batch__fails ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+}
+
+.pool-batch__fail-item code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+
+/* ---- 积分到期提醒卡（M9a 起无样式，本批补齐容器 + 新增元素）---- */
+.packages-card {
+  margin: var(--sp-5) 0 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--line-border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.packages-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.packages-card__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.packages-card__count {
+  color: var(--text-secondary);
+}
+
+.packages-card__refresh-summary {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--status-success);
+}
+
+.packages-card__refresh-errors {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.packages-card__refresh-errors summary {
+  cursor: pointer;
+  color: var(--status-danger);
+}
+
+.packages-card__refresh-errors ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+}
+
+/* ---- 模型锁池卡（M9b 起无样式，本批补齐新增元素）---- */
+.modelocks-card__head-btns {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.modelocks-card__acterr {
+  margin: 0 0 var(--sp-2);
+  color: var(--status-danger);
+  font-size: var(--fs-sm);
+}

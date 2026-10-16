@@ -1,32 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ACCOUNTS, GROWTH, LOGIN } from '../i18n/zh';
+import { BatchActions } from '../components/BatchActions';
+import { UsageBadges } from '../components/UsageBadges';
 import { GrowthTasksModal, ModelLocksCard, PackagesCard } from '../components';
 import {
   ACCOUNTS_POLL_MS,
   addQoderAccount,
   addWorkbuddyAccount,
   checkinAccount,
+  expiryLabel,
   fetchAccounts,
   refreshAccountBalance,
   pauseAccount,
   relativeTime,
   removeAccount,
   resumeAccount,
+  setAccountDisabled,
   statusTone,
   type AccountEntry,
   type AccountsSnapshot,
 } from '../lib/poolApi';
+import { accountUsageFor, fetchUsage, type UsageSnapshot } from '../lib/usageApi';
 import { LOGIN_POLL_MS, pollWorkbuddyLogin, startWorkbuddyLogin } from '../lib/loginApi';
 import { ApiError } from '../lib/panelApi';
+import '../components/PoolExtras.css';
 
 /**
- * 账号池屏（M6b，向 wb2api 看齐的富列表格）：状态卡行（总数/可用/冷却中/禁用/积分合计，等宽数字）
- * + 账号表格（平台/账号=昵称+短码可复制/状态徽标/积分=剩余/总额+进度条/成功 失败/在途/健康度/
- * 到期/冷却至/最近成功=相对时间/行内操作=任务(M7b 成长任务弹层)|暂停选号|恢复选号+删除）+ 手动刷新 + 30s 轮询。
- * 行内操作走 POST /api/accounts/{platform}:{id}/{pause|resume|remove}，删除前 confirm（文案含
- * 「凭证文件将被删除」）；{error} 信封逐字上抛展示。全部内存态，不落 storage。
+ * 账号池屏（M6b 富列表格 → M10-C 对齐 wb2api）：状态卡行（总数/可用/冷却/禁用/已暂停选号/
+ * 粘性会话/积分剩余·总额双值）+ 批量操作（全部签到/旅行巡检/活跃上报/全部保活，travel 仅
+ * workbuddy）+ 账号表格（平台/账号/状态徽标+status_note 副行/积分双值+进度条/成功 失败/在途/
+ * 用量徽章组/健康度/到期=绝对日期+相对天数/冷却至/最近成功=相对时间/行内操作=任务|签到|余额|
+ * 暂停恢复|禁用启用|删除）+ 手动刷新 + 30s 轮询。行内操作走 POST /api/accounts/{platform}:{id}/…，
+ * 删除前 confirm（文案含「凭证文件将被删除」）；{error} 信封逐字上抛展示。全部内存态，不落 storage。
  * M8：添加向导双 tab——workbuddy 新增「浏览器登录」（设备授权流）与「粘贴凭证 JSON」并列。
  */
+
+/** M10-C 新增文案（zh.ts 本批冻结，不改动；既有键引用原样保留）。 */
+const M10 = {
+  CARD_STICKY: '粘性会话',
+  COL_USAGE: '用量',
+  COL_USAGE_TITLE: '本次运行按账号累计：请求次数 / token / 耗时 / tok/s',
+  BTN_DISABLE: '禁用',
+  BTN_ENABLE: '启用',
+  CREDIT_DUAL_TITLE: '剩余 / 总额',
+} as const;
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
@@ -53,14 +70,6 @@ function statusLabel(status: string): string {
 /** 账号 ID → 短码副行：前 8 位…后 4 位（≤12 位原样），全量在 title 与复制内容里。 */
 function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
-}
-
-/** Unix 秒 → 本地展示串；null/0 = 无值（显示 —，不编造时间）。 */
-function fmtUnix(sec: number | null, dash: string): string {
-  if (sec === null || sec === 0) return dash;
-  const d = new Date(sec * 1000);
-  if (Number.isNaN(d.getTime())) return dash;
-  return d.toLocaleString();
 }
 
 function fmtCredit(n: number | null, dash: string): string {
@@ -121,15 +130,28 @@ function AccountIdCell(props: { id: string }) {
   );
 }
 
-type AccountAction = 'pause' | 'resume' | 'remove' | 'checkin' | 'balance';
+type AccountAction = 'pause' | 'resume' | 'remove' | 'checkin' | 'balance' | 'disable' | 'enable';
 
-/** 状态列：paused 判定优先于 status（灰徽「已暂停选号」）；否则按 statusTone 徽色 + 中文文案。 */
+/**
+ * 状态列（M10-C）：徽标 + 副行——paused 判定优先于 status（灰徽「已暂停选号」）；
+ * 否则按 statusTone 徽色 + 中文文案；status_note 非空时在徽标下方以小字渲染（如 429 rate limit）。
+ */
 function StatusBadge(props: { entry: AccountEntry }) {
   const { entry: a } = props;
-  if (a.paused) {
-    return <span className="pool-badge pool-badge--idle">{ACCOUNTS.STATUS_PAUSED}</span>;
-  }
-  return <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{statusLabel(a.status)}</span>;
+  return (
+    <span className="pool-status">
+      {a.paused ? (
+        <span className="pool-badge pool-badge--idle">{ACCOUNTS.STATUS_PAUSED}</span>
+      ) : (
+        <span className={`pool-badge ${TONE_CLASS[statusTone(a.status)]}`}>{statusLabel(a.status)}</span>
+      )}
+      {a.statusNote !== '' && (
+        <span className="pool-status__note" title={a.statusNote}>
+          {a.statusNote}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -157,14 +179,31 @@ function CreditCell(props: { entry: AccountEntry }) {
   );
 }
 
+/** 到期列（M10-C）：绝对日期 + 相对天数双值（wb2api 同式）；无到期概念显示 —。 */
+function ExpiryCell(props: { unix: number | null }) {
+  const label = expiryLabel(props.unix);
+  if (label === null) return <td className="pool-table__num">{ACCOUNTS.DASH}</td>;
+  return (
+    <td className="pool-table__num">
+      <span className="pool-exp">
+        <span className="pool-exp__date" title={`到期于 ${label.date}（${label.rel}）`}>
+          {label.date}
+        </span>
+        <span className="pool-exp__rel">（{label.rel}）</span>
+      </span>
+    </td>
+  );
+}
+
 function AccountRow(props: {
   entry: AccountEntry;
   showPlatform: boolean;
   busy: boolean;
+  usage: UsageSnapshot | null;
   onAction: (action: AccountAction, entry: AccountEntry) => void;
   onTasks: (entry: AccountEntry) => void;
 }) {
-  const { entry: a, showPlatform, busy, onAction, onTasks } = props;
+  const { entry: a, showPlatform, busy, usage, onAction, onTasks } = props;
   return (
     <tr>
       {showPlatform ? <td>{a.platform}</td> : null}
@@ -185,8 +224,11 @@ function AccountRow(props: {
       <td className="pool-table__num">
         {a.inFlight > 0 ? <span className="pool-num--hl">{a.inFlight}</span> : <span className="pool-num--dim">0</span>}
       </td>
+      <td>
+        <UsageBadges usage={accountUsageFor(usage, a.id)} />
+      </td>
       <td>{a.health ?? ACCOUNTS.DASH}</td>
-      <td className="pool-table__num">{fmtUnix(a.expiresAt, ACCOUNTS.DASH)}</td>
+      <ExpiryCell unix={a.expiresAt} />
       <td className="pool-table__num">{cooldownLabel(a.cooldownEnd)}</td>
       <td className="pool-table__num">{relativeTime(a.lastSuccess) ?? ACCOUNTS.DASH}</td>
       <AccountActions entry={a} busy={busy} onAction={onAction} onTasks={onTasks} />
@@ -194,7 +236,10 @@ function AccountRow(props: {
   );
 }
 
-/** 行内操作（M6b + M7b）：任务(成长任务弹层) + 暂停/恢复选号 + 删除（删除确认在容器层统一拦）。 */
+/**
+ * 行内操作（M6b + M7b + M10-C）：任务(成长任务弹层) + 签到/余额 + 暂停/恢复选号 +
+ * 禁用/启用（按当前 status 切换文案；disabled → 启用，其余 → 禁用）+ 删除（删除确认在容器层统一拦）。
+ */
 function AccountActions(props: {
   entry: AccountEntry;
   busy: boolean;
@@ -202,6 +247,7 @@ function AccountActions(props: {
   onTasks: (entry: AccountEntry) => void;
 }) {
   const { entry: a, busy, onAction, onTasks } = props;
+  const isDisabled = a.status.toLowerCase() === 'disabled';
   return (
     <td className="pool-acts">
       <button type="button" className="pool-act" onClick={() => onTasks(a)}>
@@ -239,6 +285,27 @@ function AccountActions(props: {
           {ACCOUNTS.BTN_PAUSE}
         </button>
       )}
+      {isDisabled ? (
+        <button
+          type="button"
+          className="pool-act"
+          disabled={busy}
+          title="重新启用该账号（回到选号池）"
+          onClick={() => onAction('enable', a)}
+        >
+          {M10.BTN_ENABLE}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="pool-act"
+          disabled={busy}
+          title="停用该账号（凭证保留，仅退出选号池）"
+          onClick={() => onAction('disable', a)}
+        >
+          {M10.BTN_DISABLE}
+        </button>
+      )}
       <button
         type="button"
         className="pool-act pool-act--danger"
@@ -270,6 +337,10 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
   const [growthTarget, setGrowthTarget] = useState<{ platform: string; id: string; nickname: string | null } | null>(
     null,
   );
+  // M10-C 用量列：GET /api/usage accounts 桶（短码 join）。辅助数据——拉取失败置 null
+  // （用量列全 "—"），绝不拖垮账号池屏本体。
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
+  const usageSeqRef = useRef(0);
 
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -280,6 +351,16 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       if (seq === seqRef.current) {
         setState({ phase: 'error', message: err instanceof Error ? err.message : String(err) });
       }
+    }
+  }, []);
+
+  const loadUsage = useCallback(async () => {
+    const seq = ++usageSeqRef.current;
+    try {
+      const data = await fetchUsage();
+      if (seq === usageSeqRef.current) setUsage(data);
+    } catch {
+      if (seq === usageSeqRef.current) setUsage(null);
     }
   }, []);
 
@@ -295,6 +376,8 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
         else if (action === 'resume') await resumeAccount(entry.platform, entry.id);
         else if (action === 'checkin') await checkinAccount(entry.platform, entry.id);
         else if (action === 'balance') await refreshAccountBalance(entry.platform, entry.id);
+        else if (action === 'disable') await setAccountDisabled(entry.platform, entry.id, true);
+        else if (action === 'enable') await setAccountDisabled(entry.platform, entry.id, false);
         else await removeAccount(entry.platform, entry.id);
         await load(); // 以服务端快照为准重建表格：删除成功即从表格消失
       } catch (err) {
@@ -308,9 +391,14 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
 
   useEffect(() => {
     void load();
+    void loadUsage();
     const timer = window.setInterval(() => void load(), ACCOUNTS_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    const usageTimer = window.setInterval(() => void loadUsage(), ACCOUNTS_POLL_MS);
+    return () => {
+      window.clearInterval(timer);
+      window.clearInterval(usageTimer);
+    };
+  }, [load, loadUsage]);
 
   if (state.phase === 'loading') {
     return <p className="pool-note" role="status">{ACCOUNTS.LOADING}</p>;
@@ -331,6 +419,8 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
 
   const { data } = state;
   // v1.2：平台切片（明细页）；聚合卡也按切片重算（总览页走全量，不做二次聚合）。
+  // M10-C：已暂停/积分剩余·总额 在切片页按账号行重算（服务端汇总字段是全网关口径）；
+  // 粘性会话是网关级概念（无按平台拆分的 wire 字段），恒取快照汇总值。
   const scoped = filter ? data.accounts.filter((a) => a.platform === filter) : data.accounts;
   const agg = filter
     ? {
@@ -338,9 +428,21 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
         active: scoped.filter((a) => a.status === 'active').length,
         cooling: scoped.filter((a) => a.status === 'cooling').length,
         disabled: scoped.filter((a) => a.status === 'disabled').length,
-        creditTotal: scoped.reduce((sum, a) => sum + (a.credit ?? 0), 0),
+        paused: scoped.filter((a) => a.paused).length,
+        sticky: data.stickySessions,
+        creditSum: scoped.reduce((sum, a) => sum + (a.credit ?? 0), 0),
+        creditTotal: scoped.reduce((sum, a) => sum + (a.creditTotal ?? 0), 0),
       }
-    : { total: data.total, active: data.active, cooling: data.cooling, disabled: data.disabled, creditTotal: data.creditTotal };
+    : {
+        total: data.total,
+        active: data.active,
+        cooling: data.cooling,
+        disabled: data.disabled,
+        paused: data.pausedCount,
+        sticky: data.stickySessions,
+        creditSum: data.creditSum,
+        creditTotal: data.creditTotal,
+      };
   if (scoped.length === 0) {
     // v1.2 C1/C1b：空池 = 添加向导入口（不是"去放文件"）；trae 未接入显示接入引导。
     const emptyCopy =
@@ -424,10 +526,24 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
           <span className="pool-card__value pool-card__value--err">{agg.disabled}</span>
         </li>
         <li className="pool-card">
+          <span className="pool-card__label">{ACCOUNTS.STATUS_PAUSED}</span>
+          <span className="pool-card__value pool-card__value--dim">{agg.paused}</span>
+        </li>
+        <li className="pool-card">
+          <span className="pool-card__label">{M10.CARD_STICKY}</span>
+          <span className="pool-card__value">{agg.sticky}</span>
+        </li>
+        <li className="pool-card">
           <span className="pool-card__label">{ACCOUNTS.CARD_CREDIT}</span>
-          <span className="pool-card__value">{fmtCredit(agg.creditTotal, ACCOUNTS.DASH)}</span>
+          <span className="pool-card__value" title={M10.CREDIT_DUAL_TITLE}>
+            {fmtCredit(agg.creditSum, ACCOUNTS.DASH)}
+            <span className="pool-card__sub"> / {fmtCredit(agg.creditTotal, ACCOUNTS.DASH)}</span>
+          </span>
         </li>
       </ul>
+
+      {/* M10-C 批量操作（wb2api 卡头同款）：travel 仅 workbuddy；完成回调重拉快照 */}
+      {filter !== undefined && <BatchActions platform={filter} onDone={() => void load()} />}
 
       {/* M6b 列数增加，窄屏横向滚动，表格自身不再撑破版心 */}
       <div className="pool-scroll">
@@ -445,6 +561,9 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
               </th>
               <th scope="col" title="已发出、尚未返回响应的请求数">
                 {ACCOUNTS.COL_INFLIGHT}
+              </th>
+              <th scope="col" title={M10.COL_USAGE_TITLE}>
+                {M10.COL_USAGE}
               </th>
               <th scope="col" title="近期请求质量分（0–1）：成功上升、失败下降；新账号从 1.0 起步">
                 {ACCOUNTS.COL_HEALTH}
@@ -464,6 +583,7 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
                 entry={a}
                 showPlatform={!filter}
                 busy={busyKey === `${a.platform}:${a.id}`}
+                usage={usage}
                 onAction={(action, entry) => void runAction(action, entry)}
                 onTasks={(entry) => setGrowthTarget({ platform: entry.platform, id: entry.id, nickname: entry.nickname })}
               />

@@ -6,7 +6,8 @@
  *         latency_ms, prompt_tokens, completion_tokens, request_id}] }（旧→新）
  *   GET /api/usage
  *     → { window, requests, fail, prompt_tokens, completion_tokens,
- *         by_platform:{<id>:{requests,fail}}, by_model:{...同构} }
+ *         by_platform:{<id>:{requests,fail}}, by_model:{...同构},
+ *         accounts:{<shortId>:{requests,tokens,duration_sec,tok_per_sec}} }（M10 追加）
  *
  * 404/4xx 如实上抛（panelApi.ApiError），不硬编码假成功。解析沿用 poolApi 的
  * 防御式读数：可空字段缺失/形状不对 → null 而不丢条目；结果枚举未知值原样
@@ -48,6 +49,19 @@ export interface UsageBucket {
   fail: number;
 }
 
+/**
+ * 单账号用量（M10，GET /api/usage accounts 桶）：键 = 账号 ShortID（uid 前 8），
+ * 账号表按短码 join。四个指标均可空——上游未回该键时以 "-" 占位（不造 0）。
+ */
+export interface AccountUsage {
+  requests: number | null;
+  tokens: number | null;
+  /** 累计耗时（秒）。 */
+  durationSec: number | null;
+  /** 平均每秒 token。 */
+  tokPerSec: number | null;
+}
+
 export interface UsageSnapshot {
   window: string;
   requests: number;
@@ -56,6 +70,8 @@ export interface UsageSnapshot {
   completionTokens: number;
   byPlatform: Record<string, UsageBucket>;
   byModel: Record<string, UsageBucket>;
+  /** M10 accounts 桶：短码 → 单账号用量；缺失/形状不对的条目跳过（整体缺失 = {}）。 */
+  accounts: Record<string, AccountUsage>;
 }
 
 export const REQUESTS_FETCH_LIMIT = 300;
@@ -70,6 +86,15 @@ export function fetchRequests(result: RequestResultFilter = 'all', limit: number
 /** GET /api/usage → UsageSnapshot（404/4xx 如实上抛）。 */
 export function fetchUsage(): Promise<UsageSnapshot> {
   return apiGet('/api/usage', parseUsageSnapshot);
+}
+
+/**
+ * 账号表 join（M10）：先按全量 id 直配，再回落 ShortID（前 8 位，reqlog account_id 同一口径）；
+ * 都无 → null（用量列四徽章全 "-"）。快照缺失（usage 未拉到）同样返回 null。
+ */
+export function accountUsageFor(usage: UsageSnapshot | null, accountId: string): AccountUsage | null {
+  if (!usage) return null;
+  return usage.accounts[accountId] ?? usage.accounts[accountId.slice(0, 8)] ?? null;
 }
 
 // ---------- 蛇形 wire → 防御式解析（poolApi 同款纪律） ----------
@@ -139,6 +164,26 @@ function parseBucketMap(v: unknown): Record<string, UsageBucket> {
   return out;
 }
 
+/** accounts 桶单条：键存在即入表，四个指标逐键可空（缺失/非数值 → null → UI "-" 占位）。 */
+function parseAccountUsage(v: unknown): AccountUsage {
+  const raw = isObject(v) ? v : {};
+  return {
+    requests: numOrNull(raw['requests']),
+    tokens: numOrNull(raw['tokens']),
+    durationSec: numOrNull(raw['duration_sec']),
+    tokPerSec: numOrNull(raw['tok_per_sec']),
+  };
+}
+
+function parseAccountUsageMap(v: unknown): Record<string, AccountUsage> {
+  if (!isObject(v)) return {};
+  const out: Record<string, AccountUsage> = {};
+  for (const [k, raw] of Object.entries(v)) {
+    out[k] = parseAccountUsage(raw);
+  }
+  return out;
+}
+
 export function parseUsageSnapshot(body: unknown): UsageSnapshot {
   if (!isObject(body)) throw new Error('usage: 响应非对象');
   return {
@@ -149,5 +194,6 @@ export function parseUsageSnapshot(body: unknown): UsageSnapshot {
     completionTokens: numOrZero(body['completion_tokens']),
     byPlatform: parseBucketMap(body['by_platform']),
     byModel: parseBucketMap(body['by_model']),
+    accounts: parseAccountUsageMap(body['accounts']),
   };
 }
