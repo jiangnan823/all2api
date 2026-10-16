@@ -15,6 +15,7 @@ import "context"
 // supports_stream/is_free) plus model/max_output and the three M8 additions
 // (credit_multiplier/is_default/thinking_tiers). Unknown facts are null —
 // never a fabricated 0/false — so nullable facts are pointer fields.
+// M10-B1 appends supports_vision (additive; existing keys untouched).
 type modelWire struct {
 	// Platform mirrors Provider under the name the panel reads; both are sent
 	// so the M5a adapter-wire tags and the M5c panel contract stay aligned.
@@ -32,6 +33,10 @@ type modelWire struct {
 	CreditMultiplier *float64 `json:"credit_multiplier"` // 积分倍率; null = unknown
 	IsDefault        *bool    `json:"is_default"`        // null = unknown
 	ThinkingTiers    []string `json:"thinking_tiers"`    // 思考档位; null = none declared
+
+	// SupportsVision is the image-input capability (M10-B1, additive key):
+	// null = the catalog did not declare it — never a fabricated false.
+	SupportsVision *bool `json:"supports_vision"`
 }
 
 type modelsResponse struct {

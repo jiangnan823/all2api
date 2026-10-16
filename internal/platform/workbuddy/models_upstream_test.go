@@ -70,16 +70,20 @@ func (s *catalogStub) handler() http.Handler {
 }
 
 // catalogFixtureBody mirrors the wb2api dynModelEntry field names: one full
-// entry, one disabled, one id-fallback (modelId only), one credits-as-"0x"
-// limited-free badge entry.
+// entry (declares supportsImages), one disabled, one id-fallback (modelId
+// only), one credits-as-"0x" limited-free badge entry with a 视觉 tag, one
+// factless entry, one explicit-false vision entry that also carries a vision
+// tag (the declaration must win), and one tag-only vision entry.
 const catalogFixtureBody = `{"code":0,"msg":"ok","data":{"models":[` +
 	`{"id":"deepseek-v4-flash","name":"DeepSeek V4 Flash","descriptionZh":"旗舰快思考","credits":"x0.05 credits","vendor":"deepseek","isDefault":true,` +
-	`"maxInputTokens":128000,"maxOutputTokens":32768,"supportsToolCall":true,"supportsReasoning":true,` +
+	`"maxInputTokens":128000,"maxOutputTokens":32768,"supportsToolCall":true,"supportsImages":true,"supportsReasoning":true,` +
 	`"reasoning":{"effort":"high","defaultEffort":"low","canDisableThinking":true,"supportedEfforts":["low","high"]}},` +
 	`{"id":"nes-embed-1","name":"Embed","maxInputTokens":8192,"disabled":true},` +
 	`{"modelId":"fallback-only","name":"Fallback","credits":"x0.29","maxInputTokens":65536},` +
-	`{"id":"glm-free","name":"GLM Free","credits":"0x","tags":["badge:限时免费"],"maxInputTokens":200000,"maxOutputTokens":8192,"reasoning":{"summary":"auto"}},` +
-	`{"id":"no-credits","name":"No Credits"}` +
+	`{"id":"glm-free","name":"GLM Free","credits":"0x","tags":["badge:限时免费","视觉"],"maxInputTokens":200000,"maxOutputTokens":8192,"reasoning":{"summary":"auto"}},` +
+	`{"id":"no-credits","name":"No Credits"},` +
+	`{"id":"vl-off","name":"VL Off","tags":["vision"],"supportsImages":false},` +
+	`{"id":"tag-vl","name":"Tag VL","tags":["vision"]}` +
 	`]}}`
 
 // newCatalogStub serves the fake upstream and returns a task client pointed
@@ -118,8 +122,8 @@ func TestModelCatalogParsesUpstreamEntries(t *testing.T) {
 		t.Fatalf("ModelCatalog: %v", err)
 	}
 	// disabled entries are skipped; the modelId-only fallback stays.
-	if len(entries) != 4 {
-		t.Fatalf("entries = %d, want 4 (5 served, 1 disabled): %+v", len(entries), entries)
+	if len(entries) != 6 {
+		t.Fatalf("entries = %d, want 6 (7 served, 1 disabled): %+v", len(entries), entries)
 	}
 
 	first := entries[0]
@@ -131,6 +135,9 @@ func TestModelCatalogParsesUpstreamEntries(t *testing.T) {
 	}
 	if !first.SupportsTool || !first.SupportsStream {
 		t.Fatalf("first entry tool/stream = %v/%v, want true/true", first.SupportsTool, first.SupportsStream)
+	}
+	if first.SupportsVision == nil || !*first.SupportsVision {
+		t.Fatalf("first entry supportsImages:true must map to SupportsVision true, got %v", first.SupportsVision)
 	}
 	if first.CreditMultiplier == nil || *first.CreditMultiplier != 0.05 {
 		t.Fatalf("first entry credit multiplier = %v, want 0.05", first.CreditMultiplier)
@@ -165,6 +172,9 @@ func TestModelCatalogParsesUpstreamEntries(t *testing.T) {
 	if fb.ThinkingTiers != nil || fb.DefaultEffort != "" {
 		t.Fatalf("fallback tiers/effort = %v/%q, want nil/empty", fb.ThinkingTiers, fb.DefaultEffort)
 	}
+	if fb.SupportsVision != nil {
+		t.Fatalf("fallback vision = %v, want nil (nothing declared)", fb.SupportsVision)
+	}
 
 	// credits "0x" → multiplier 0 (limited-free pricing), tiers absent → nil.
 	free := entries[2]
@@ -177,10 +187,29 @@ func TestModelCatalogParsesUpstreamEntries(t *testing.T) {
 	if free.ThinkingTiers != nil {
 		t.Fatalf("free tiers = %v, want nil", free.ThinkingTiers)
 	}
+	if free.SupportsVision == nil || !*free.SupportsVision {
+		t.Fatalf("视觉 tag must mark the entry vision-capable: %v", free.SupportsVision)
+	}
 
 	// no credits at all → nil multiplier (null on the wire), never 0.
 	if entries[3].CreditMultiplier != nil {
 		t.Fatalf("creditless multiplier = %v, want nil", entries[3].CreditMultiplier)
+	}
+	if entries[3].SupportsVision != nil {
+		t.Fatalf("factless entry vision = %v, want nil", entries[3].SupportsVision)
+	}
+
+	// explicit supportsImages wins even when false: the vl-off entry carries a
+	// vision tag, but the declaration must not be second-guessed.
+	off := entries[4]
+	if off.SupportsVision == nil || *off.SupportsVision {
+		t.Fatalf("explicit supportsImages:false must stay false over a vision tag, got %v", off.SupportsVision)
+	}
+
+	// tag-only entry: vision derived from the tag, no declaration present.
+	tagged := entries[5]
+	if tagged.SupportsVision == nil || !*tagged.SupportsVision {
+		t.Fatalf("vision tag must mark the entry capable, got %v", tagged.SupportsVision)
 	}
 }
 

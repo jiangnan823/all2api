@@ -126,5 +126,6 @@ func upstreamWireRow(m workbuddy.CatalogModel) modelWire {
 		row.IsFree = boolPtr(true) // badge-derived; no badge → null (unknown)
 	}
 	row.CreditMultiplier = m.CreditMultiplier
+	row.SupportsVision = m.SupportsVision // declared field, else vision tag, else nil (undeclared)
 	return row
 }

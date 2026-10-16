@@ -82,6 +82,12 @@ type CatalogModel struct {
 	// the wire layer sends null rather than a bare false.
 	IsFree bool
 
+	// SupportsVision is the image-input capability, resolved three-state:
+	// the directory's supportsImages field when the entry declares one,
+	// else true when a vision/视觉 tag marks it, else nil — undeclared, and
+	// the wire layer sends null rather than a fabricated false.
+	SupportsVision *bool
+
 	// CreditMultiplier is parsed from the credits string ("x0.05 credits" →
 	// 0.05); nil = absent or unparsable.
 	CreditMultiplier *float64
@@ -115,6 +121,11 @@ type catalogEntry struct {
 
 	SupportsReason bool `json:"supportsReasoning"`
 	SupportsTool   bool `json:"supportsToolCall"`
+
+	// SupportsImages is the vision declaration; the pointer keeps "absent"
+	// distinct from an explicit false so the three-state resolution below can
+	// tell "not declared" (fall through to the tags) from "declared false".
+	SupportsImages *bool `json:"supportsImages"`
 
 	Reasoning struct {
 		Effort             string   `json:"effort"`
@@ -170,6 +181,7 @@ func catalogModels(text string) ([]CatalogModel, error) {
 			cm.DefaultEffort = m.Reasoning.Effort // legacy single-effort key
 		}
 		cm.Description = m.Description
+		cm.SupportsVision = visionCapability(m.SupportsImages, m.Tags)
 		if x, ok := parseCreditMultiplier(m.Credits); ok {
 			cm.CreditMultiplier = &x
 		}
@@ -185,6 +197,24 @@ func catalogModels(text string) ([]CatalogModel, error) {
 		return nil, errors.New("workbuddy: models api returned no usable entries")
 	}
 	return out, nil
+}
+
+// visionCapability resolves one entry's image-input capability three-state:
+// an explicit directory declaration (supportsImages) wins when present — true
+// or false alike; absent, a vision/视觉 tag marks the entry capable; absent
+// both, the capability is undeclared and the answer is nil (the wire layer
+// sends null, never a fabricated false).
+func visionCapability(declared *bool, tags []string) *bool {
+	if declared != nil {
+		return declared
+	}
+	for _, t := range tags {
+		if strings.Contains(strings.ToLower(t), "vision") || strings.Contains(t, "视觉") {
+			v := true
+			return &v
+		}
+	}
+	return nil
 }
 
 // parseCreditMultiplier extracts the numeric multiplier from the raw credits

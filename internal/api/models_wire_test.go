@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"all2api/internal/adapter"
 	"all2api/internal/host"
 	"all2api/internal/platform/workbuddy"
 	"all2api/internal/pool"
@@ -58,7 +59,7 @@ func (s stubAccounts) SnapshotAccounts() []pool.Account { return s.accts }
 func TestModelsEndpointEndToEnd(t *testing.T) {
 	stub := &catalogWireStub{body: `{"code":0,"msg":"ok","data":{"models":[` +
 		`{"id":"deepseek-v4-flash","name":"DeepSeek V4 Flash","credits":"x0.05 credits","isDefault":true,` +
-		`"maxInputTokens":128000,"maxOutputTokens":32768,"supportsToolCall":true,` +
+		`"maxInputTokens":128000,"maxOutputTokens":32768,"supportsToolCall":true,"supportsImages":true,` +
 		`"reasoning":{"defaultEffort":"low","supportedEfforts":["low","high"]}},` +
 		`{"id":"plain-one","name":"Plain","maxInputTokens":0}` +
 		`]}}`}
@@ -103,6 +104,7 @@ func TestModelsEndpointEndToEnd(t *testing.T) {
 		`"max_output":32768`,
 		`"supports_tool":true`,
 		`"supports_stream":true`,
+		`"supports_vision":true`,
 	} {
 		if !strings.Contains(body, key) {
 			t.Fatalf("wire key %s missing from /api/models body: %s", key, body)
@@ -124,6 +126,9 @@ func TestModelsEndpointEndToEnd(t *testing.T) {
 	}
 	if plain.ContextSize != nil || plain.MaxOutput != nil || plain.CreditMultiplier != nil || plain.ThinkingTiers != nil {
 		t.Fatalf("factless row must null unknowns: %+v", plain)
+	}
+	if plain.SupportsVision != nil {
+		t.Fatalf("factless row must leave supports_vision null (never a fabricated false): %+v", plain)
 	}
 	// Source honesty: live workbuddy directory served → never "local". The
 	// default build also mounts the qoder static table (mixed); workbuddy-only
@@ -165,5 +170,60 @@ func TestModelsSeamNilWithoutCredentials(t *testing.T) {
 	cat := newWBModelCatalog(h.Creds, stubAccounts{}, workbuddy.TaskClientOptions{})
 	if rows, ok := cat.Fetch(t.Context(), false); ok || rows != nil {
 		t.Fatalf("account-less Fetch = %v, %v; want nil, false", rows, ok)
+	}
+}
+
+// TestModelsQoderStaticVisionTable checks the M10-B1 static vision capability
+// table over the qoder half of the endpoint (static-only mount, source local):
+// known vision-capable display names go out true, names absent from the table
+// stay null (undeclared, never a fabricated false). Skipped in builds that do
+// not compile the qoder platform — the table then has no rows to check.
+func TestModelsQoderStaticVisionTable(t *testing.T) {
+	if adapter.Default.Get("qoder") == nil {
+		t.Skip("qoder platform not compiled into this build")
+	}
+	loadM5Config(t, `{"listen":":0"}`)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/models", withAPIKey(modelsEndpointHandler(nil)))
+	rec := panelGet(t, mux, "/api/models")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/models: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	var resp modelsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode models response: %v", err)
+	}
+	if resp.Source != "local" {
+		t.Fatalf("static-only mount must label source local, got %q", resp.Source)
+	}
+
+	byName := map[string]*modelWire{}
+	qoder := 0
+	for i := range resp.Models {
+		m := &resp.Models[i]
+		if m.Provider != "qoder" {
+			continue
+		}
+		qoder++
+		byName[m.Name] = m
+	}
+	if qoder != 13 {
+		t.Fatalf("qoder static catalog = %d entries, want 13", qoder)
+	}
+	// Every table row declares true on the wire.
+	for _, name := range []string{"Qwen3.8-Max", "Qwen3.8-Flash", "Qwen3.7-Max", "Qwen3.7-Plus", "Qwen3.7-Flash",
+		"DeepSeek-V4-Pro", "DeepSeek-Flash", "GLM-5.3", "GLM-5.3-Flash", "GLM-5.2", "Kimi-K3", "Kimi-K2.8-Preview"} {
+		m := byName[name]
+		if m == nil {
+			t.Fatalf("known qoder model %q missing from the static catalog", name)
+		}
+		if m.SupportsVision == nil || !*m.SupportsVision {
+			t.Fatalf("%q must declare supports_vision true, got %v", name, m.SupportsVision)
+		}
+	}
+	// Unknown/undeclared names stay null — never a fabricated false.
+	if m := byName["MiniMax-M2.7"]; m == nil || m.SupportsVision != nil {
+		t.Fatalf("undeclared MiniMax-M2.7 must keep supports_vision null, got %+v", m)
 	}
 }
