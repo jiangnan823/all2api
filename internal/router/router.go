@@ -128,17 +128,25 @@ func (rt *Router) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	rt.dispatch(w, r, req)
+	rt.dispatch(w, r, "chat", req)
 }
 
 // ---------- POST /v1/responses ----------
 
 // responsesAPIRequest is the subset of the Responses API request the
-// interface-first router understands: model addressing and the stream flag.
+// interface-first router understands: model addressing, the stream flag, the
+// system prompt (instructions), the output budget (max_output_tokens) and
+// the reasoning effort (reasoning.effort — the Responses spelling of the
+// chat surface's flat reasoning_effort).
 type responsesAPIRequest struct {
-	Model  string          `json:"model"`
-	Stream bool            `json:"stream"`
-	Input  json.RawMessage `json:"input"`
+	Model           string          `json:"model"`
+	Stream          bool            `json:"stream"`
+	Input           json.RawMessage `json:"input"`
+	Instructions    string          `json:"instructions"`
+	MaxOutputTokens *int            `json:"max_output_tokens"`
+	Reasoning       *struct {
+		Effort string `json:"effort"`
+	} `json:"reasoning"`
 }
 
 func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
@@ -171,11 +179,28 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	rt.dispatch(w, r, adapter.ChatRequest{
-		Model:    raw.Model,
-		Messages: msgs,
-		Stream:   raw.Stream,
+	// instructions is the Responses system prompt; it rides in front of the
+	// converted input so upstream sees the canonical message order.
+	if strings.TrimSpace(raw.Instructions) != "" {
+		msgs = append([]adapter.ChatMessage{{Role: "system", Content: json.RawMessage(mustJSON(raw.Instructions))}}, msgs...)
+	}
+	effort := ""
+	if raw.Reasoning != nil {
+		effort = raw.Reasoning.Effort
+	}
+	rt.dispatch(w, r, "responses", adapter.ChatRequest{
+		Model:           raw.Model,
+		Messages:        msgs,
+		Stream:          raw.Stream,
+		MaxTokens:       raw.MaxOutputTokens,
+		ReasoningEffort: effort,
 	})
+}
+
+// mustJSON marshals a Go string as a JSON string; a plain string cannot fail.
+func mustJSON(s string) json.RawMessage {
+	b, _ := json.Marshal(s)
+	return json.RawMessage(b)
 }
 
 // responsesInputToMessages converts the Responses input onto the chat message
@@ -321,7 +346,10 @@ func responsesContentToChat(idx int, content json.RawMessage) (json.RawMessage, 
 // candidate set and the next loop iteration naturally advances to the next
 // account — no router-side retry ring. The loop ends when Select finds no
 // eligible account left.
-func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.ChatRequest) {
+func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string, req adapter.ChatRequest) {
+	// proto tags the client-side protocol: "chat" relays chat.completion
+	// frames verbatim; "responses" shapes the same pipeline onto the native
+	// Responses envelope (object + typed SSE events).
 	// M8 request ledger: exactly one entry per client request, emitted by the
 	// deferred record below whatever the exit path. Result defaults to
 	// "error" (the validation/pool-exhaustion exits); success-shaped paths
@@ -462,7 +490,7 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 		rt.host.Pool.InFlightAdd(platform, acct.ID, +1)
 
 		if req.Stream {
-			committed, reqID, streamErr := rt.relayStream(w, r.Context(), sender, acct, req)
+			committed, reqID, streamErr := rt.relayStream(w, r.Context(), sender, acct, req, proto)
 			if reqID != "" {
 				ledger.RequestID = reqID
 			}
@@ -503,7 +531,11 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, req adapter.C
 			ledger.PromptTokens, ledger.CompletionTokens = usage.TokensFromAdapterUsage(resp.Usage)
 			rt.recordSendOutcome(req.Model, platform, acct.ID, http.StatusOK, nil)
 			rt.finishAttempt(platform, acct.ID, "success")
-			writeJSON(w, http.StatusOK, resp)
+			if proto == "responses" {
+				writeJSON(w, http.StatusOK, responsesObjectOf(resp))
+			} else {
+				writeJSON(w, http.StatusOK, resp)
+			}
 			return
 		}
 		lastErr = err
@@ -652,8 +684,14 @@ func (rt *Router) disabledPlatforms() map[string]bool {
 // by stream close without [DONE], so clients must not treat it as complete).
 // requestID is the completion id observed on the first chunk carrying one,
 // for the request ledger ("" when the stream died before any id showed up).
-func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender adapter.Sender, acct *pool.Account, req adapter.ChatRequest) (committed bool, requestID string, streamErr error) {
+func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender adapter.Sender, acct *pool.Account, req adapter.ChatRequest, proto string) (committed bool, requestID string, streamErr error) {
 	chunks, errCh, err := sender.SendChatStream(ctx, acct, req)
+	// Responses protocol: the same chunk stream re-emerges as native typed
+	// events; a nil accumulator means the chat pass-through below runs.
+	var acc *responsesStream
+	if proto == "responses" {
+		acc = newResponsesStream()
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -673,6 +711,22 @@ func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender
 		}
 		return true
 	}
+	// writeEvent emits one native Responses event: an event: line carrying
+	// the type plus the data: payload (the official stream spells both).
+	writeEvent := func(ev map[string]any) bool {
+		payload, mErr := json.Marshal(ev)
+		if mErr != nil {
+			return true // one unmarshalable event is skipped, not fatal
+		}
+		typ, _ := ev["type"].(string)
+		if _, wErr := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", typ, payload); wErr != nil {
+			return false
+		}
+		if canFlush {
+			flusher.Flush()
+		}
+		return true
+	}
 
 	for {
 		select {
@@ -682,11 +736,27 @@ func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender
 			return true, requestID, ctx.Err()
 		case chunk, ok := <-chunks:
 			if !ok {
+				if acc != nil {
+					for _, ev := range acc.finish() {
+						if !writeEvent(ev) {
+							break
+						}
+					}
+					return true, requestID, nil
+				}
 				writeFrame("[DONE]")
 				return true, requestID, nil
 			}
 			if requestID == "" && chunk.ID != "" {
 				requestID = chunk.ID
+			}
+			if acc != nil {
+				for _, ev := range acc.feed(chunk) {
+					if !writeEvent(ev) {
+						return true, requestID, nil
+					}
+				}
+				continue
 			}
 			payload, mErr := json.Marshal(chunk)
 			if mErr != nil {
@@ -701,6 +771,12 @@ func (rt *Router) relayStream(w http.ResponseWriter, ctx context.Context, sender
 				continue
 			}
 			_, e := apiErrorForSend(upErr)
+			if acc != nil {
+				// Native protocol: failure rides the response.failed event,
+				// not the chat error envelope.
+				writeEvent(responsesFailedEvent(requestID, req.Model, e.Code, e.Message))
+				return true, requestID, upErr
+			}
 			if payload, mErr := json.Marshal(errorEnvelope{Error: e}); mErr == nil {
 				writeFrame(string(payload))
 			}
