@@ -33,10 +33,9 @@ type fakeBatchUpstream struct {
 	travelDelta    int64
 	keepaliveUntil time.Time
 
-	errFor   map[string]error // account id → scripted error
-	calls    []string         // "op:platform:id" in call order
-	seenCtx  bool
-	failSlow bool
+	errFor  map[string]error // account id → scripted error
+	calls   []string         // "op:platform:id" in call order
+	seenCtx bool
 }
 
 func (f *fakeBatchUpstream) record(op string, acc *schedule.Account) error {

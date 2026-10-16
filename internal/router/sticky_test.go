@@ -113,12 +113,11 @@ func TestStickyTTLConfigKey(t *testing.T) {
 func TestSelectAccountBindsAndReuses(t *testing.T) {
 	h := newStickyHost(t)
 	rt := &Router{host: h, sticky: NewStickyRegistry()}
-	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/v1/chat/completions", nil)
 	req.Header.Set("X-API-Key", "caller-a")
-	ctx := context.Background()
 
 	// First call goes through Select and binds whatever it chose.
-	first, err := rt.selectAccount(req.WithContext(ctx), "qa", "m1", 30*time.Minute)
+	first, err := rt.selectAccount(req, "qa", "m1", 30*time.Minute)
 	if err != nil || first == nil {
 		t.Fatalf("first select: acc=%v err=%v", first, err)
 	}
@@ -128,7 +127,7 @@ func TestSelectAccountBindsAndReuses(t *testing.T) {
 	}
 
 	// Second call must return the SAME account (advisory lease, no re-draw).
-	second, err := rt.selectAccount(req.WithContext(ctx), "qa", "m1", 30*time.Minute)
+	second, err := rt.selectAccount(req, "qa", "m1", 30*time.Minute)
 	if err != nil || second == nil || second.ID != first.ID {
 		t.Fatalf("sticky reuse returned %v (want %s), err %v", second, first.ID, err)
 	}
@@ -139,7 +138,7 @@ func TestSelectAccountDropsIneligibleBinding(t *testing.T) {
 	h := newStickyHost(t)
 	p := h.Pool
 	rt := &Router{host: h, sticky: NewStickyRegistry()}
-	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/v1/chat/completions", nil)
 	req.Header.Set("X-API-Key", "caller-a")
 
 	first, err := rt.selectAccount(req, "qa", "m1", 30*time.Minute)
@@ -166,7 +165,7 @@ func TestSelectAccountDropsIneligibleBinding(t *testing.T) {
 func TestSelectAccountTTLOffMeansPlainSelect(t *testing.T) {
 	h := newStickyHost(t)
 	rt := &Router{host: h, sticky: NewStickyRegistry()}
-	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/v1/chat/completions", nil)
 	req.Header.Set("X-API-Key", "caller-a")
 
 	first, err := rt.selectAccount(req, "qa", "m1", 0)
