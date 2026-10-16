@@ -485,7 +485,7 @@ func TestPackagesRoutesRegistered(t *testing.T) {
 
 // TestPackagesRefreshTalliesAndErrors pins the M10 adversarial-review fix:
 // POST /api/packages/refresh probes every workbuddy account live (frontend
-//「检查」button), counts successes, and lists failures verbatim — the route
+// 「检查」button), counts successes, and lists failures verbatim — the route
 // was frozen on the wire but never registered (404) until this batch.
 func TestPackagesRefreshTalliesAndErrors(t *testing.T) {
 	b := &fakePackagesBackend{
