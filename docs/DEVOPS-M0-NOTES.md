@@ -960,3 +960,14 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 - **实测**：热替换后 /api/packages、/api/model-locks（连同 /api/usage、/api/requests）全部上线；模型屏 45 行实时目录渲染正常；前端 304 用例全绿、typecheck/build 0 错、Go 八包绿。
 
 遗留（沿用 §9.29 清单）：用量 token 流式口径、growth「自动完成」类抓包消歧、trae 平台接入；新增小项——聚合 /api/packages 的 daily_burn 目前按批次静态估算，待主人反馈校准口径。
+
+
+## 9.32 /v1/responses 原生输入映射修复（2026-10-16，主人客户端报「unsupported content type at index 0: input_text」驱动）
+
+主人用第三方客户端以 Responses 协议接 `workbuddy/glm-5.3-flash` 报连接失败。排查链条：
+
+- **根因**：`responsesInputToMessages` 把消息数组**原样透传**进 chat 管线（代码注释自认 minimal 映射），原生 Responses 客户端的 `content:[{type:"input_text",...}]` 直接砸给上游，上游拒收。报错串网关代码里不存在——是上游错误经网关透传回来，curl 复现一字不差。
+- **修复**（e14b68b）：typed message item 正确转换——text 族部件（input_text/output_text/text）**按原始交错顺序**压平为纯字符串 content（无图时所有上游都吃得下）；input_image 映射为 chat 的 image_url 部件（对象/裸字符串两种形态都收），有图才升级为部件数组；外来 item 类型（function_call_output 等）报清晰错误而不是糊给上游。测试抓过一版顺序缺陷（图统一排在文字后，"看[图]仔细点"语义会漂移）——改为单遍有序映射。
+- **边界如实记录**：流式下 `/v1/responses` 吐的仍是 chat.completion.chunk SSE，不是原生 `response.output_text.delta` 事件流。非流式 Responses 已全通；严格校验 Responses 事件流的客户端需关流式或走 /v1/chat/completions。原生信封（object:"response" + output 数组 + Responses SSE 事件）整体归入平台协议批。
+- **热替换第 N 次验证**：kill PID → netstat 确认释放 → `go build -o "D:\Program Files\all2api\all2api.exe" ./cmd/gateway` → Start-Process → healthz 200 → 原生格式实测模型回复 "OK"。仓库根目录无 main 包（入口在 ./cmd/gateway），`go build .` 会报 no Go files——构建命令要带包路径。
+- gofmt -l 本地列出全部旧文件是 CRLF 检出噪音（新写的 LF 文件不在列表内），CI 按 LF 检出运行门禁为准。
