@@ -143,10 +143,17 @@ func main() {
 	observability.Info("credit seeding done", "platform", host.QoderPlatform,
 		"seeded", qoderSeeded, "failed", qoderSeedFailed)
 
-	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses).
-	// Upstream sends resolve per request from adapters implementing
-	// adapter.Sender; with no implementer registered every /v1 call answers
-	// 503 "no upstream sender" instead of failing at assembly time.
+	// GET /v1/models catalog source: the panel catalog (same data /api/models
+	// serves), folded to bare + namespaced ids. Wired before Register so
+	// clients' connectivity probes list the real catalog.
+	router.DefaultModelLister = func(ctx context.Context) []router.PublicModel {
+		return api.PublicModelList(ctx, gwHost)
+	}
+
+	// OpenAI-compatible router surface (/v1/chat/completions, /v1/responses,
+	// /v1/models). Upstream sends resolve per request from adapters
+	// implementing adapter.Sender; with no implementer registered every /v1
+	// call answers 503 "no upstream sender" instead of failing at assembly.
 	router.Register(mux, gwHost, adapter.Default)
 
 	// Panel API surface (G3 consent gate + config delivery + recover wiring).
