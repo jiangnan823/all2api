@@ -1076,3 +1076,21 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 - **站别假设已撤回（主人纠正：其账号就是国内站）**：qoder.com 即产品主域（.com/.com.cn 双域均服务国内产品）。修正后的事实链：PAT 在 .sh REST 交换成功 + userinfo 成功（令牌在交换平面有效）→ 聊天流内 401/403 body code=**105** "Login expired"（诊断增强：报错现在携带业务码原文）。参考实现在 com.cn 传统交换上直接 401 "personal token is invalid"。两侧引导链结构一致后仍分歧，指向**官方客户端的令牌链已演进**（新格式 PAT 的会话建立步骤与两份实现的旧协议有差）——归入平台协议批的 IDE 抓包研究项：抓一次官方 Qoder IDE 的对话流（host + 令牌链），对齐后即可修复。
 - 附带发现：面板「添加账号」重录同一 PAT 会生成新账号 ID（27f7f35a→7c024efa，PAT 哈希派生）——旧 ID 的禁用状态不会遗传到新 ID，误打误撞是自愈的；记档。
 - 附带发现：台账 20:05:59 的 6 连 0ms 错误 = 账号禁用期间的模型遍历秒 503；"Model request was cancelled" 是 ZCode 对「SSE 流中途断开」的包装措辞，根因同上。
+
+
+## 9.42 qoder 桌面版抓包：对话走云端 agent 平面，传统网关路径对本账号不可用（2026-10-16 深夜，mitmproxy 实战）
+
+主人配合完成桌面版（Qoder CN 0.4.8，Electron）抓包。方法学沉淀：
+- **分层拦截**：系统代理只截 Chromium 面（遥测/OpenAPI REST 全部可见）；AI 对话走 Node 主进程直连，**既不理系统代理也不理 --proxy-server**。最终用 hosts→127.0.0.1:443 + mitmproxy reverse 模式 + addon 钉上游真实 IP（保 SNI/Host，`keep_host_header=true` 必须——alb 按 Host 路由，IP Host 直接 503）+ NODE_EXTRA_CA_CERTS/机器根证书（Chromium 105+ 不信任用户级根证书，必须 LocalMachine）截获。
+- 教训：taskkill //IM mitmdump.exe 会同时杀掉 8080/443 两个实例（同映像名）——多实例抓包要用 PID 管理。
+
+**抓包事实**：
+1. 桌面版对话不经过 gateway.qoder.com.cn 的 agent_chat_generation（443 反向只捕到 ping 洪流 + otel 遥测），也不在 openapi 的已见路径里——它走**云端 agent 协作平面**（collaboration/remote/automations/system-events 一族，模型完成流两次抓包均未出现，疑在别的主机/通道）。
+2. 官方令牌链抓到：`POST openapi.qoder.com.cn/api/v1/me/jobToken` → 200 `{token: jt-…, refresh_token: jrt-…, expires 24h}`（与 .sh 交换端点是两套；Bearer dt- 设备令牌用于 otel）。
+3. 传统网关（gateway.qoder.com.cn agent_chat_generation）对主人的 PAT 会话回 105 "Login expired"；参考实现在同 PAT 上连交换都 401。**结论：该账号走不了两份实现依赖的传统路径，非实现 bug，也非证书/代理问题。**
+
+**qoder 对话支持现状与出路**：
+- 短期：qoder 账号保留作配额展示，对话标记暂不可用（诚实 503）；WorkBuddy 全功能不受影响。
+- 中期出路 A：主人如有**可用传统路径的 qoder 账号**（参考项目用户群那种），换号即通。
+- 中期出路 B：**新 OpenAPI/云端 agent 平面对话协议研究**——需在桌面版里抓到一次完整的模型完成流（本轮两次均未出现，可能需特定入口如 remote agent 会话）。
+- 环境已全部还原：hosts 条目已摘、系统代理已关、mitmdump 已停、Qoder 已正常（无参数）重启。mitmproxy CA 留在机器+用户根库（无害，后续抓包复用）。
