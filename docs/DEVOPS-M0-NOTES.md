@@ -1014,3 +1014,14 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 - **ZCode 接入口径（已答复主人）**：Base URL `http://127.0.0.1:7800/v1`；模型用 `platform/model` 前缀名钉平台；思考模型给足 max_tokens（小预算全被思维链吃掉时 content 为空 + finish=length，协议合法但客户端看起来像失败）。
 
 门禁：全包测试/vet 全绿，CI 十 job success（7d4c83d）。
+
+
+## 9.36 Responses 原生信封补齐（2026-10-16，主人 ZCode 供应商截图「API 格式=Responses」点名驱动）
+
+主人重测 ZCode 新建供应商仍报 "Model request failed."——截图揭示 API 格式选了 **Responses (/responses)**：ZCode 期待原生 response 对象与事件流，而网关流式吐 chat.completion.chunk、非流式回 chat.completion 信封（§9.32 已知边界，本批闭合）。
+
+- **非流式**（responsesObjectOf）：adapter.ChatResponse → 原生信封 `object:"response"` + `output[]`（reasoning → message → function_call 项序，output_text/reasoning summary 形状）+ Responses usage 键（input/output/total_tokens）。
+- **流式**（responsesStream 状态机）：chat chunk 流翻译为原生事件序——`response.created/in_progress → output_item.added(reasoning) → reasoning_summary_text.delta×N → output_item.added(message) → content_part.added → output_text.delta×N → reasoning/part/message item.done → response.completed`；函数调用走 `function_call_arguments.delta/done`；中游错误走 `response.failed`。帧格式 `event: <type>` + `data: <json>` 双行；native 流不发 `[DONE]`。
+- **input 侧扩展**：`instructions`→前置 system；`max_output_tokens`→max_tokens；`reasoning.effort`→ReasoningEffort（§9.35 的开关在 Responses 拼写下同样可用）。
+- **实测（热替换后真实上游）**：非流式 `object:response/status:completed/output:[reasoning,message]` + usage；流式事件序 uniq 计数 1/1/1/213×reasoning delta/1/1/49×text delta/3×done/completed——与 OpenAI 原生序列一致。glm 在无 effort 提示下也会自发吐思维链（§9.35 的透传管道全程供血）。
+- 教训补一行：python 批量替换对 CRLF 工作副本的缩进差异（一个 tab）也会静默不命中——锚点断言失败时直接换 Edit 工具逐处改，别再调正则。
