@@ -25,6 +25,7 @@ package api
 // answers 405 from ServeMux itself; the handlers stay check-free.
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strings"
@@ -302,76 +303,8 @@ func handleModels(h *host.Host) http.HandlerFunc {
 // failure — honestly labeled local.
 func modelsEndpointHandler(cat upstreamCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		refresh := r.URL.Query().Get("refresh") == "1"
-		resp := modelsResponse{Source: "local", Models: []modelWire{}}
-
-		// qoder: static fallback catalog (display-name → qoder key snapshot,
-		// chat.go defaultModelMap) via the adapter's ListModels. Static by
-		// construction — it never flips the source to upstream.
-		if a := adapter.Default.Get("qoder"); a != nil {
-			if infos, err := a.ListModels(r.Context()); err == nil {
-				for _, m := range infos {
-					if m == nil {
-						continue
-					}
-					// The static table names models, marks streaming, and
-					// declares vision for the known rows (qoderVisionModels);
-					// every other fact stays null (undeclared, not false).
-					stream := m.SupportsStream
-					row := modelWire{
-						Platform:       "qoder",
-						Provider:       "qoder",
-						ID:             m.ID,
-						Name:           m.Name,
-						Model:          strings.TrimPrefix(m.ID, "qoder/"),
-						SupportsStream: &stream,
-					}
-					if v, ok := qoderVisionModels[m.Name]; ok {
-						row.SupportsVision = &v
-					}
-					resp.Models = append(resp.Models, row)
-				}
-			}
-		}
-
-		// workbuddy: live upstream directory first (M8), static name list on
-		// any failure (no credential / transport / parse / empty table).
-		upstreamOK := false
-		if cat != nil {
-			if rows, ok := cat.Fetch(r.Context(), refresh); ok {
-				resp.Models = append(resp.Models, rows...)
-				upstreamOK = true
-			}
-		}
-		if !upstreamOK {
-			// config model_map (frozen surface, usually empty) first, then the
-			// known default names not already covered by a map entry. The
-			// static list carries names only — metadata stays null.
-			known := map[string]bool{}
-			for name := range config.Shared.Get().ModelMap {
-				resp.Models = append(resp.Models, localWorkbuddyRow(name))
-				known[name] = true
-			}
-			for _, name := range workbuddyDefaultModels {
-				if known[name] {
-					continue
-				}
-				resp.Models = append(resp.Models, localWorkbuddyRow(name))
-			}
-		}
-
-		// Source honesty: live workbuddy + static qoder = mixed; live only =
-		// upstream; anything that touched a static table only = local.
-		if upstreamOK {
-			resp.Source = "upstream"
-			for _, m := range resp.Models {
-				if m.Platform == "qoder" {
-					resp.Source = "mixed"
-					break
-				}
-			}
-		}
-
+		rows, source := buildModelRows(r.Context(), cat, r.URL.Query().Get("refresh") == "1")
+		resp := modelsResponse{Source: source, Models: rows}
 		// Deterministic delivery order: by provider, then id.
 		sort.Slice(resp.Models, func(i, j int) bool {
 			if resp.Models[i].Provider != resp.Models[j].Provider {
@@ -381,6 +314,80 @@ func modelsEndpointHandler(cat upstreamCatalog) http.HandlerFunc {
 		})
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// buildModelRows assembles the full catalog rows the panel models endpoint
+// serves: static qoder + live-or-static workbuddy. Shared with
+// PublicModelList (the /v1/models source) so the two surfaces can't drift.
+func buildModelRows(ctx context.Context, cat upstreamCatalog, refresh bool) ([]modelWire, string) {
+	resp := modelsResponse{Source: "local", Models: []modelWire{}}
+	// qoder: static fallback catalog (display-name → qoder key snapshot,
+	// chat.go defaultModelMap) via the adapter's ListModels. Static by
+	// construction — it never flips the source to upstream.
+	if a := adapter.Default.Get("qoder"); a != nil {
+		if infos, err := a.ListModels(ctx); err == nil {
+			for _, m := range infos {
+				if m == nil {
+					continue
+				}
+				// The static table names models, marks streaming, and
+				// declares vision for the known rows (qoderVisionModels);
+				// every other fact stays null (undeclared, not false).
+				stream := m.SupportsStream
+				row := modelWire{
+					Platform:       "qoder",
+					Provider:       "qoder",
+					ID:             m.ID,
+					Name:           m.Name,
+					Model:          strings.TrimPrefix(m.ID, "qoder/"),
+					SupportsStream: &stream,
+				}
+				if v, ok := qoderVisionModels[m.Name]; ok {
+					row.SupportsVision = &v
+				}
+				resp.Models = append(resp.Models, row)
+			}
+		}
+	}
+
+	// workbuddy: live upstream directory first (M8), static name list on
+	// any failure (no credential / transport / parse / empty table).
+	upstreamOK := false
+	if cat != nil {
+		if rows, ok := cat.Fetch(ctx, refresh); ok {
+			resp.Models = append(resp.Models, rows...)
+			upstreamOK = true
+		}
+	}
+	if !upstreamOK {
+		// config model_map (frozen surface, usually empty) first, then the
+		// known default names not already covered by a map entry. The
+		// static list carries names only — metadata stays null.
+		known := map[string]bool{}
+		for name := range config.Shared.Get().ModelMap {
+			resp.Models = append(resp.Models, localWorkbuddyRow(name))
+			known[name] = true
+		}
+		for _, name := range workbuddyDefaultModels {
+			if known[name] {
+				continue
+			}
+			resp.Models = append(resp.Models, localWorkbuddyRow(name))
+		}
+	}
+
+	// Source honesty: live workbuddy + static qoder = mixed; live only =
+	// upstream; anything that touched a static table only = local.
+	if upstreamOK {
+		resp.Source = "upstream"
+		for _, m := range resp.Models {
+			if m.Platform == "qoder" {
+				resp.Source = "mixed"
+				break
+			}
+		}
+	}
+	return resp.Models, resp.Source
 }
 
 // localWorkbuddyRow is one static workbuddy name-list entry: namespaced id,

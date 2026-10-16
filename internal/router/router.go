@@ -49,14 +49,19 @@ type Router struct {
 	// sticky is the M10-B2 (caller, model) → account binding registry; same
 	// nil-receiver safety — a Router without one just never sticks.
 	sticky *StickyRegistry
+	// models is the /v1/models list source, injectable for tests; nil falls
+	// back to DefaultModelLister (main wires it to the panel catalog).
+	models func(ctx context.Context) []PublicModel
 }
 
-// Register wires POST /v1/chat/completions and POST /v1/responses onto mux.
-// Non-POST methods are answered 405 by the ServeMux method patterns.
+// Register wires POST /v1/chat/completions, POST /v1/responses and
+// GET /v1/models onto mux. Non-matching methods are answered 405 by the
+// ServeMux method patterns.
 func Register(mux *http.ServeMux, h *host.Host, lookup AdapterLookup) {
 	rt := &Router{host: h, lookup: lookup, locks: DefaultModelLocks, sticky: DefaultSticky}
 	mux.HandleFunc("POST /v1/chat/completions", rt.handleChatCompletions)
 	mux.HandleFunc("POST /v1/responses", rt.handleResponses)
+	mux.HandleFunc("GET /v1/models", rt.handleV1Models)
 }
 
 // apiError mirrors the OpenAI error object (wire keys snake_case).
