@@ -173,10 +173,15 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// responsesInputToMessages performs the minimal Responses→chat mapping the
-// interface-first router supports: a plain string input becomes one user
-// message; an array of chat-shaped message objects passes through verbatim.
-// Native Responses envelope conversion lands with the platform protocol batch.
+// responsesInputToMessages converts the Responses input onto the chat message
+// shape. A plain string becomes one user message; an array may carry either
+// bare chat-shaped message objects (legacy passthrough) or native typed items
+// — {"type":"message","role","content"} whose content parts speak the
+// Responses vocabulary ("input_text"/"input_image"). Those part types reached
+// upstream verbatim once and were rejected ("unsupported content type"), so
+// text parts now flatten to plain string content and image parts map onto
+// chat image_url parts; anything else is a hard error so nothing reaches
+// upstream garbled.
 func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, error) {
 	if len(input) == 0 || string(input) == "null" {
 		return nil, errors.New("input is required")
@@ -185,11 +190,122 @@ func responsesInputToMessages(input json.RawMessage) ([]adapter.ChatMessage, err
 	if err := json.Unmarshal(input, &s); err == nil {
 		return []adapter.ChatMessage{{Role: "user", Content: input}}, nil
 	}
-	var msgs []adapter.ChatMessage
-	if err := json.Unmarshal(input, &msgs); err == nil {
-		return msgs, nil
+	var items []json.RawMessage
+	if err := json.Unmarshal(input, &items); err != nil {
+		return nil, errors.New("unsupported input shape: expected a string or a message array")
 	}
-	return nil, errors.New("unsupported input shape: expected a string or a message array")
+	out := make([]adapter.ChatMessage, 0, len(items))
+	for i, item := range items {
+		var head struct {
+			Type    string          `json:"type"`
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(item, &head); err != nil {
+			return nil, fmt.Errorf("input[%d]: %w", i, err)
+		}
+		if head.Type != "" && head.Type != "message" {
+			return nil, fmt.Errorf("input[%d]: unsupported item type %q — only message items are supported on this surface", i, head.Type)
+		}
+		content, err := responsesContentToChat(i, head.Content)
+		if err != nil {
+			return nil, err
+		}
+		role := head.Role
+		if role == "" {
+			role = "user"
+		}
+		out = append(out, adapter.ChatMessage{Role: role, Content: content})
+	}
+	return out, nil
+}
+
+// responsesContentToChat maps one message's content onto the chat shape. A
+// string passes through verbatim; a typed part array flattens
+// input_text/output_text/text runs into plain string content (joined by
+// newlines — every upstream accepts a bare string) and carries input_image
+// parts over as chat image_url parts, switching to a part array only when
+// images are actually present.
+func responsesContentToChat(idx int, content json.RawMessage) (json.RawMessage, error) {
+	if len(content) == 0 || string(content) == "null" {
+		return nil, fmt.Errorf("input[%d]: content is required", idx)
+	}
+	var s string
+	if err := json.Unmarshal(content, &s); err == nil {
+		return content, nil
+	}
+	var parts []struct {
+		Type     string          `json:"type"`
+		Text     string          `json:"text"`
+		ImageURL json.RawMessage `json:"image_url"`
+	}
+	if err := json.Unmarshal(content, &parts); err != nil {
+		return nil, fmt.Errorf("input[%d]: unsupported content shape — expected a string or a part array", idx)
+	}
+	// Ordered pass: text and image parts keep their original interleaving —
+	// "look [image] closely" must not become "look closely [image]".
+	type chatPart struct {
+		text string
+		img  string
+	}
+	ordered := make([]chatPart, 0, len(parts))
+	for j, p := range parts {
+		switch p.Type {
+		case "input_text", "output_text", "text":
+			ordered = append(ordered, chatPart{text: p.Text})
+		case "input_image":
+			// Both the object form {"url":...} and a bare JSON string appear
+			// in the wild; accept either, reject the rest.
+			var obj struct {
+				URL string `json:"url"`
+			}
+			if err := json.Unmarshal(p.ImageURL, &obj); err == nil && obj.URL != "" {
+				ordered = append(ordered, chatPart{img: obj.URL})
+			} else if len(p.ImageURL) > 0 && p.ImageURL[0] == '"' {
+				var bare string
+				_ = json.Unmarshal(p.ImageURL, &bare)
+				if bare == "" {
+					return nil, fmt.Errorf("input[%d].content[%d]: input_image url is empty", idx, j)
+				}
+				ordered = append(ordered, chatPart{img: bare})
+			} else {
+				return nil, fmt.Errorf("input[%d].content[%d]: input_image needs a url", idx, j)
+			}
+		case "":
+			return nil, fmt.Errorf(`input[%d].content[%d]: content part is missing "type"`, idx, j)
+		default:
+			return nil, fmt.Errorf("input[%d].content[%d]: unsupported content type %q", idx, j, p.Type)
+		}
+	}
+	var texts []string
+	var images int
+	for _, p := range ordered {
+		if p.img == "" {
+			texts = append(texts, p.text)
+		} else {
+			images++
+		}
+	}
+	if images == 0 {
+		b, err := json.Marshal(strings.Join(texts, "\n"))
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
+	}
+	chat := make([]map[string]any, 0, len(ordered))
+	for _, p := range ordered {
+		if p.img == "" {
+			chat = append(chat, map[string]any{"type": "text", "text": p.text})
+		} else {
+			chat = append(chat, map[string]any{"type": "image_url", "image_url": map[string]string{"url": p.img}})
+		}
+	}
+	b, err := json.Marshal(chat)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // ---------- shared orchestration ----------
