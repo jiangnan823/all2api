@@ -88,20 +88,20 @@ func TestAccountsShapeAndAggregation(t *testing.T) {
 	now := time.Now()
 	h.Pool.AddAccount(&pool.Account{
 		ID: "a1", Platform: "qa", Status: "active",
-		Credit: 500, Health: 0.9, LastSelected: now.Add(-time.Hour),
+		Credit: 500, CreditTotal: 700, Health: 0.9, LastSelected: now.Add(-time.Hour),
 	})
 	h.Pool.AddAccount(&pool.Account{
 		ID: "a2", Platform: "qa", Status: "cooling",
-		Credit: 200, Health: 0.5, CooldownEnd: now.Add(30 * time.Minute),
+		Credit: 200, CreditTotal: 300, Health: 0.5, CooldownEnd: now.Add(30 * time.Minute),
 	})
 	h.Pool.AddAccount(&pool.Account{
 		ID: "a3", Platform: "qa", Status: "disabled",
-		Credit: 0, Health: 0,
+		Credit: 0, CreditTotal: 60, Health: 0,
 	})
 	// An unknown status must not silently inflate any bucket (still counted
 	// in total and credit_total).
 	h.Pool.AddAccount(&pool.Account{
-		ID: "a4", Platform: "qa", Status: "elsewhere", Credit: 42,
+		ID: "a4", Platform: "qa", Status: "elsewhere", Credit: 42, CreditTotal: 42,
 	})
 
 	mux := newPanelMux(t, h, nil, nil, nil)
@@ -153,8 +153,9 @@ func TestAccountsShapeAndAggregation(t *testing.T) {
 		t.Fatalf("aggregation drift: total=%d active=%d cooling=%d disabled=%d, want 5/2/1/1",
 			resp.Total, resp.Active, resp.Cooling, resp.Disabled)
 	}
-	if resp.CreditTotal != 742 {
-		t.Fatalf("credit_total = %d, want 742 (500+200+0+42)", resp.CreditTotal)
+	// M10: credit_total sums the quota CAPACITY (总额 half of 积分剩余/总额).
+	if resp.CreditTotal != 1102 {
+		t.Fatalf("credit_total = %d, want 1102 (700+300+60+42)", resp.CreditTotal)
 	}
 	if len(resp.Accounts) != 5 {
 		t.Fatalf("accounts array = %d entries, want 5", len(resp.Accounts))

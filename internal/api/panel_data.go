@@ -152,7 +152,9 @@ func handleAccounts(h *host.Host) http.HandlerFunc {
 				if acc.Paused {
 					resp.PausedCount++
 				}
-				resp.CreditTotal += acc.Credit
+				// credit_total sums the upstream quota CAPACITY (the paired
+				// 总额 half of 积分剩余/总额); Credit is the remain half.
+				resp.CreditTotal += acc.CreditTotal
 				resp.CreditSum += acc.Credit
 			}
 			resp.Total = len(snapshot)

@@ -23,9 +23,9 @@ func TestAccountsSnapshotM10Aggregates(t *testing.T) {
 	h.Creds = host.NewCredentialStore(h.Pool)
 
 	now := time.Now()
-	h.Pool.AddAccount(&pool.Account{ID: "a1", Platform: "qa", Status: "active", Credit: 500, Health: 0.9})
+	h.Pool.AddAccount(&pool.Account{ID: "a1", Platform: "qa", Status: "active", Credit: 500, CreditTotal: 800, Health: 0.9})
 	h.Pool.AddAccount(&pool.Account{ID: "a2", Platform: "qa", Status: "cooling",
-		Credit: 200, Health: 0.5, CooldownEnd: now.Add(30 * time.Minute), CooldownReason: pool.CooldownReasonRateLimit})
+		Credit: 200, CreditTotal: 400, Health: 0.5, CooldownEnd: now.Add(30 * time.Minute), CooldownReason: pool.CooldownReasonRateLimit})
 	h.Pool.AddAccount(&pool.Account{ID: "a3", Platform: "qa", Status: "disabled", Credit: 0, Paused: true})
 	// A non-429 cooldown renders the task-failure phrase.
 	h.Pool.AddAccount(&pool.Account{ID: "a4", Platform: "qa", Status: "cooling",
@@ -85,13 +85,13 @@ func TestAccountsSnapshotM10Aggregates(t *testing.T) {
 	if resp.StickySessions != 1 {
 		t.Fatalf("sticky_sessions = %d, want 1 (only live bindings count)", resp.StickySessions)
 	}
-	// credit_sum = the remaining-credit sum; it lands beside the untouched
-	// M5a credit_total (which de-facto carried the same sum already).
+	// credit_sum = the remaining-credit sum; credit_total = the paired
+	// capacity sum (积分剩余/总额 double value), seeded 800+400 above.
 	if resp.CreditSum != 1000 {
 		t.Fatalf("credit_sum = %d, want 1000", resp.CreditSum)
 	}
-	if resp.CreditTotal != resp.CreditSum {
-		t.Fatalf("credit_total = %d drifted from credit_sum %d — M5a semantics must stay", resp.CreditTotal, resp.CreditSum)
+	if resp.CreditTotal != 1200 {
+		t.Fatalf("credit_total = %d, want 1200 (capacity sum, not remain)", resp.CreditTotal)
 	}
 }
 
