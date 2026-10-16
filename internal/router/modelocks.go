@@ -290,9 +290,11 @@ func (m *ModelLockRegistry) Unlock(model string) int {
 	return n
 }
 
-// UnlockAll is Unlock across every model: the panel's "clear the whole lock
-// pool" action (POST /api/model-locks/unlock with an empty model).
-func (m *ModelLockRegistry) UnlockAll() int {
+// UnlockAll is Unlock across every model. platform non-empty scopes the clear
+// to one platform's locks — the panel's per-platform「全部解锁」must not reach
+// into other platforms' locks (M10 review scope-leak fix). Empty platform
+// clears everything (whole-pool action).
+func (m *ModelLockRegistry) UnlockAll(platform string) int {
 	if m == nil {
 		return 0
 	}
@@ -301,6 +303,9 @@ func (m *ModelLockRegistry) UnlockAll() int {
 	defer m.mu.Unlock()
 	n := 0
 	for k, l := range m.locks {
+		if platform != "" && k.platform != platform {
+			continue
+		}
 		delete(m.locks, k)
 		if now.Before(l.unlockAt) {
 			n++

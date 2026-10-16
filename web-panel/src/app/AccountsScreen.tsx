@@ -602,8 +602,10 @@ export function AccountsScreen(props: { platform?: 'workbuddy' | 'qoder' | 'trae
       )}
       {filter !== undefined && (
         <>
-          <PackagesCard />
-          <ModelLocksCard />
+          {/* 积分到期提醒是 WorkBuddy 专属面（上游只有它有积分包）——qoder/trae 页不渲染 */}
+          {filter === 'workbuddy' && <PackagesCard />}
+          {/* 模型锁池按平台域过滤：各软件页只看自己的锁 */}
+          <ModelLocksCard platform={filter} />
         </>
       )}
     </div>

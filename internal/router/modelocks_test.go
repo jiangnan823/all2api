@@ -170,7 +170,7 @@ func TestModelLockRegistryNilSafety(t *testing.T) {
 	if n := m.Unlock("m"); n != 0 {
 		t.Fatalf("nil registry unlock = %d, want 0", n)
 	}
-	if n := m.UnlockAll(); n != 0 {
+	if n := m.UnlockAll(""); n != 0 {
 		t.Fatalf("nil registry unlock-all = %d, want 0", n)
 	}
 	m.BindPool(nil) // must not panic
@@ -220,7 +220,7 @@ func TestModelLockUnlockSkipsExpiredGhosts(t *testing.T) {
 
 	m.NoteRateLimited("m1", "wb", "a1", 0)
 	c.Advance(3 * time.Minute)
-	if n := m.UnlockAll(); n != 0 {
+	if n := m.UnlockAll(""); n != 0 {
 		t.Fatalf("UnlockAll over expired-only entries = %d, want 0", n)
 	}
 	if len(m.locks) != 0 {
@@ -236,11 +236,27 @@ func TestModelLockUnlockAll(t *testing.T) {
 	m.NoteRateLimited("m2", "qoder", "a2", 0)
 	m.NoteRateLimited("m3", "trae", "a3", 0)
 
-	if n := m.UnlockAll(); n != 3 {
+	if n := m.UnlockAll(""); n != 3 {
 		t.Fatalf("UnlockAll = %d, want 3", n)
 	}
 	if got := m.Snapshot(); len(got) != 0 {
 		t.Fatalf("UnlockAll left %d rows", len(got))
+	}
+}
+
+func TestModelLockUnlockAllScopedToPlatform(t *testing.T) {
+	// M10 审查修复：平台页「全部解锁」只清本平台域，不越界清别人的锁。
+	c := newFakeClock()
+	m := newTestRegistry(c)
+
+	m.NoteRateLimited("m1", "workbuddy", "a1", 0)
+	m.NoteRateLimited("m2", "qoder", "a2", 0)
+
+	if n := m.UnlockAll("qoder"); n != 1 {
+		t.Fatalf("scoped UnlockAll = %d, want 1 (qoder only)", n)
+	}
+	if got := m.Snapshot(); len(got) != 1 || got[0].Platform != "workbuddy" {
+		t.Fatalf("workbuddy lock must survive the scoped clear, got %+v", got)
 	}
 }
 

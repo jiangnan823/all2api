@@ -90,9 +90,13 @@ func handleModelLocks(h *host.Host, locks *router.ModelLockRegistry) http.Handle
 }
 
 // modelLockUnlockRequest is the POST /api/model-locks/unlock body. Empty model
-// (missing key, empty string, or no body at all) means the whole pool.
+// (missing key, empty string, or no body at all) means the whole pool, scoped
+// to platform when that key carries a non-empty platform name — the per-
+// platform pages'「全部解锁」must not reach into other platforms' locks
+// (M10 review scope-leak fix).
 type modelLockUnlockRequest struct {
-	Model string `json:"model"`
+	Model    string `json:"model"`
+	Platform string `json:"platform"`
 }
 
 // modelLockUnlockResponse is the frozen M10-B1 reply shape: {"unlocked":n}.
@@ -102,8 +106,9 @@ type modelLockUnlockResponse struct {
 
 // handleModelLockUnlock serves POST /api/model-locks/unlock: {"model":"x"}
 // unlocks that one model everywhere; {} / {"model":""} / empty body unlock the
-// whole pool. The reply is {"unlocked":n} with n the live locks actually
-// removed — expired ghosts never inflate it.
+// whole pool — narrowed to one platform when the body carries platform.
+// The reply is {"unlocked":n} with n the live locks actually removed —
+// expired ghosts never inflate it.
 func handleModelLockUnlock(locks *router.ModelLockRegistry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -120,8 +125,9 @@ func handleModelLockUnlock(locks *router.ModelLockRegistry) http.HandlerFunc {
 		model := strings.TrimSpace(req.Model)
 		n := locks.Unlock(model)
 		if model == "" {
-			// 空 model（{} / {"model":""} / 空请求体）= 全池解锁。
-			n = locks.UnlockAll()
+			// 空 model（{} / {"model":""} / 空请求体）= 全池解锁；platform
+			// 非空时收窄到该平台域（平台页「全部解锁」的作用域）。
+			n = locks.UnlockAll(strings.TrimSpace(req.Platform))
 		}
 		writeJSON(w, http.StatusOK, modelLockUnlockResponse{Unlocked: n})
 	}

@@ -450,14 +450,18 @@ export function setAccountDisabled(platform: string, id: string, disable: boolea
 
 /**
  * 模型锁解锁（M10）：POST /api/model-locks/unlock。
- * model = null → body {}（表头「全部解锁」）；否则 body {"model":...}（行级「全池解锁」）。
+ * model = null → 全池解锁（platform 传入时收窄到该平台域，M10 审查防串台）；
+ * 否则 body {"model":...}（行级「全池解锁」）。
  * {error} 信封逐字上抛；成功响应形状不参与判定（以刷新后的锁表为准）。
  */
-export async function unlockModelLocks(model: string | null): Promise<void> {
+export async function unlockModelLocks(model: string | null, platform?: string): Promise<void> {
+  const body: Record<string, string> = {};
+  if (model !== null) body['model'] = model;
+  if (model === null && platform) body['platform'] = platform;
   const res = await fetch('/api/model-locks/unlock', {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: model === null ? '{}' : JSON.stringify({ model }),
+    body: JSON.stringify(body),
   });
   if (res.ok) return;
   let msg = `HTTP ${res.status}`;

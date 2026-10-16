@@ -37,7 +37,8 @@ const COPY = {
   ERR_PREFIX: '解锁失败：',
 } as const;
 
-export function ModelLocksCard() {
+export function ModelLocksCard(props: { platform?: 'workbuddy' | 'qoder' | 'trae' }) {
+  const { platform } = props;
   const [state, setState] = useState<
     { phase: 'loading' } | { phase: 'error'; message: string } | { phase: 'ready'; locks: ModelLock[] }
   >({ phase: 'loading' });
@@ -53,12 +54,14 @@ export function ModelLocksCard() {
       const body = await res.json();
       if (seq !== seqRef.current) return;
       const raw = Array.isArray(body.locks) ? body.locks : [];
-      // 防御式读数：单条形状不对丢弃，不拖垮整卡；scope/available/total 可空
+      // 防御式读数：单条形状不对丢弃，不拖垮整卡；scope/available/total 可空；
+      // platform 传入时分平台域过滤（各软件页只看自己的锁）
       const locks: ModelLock[] = [];
       for (const item of raw) {
         if (item === null || typeof item !== 'object') continue;
         const o = item as Record<string, unknown>;
         if (typeof o['model'] !== 'string' || o['model'] === '') continue;
+        if (platform && o['platform'] !== platform) continue;
         locks.push({
           model: o['model'],
           platform: typeof o['platform'] === 'string' ? o['platform'] : '',
@@ -87,7 +90,7 @@ export function ModelLocksCard() {
       setBusy(true);
       setActionErr(null);
       try {
-        await unlockModelLocks(model);
+        await unlockModelLocks(model, platform);
         await load();
       } catch (err) {
         setActionErr(err instanceof Error ? err.message : String(err));
