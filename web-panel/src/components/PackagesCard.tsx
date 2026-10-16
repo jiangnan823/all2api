@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PACKAGES } from '../i18n/zh';
-
+import { refreshPackages, type PackagesRefreshResult } from '../lib/poolApi';
 
 /**
  * 积分到期提醒卡（M9a，wb2api「积分到期提醒」同构）：按账号显示最近到期批次
  * （日期 + X 天后到期 + 该批积分 + 到期前日均需耗）与随后各批次行。
  * 数据源 GET /api/packages（上游实时逐包查询，FEFO 升序）；单号探查失败该号
  * 显示错误原文，不造零。
+ *
+ * M10-C：头部加「检查」按钮（POST /api/packages/refresh 实时查询上游，
+ * 完成后重拉本卡数据）+「N 个账号 · 实时查询上游」口径文案；refresh 返回的
+ * errors 逐账号可折叠展示。60s 轮询保持不变。新增文案为组件内联字典。
  */
+
 interface PkgCycleEnd {
   unix: number;
   local: string;
@@ -28,6 +33,14 @@ interface PkgAccount {
   batches: PkgBatch[];
   error?: string;
 }
+
+/** 组件内联字典（zh.ts 本批冻结）：新增文案只落在这里。 */
+const COPY = {
+  COUNT_NOTE: (n: number): string => `${n} 个账号 · 实时查询上游`,
+  CHECKING: '检查中…',
+  REFRESHED: (n: number): string => `已刷新 ${n} 个账号`,
+  ERRORS_TITLE: '查询失败',
+} as const;
 
 function fmtLocal(cycleEnd: PkgCycleEnd | null): string {
   return cycleEnd ? cycleEnd.local.slice(0, 10) : '—';
@@ -53,7 +66,8 @@ function AccountPackages(props: { account: PkgAccount }) {
           <p className="packages-card__nearest">
             {PACKAGES.NEAREST.replace('{date}', nearest ? fmtLocal(nearest) : '—')
               .replace('{days}', String(days))
-              .replace('{remain}', String(nearestRemain))}
+              .replace('{remain}', String(nearestRemain))
+              .replace('{daily}', String(a.daily_burn ?? '—'))}
           </p>
           <div className="packages-card__batches">
             {a.batches.map((b, i) => (
@@ -73,6 +87,10 @@ export function PackagesCard() {
     { phase: 'loading' } | { phase: 'error'; message: string } | { phase: 'ready'; accounts: PkgAccount[] }
   >({ phase: 'loading' });
   const seqRef = useRef(0);
+  // M10-C「检查」：POST 实时查询期间按钮禁用；结果行内展示（失败逐账号可折叠）
+  const [checking, setChecking] = useState(false);
+  const [refreshRes, setRefreshRes] = useState<PackagesRefreshResult | null>(null);
+  const [refreshErr, setRefreshErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -88,6 +106,21 @@ export function PackagesCard() {
     }
   }, []);
 
+  const check = useCallback(async () => {
+    setChecking(true);
+    setRefreshRes(null);
+    setRefreshErr(null);
+    try {
+      const res = await refreshPackages();
+      setRefreshRes(res);
+      await load(); // 实时查询完成后以最新快照重建批次行
+    } catch (err) {
+      setRefreshErr(err instanceof Error ? err.message : String(err));
+    } finally {
+      setChecking(false);
+    }
+  }, [load]);
+
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 60_000);
@@ -98,11 +131,46 @@ export function PackagesCard() {
     <div className="packages-card" data-testid="packages-card">
       <div className="packages-card__head">
         <h3 className="packages-card__title">{PACKAGES.TITLE}</h3>
-        <button type="button" className="btn" onClick={() => void load()}>
-          {PACKAGES.REFRESH}
+        <button type="button" className="btn" disabled={checking} aria-busy={checking} onClick={() => void check()}>
+          {checking ? COPY.CHECKING : PACKAGES.REFRESH}
         </button>
       </div>
-      <p className="packages-card__note">{PACKAGES.NOTE}</p>
+      <p className="packages-card__note">
+        {state.phase === 'ready' ? (
+          <>
+            <span className="packages-card__count">{COPY.COUNT_NOTE(state.accounts.length)}</span>
+            <br />
+          </>
+        ) : null}
+        {PACKAGES.NOTE}
+      </p>
+      {refreshErr !== null && (
+        <p className="packages-card__error" role="alert">
+          {refreshErr}
+        </p>
+      )}
+      {refreshRes !== null && (
+        <div className="packages-card__refresh" role="status">
+          <p className="packages-card__refresh-summary">
+            {COPY.REFRESHED(refreshRes.refreshed)}
+            {refreshRes.errors.length > 0 ? ` · ${COPY.ERRORS_TITLE} ${refreshRes.errors.length}` : ''}
+          </p>
+          {refreshRes.errors.length > 0 && (
+            <details className="packages-card__refresh-errors">
+              <summary>
+                {COPY.ERRORS_TITLE}（{refreshRes.errors.length}）
+              </summary>
+              <ul>
+                {refreshRes.errors.map((e) => (
+                  <li key={e.id}>
+                    <code>{e.id}</code> {e.error}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
       {state.phase === 'loading' ? (
         <p className="packages-card__note" role="status">{PACKAGES.LOADING}</p>
       ) : state.phase === 'error' ? (

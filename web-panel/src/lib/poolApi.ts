@@ -19,6 +19,8 @@ export interface AccountEntry {
   id: string;
   /** 服务端原始状态串（active / cooling / disabled 等），徽色按 statusTone 映射，未知值如实显示。 */
   status: string;
+  /** 状态副行（M10 wire status_note；如 "429 rate limit"）。空串 = 无，UI 不渲染副行。 */
+  statusNote: string;
   credit: number | null;
   health: string | null;
   /** Unix 秒；缺失/0 = 无到期概念。 */
@@ -47,6 +49,12 @@ export interface AccountsSnapshot {
   cooling: number;
   disabled: number;
   creditTotal: number | null;
+  /** 已暂停选号数（M10 wire paused_count；缺失按 0，不丢卡）。 */
+  pausedCount: number;
+  /** 粘性会话数（M10 wire sticky_sessions；缺失按 0）。 */
+  stickySessions: number;
+  /** 积分剩余和（M10 wire credit_sum；与 credit_total=总额 组成 KPI 双值；缺失 → null → 显示 —）。 */
+  creditSum: number | null;
 }
 
 export interface LogEntry {
@@ -130,6 +138,8 @@ export function parseAccountsSnapshot(body: unknown): AccountsSnapshot {
         id: str(item['id'], 'account.id'),
         nickname: strOrNull(item['nickname']),
         status: str(item['status'], 'account.status'),
+        // M10：状态副行——缺失/非串按空串（= 无副行），不丢条目
+        statusNote: typeof item['status_note'] === 'string' ? item['status_note'] : '',
         credit: numOrNull(item['credit']),
         health: typeof item['health'] === 'string' && item['health'] !== '' ? item['health'] : null,
         expiresAt: timeLocalToUnix(item['expires_at']),
@@ -157,6 +167,10 @@ export function parseAccountsSnapshot(body: unknown): AccountsSnapshot {
     cooling: count('cooling'),
     disabled: count('disabled'),
     creditTotal,
+    // M10 汇总：计数缺失按 0；credit_sum 可空（缺失 → KPI 显示 —）
+    pausedCount: count('paused_count'),
+    stickySessions: count('sticky_sessions'),
+    creditSum: numOrNull(body['credit_sum']),
   };
 }
 
@@ -202,6 +216,27 @@ export function relativeTime(unix: number | null): string | null {
   if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
   if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
   return `${Math.floor(s / 86400)} 天前`;
+}
+
+/**
+ * 到期时间双值（M10：绝对日期 + 相对天数，wb2api「17 小时前」式同源换算）：
+ * date = 本地 YYYY-MM-DD；rel = N 天后 / 今天到期 / 今天过期 / 已过期 N 天（负数天不显示负号）。
+ * null/0 → null（调用方显示 —，不编造时间）。
+ */
+export function expiryLabel(unix: number | null): { date: string; rel: string } | null {
+  if (unix === null || unix === 0) return null;
+  const d = new Date(unix * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const diffMs = unix * 1000 - Date.now();
+  const days = Math.floor(diffMs / 86_400_000);
+  let rel: string;
+  if (days >= 1) rel = `${days} 天后`;
+  else if (diffMs > 0) rel = '今天到期';
+  else if (diffMs > -86_400_000) rel = '今天过期';
+  else rel = `已过期 ${-days} 天`;
+  return { date, rel };
 }
 
 /** 日志级别 → 徽色档（error 及近似值红色，warn 档黄色，其余中性）。 */
@@ -345,4 +380,126 @@ async function apiPostEmpty(path: string): Promise<void> {
     }
     throw new Error(msg);
   }
+}
+
+// ---------- 批量操作 / 启停 / 解锁 / 积分实时查询（M10-C，wb2api 对齐） ----------
+
+/** 批量操作闭集（wire {"op":...}）：travel 仅 workbuddy 上游有语义，UI 按平台渲染。 */
+export type BatchOpKind = 'checkin' | 'travel' | 'active' | 'keepalive';
+
+/** 单账号失败明细（逐账号原样上抛，UI 可折叠展示）。 */
+export interface BatchOpFailure {
+  id: string;
+  error: string;
+}
+
+/** POST /api/accounts/{platform}/batch-op → {requested, done, skipped, failed:[{id,error}]}。 */
+export interface BatchOpResult {
+  requested: number;
+  done: number;
+  skipped: number;
+  failed: BatchOpFailure[];
+}
+
+/**
+ * 平台级批量操作：POST /api/accounts/{platform}/batch-op body {"op":"checkin"|"travel"|"active"|"keepalive"}。
+ * 计数缺失按 0；failed 逐条防御（缺 id/error 的条目丢弃），{error} 信封逐字上抛。
+ */
+export async function batchOp(platform: string, op: BatchOpKind): Promise<BatchOpResult> {
+  const res = await fetch(`/api/accounts/${encodeURIComponent(platform)}/batch-op`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op }),
+  });
+  let parsed: unknown;
+  try {
+    parsed = await res.json();
+  } catch {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  if (!res.ok) {
+    const msg = isObject(parsed) && typeof parsed['error'] === 'string' ? parsed['error'] : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  if (!isObject(parsed)) throw new Error('batch-op: 响应非对象');
+  const failed: BatchOpFailure[] = [];
+  const rawFailed = Array.isArray(parsed['failed']) ? parsed['failed'] : [];
+  for (const item of rawFailed) {
+    if (!isObject(item)) continue;
+    if (typeof item['id'] !== 'string' || typeof item['error'] !== 'string') continue;
+    failed.push({ id: item['id'], error: item['error'] });
+  }
+  return {
+    requested: numOrZero(parsed['requested']),
+    done: numOrZero(parsed['done']),
+    skipped: numOrZero(parsed['skipped']),
+    failed,
+  };
+}
+
+/**
+ * 账号启停（M10）：POST /api/accounts/{platform}:{id}/disable 与 /enable。
+ * 与 pause/resume 正交：disable = 管理员停用（凭证保留，仅退出选号）。
+ * 响应不参与判定，成功一律以刷新后的快照为准。
+ */
+export function setAccountDisabled(platform: string, id: string, disable: boolean): Promise<void> {
+  return apiPostEmpty(
+    `/api/accounts/${encodeURIComponent(platform)}:${encodeURIComponent(id)}/${disable ? 'disable' : 'enable'}`,
+  );
+}
+
+/**
+ * 模型锁解锁（M10）：POST /api/model-locks/unlock。
+ * model = null → body {}（表头「全部解锁」）；否则 body {"model":...}（行级「全池解锁」）。
+ * {error} 信封逐字上抛；成功响应形状不参与判定（以刷新后的锁表为准）。
+ */
+export async function unlockModelLocks(model: string | null): Promise<void> {
+  const res = await fetch('/api/model-locks/unlock', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: model === null ? '{}' : JSON.stringify({ model }),
+  });
+  if (res.ok) return;
+  let msg = `HTTP ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body?.error === 'string' && body.error !== '') msg = body.error;
+  } catch {
+    // 非 JSON 响应：保留 HTTP 码
+  }
+  throw new Error(msg);
+}
+
+/** POST /api/packages/refresh → {refreshed, errors:[{id,error}]}（积分实时查询上游）。 */
+export interface PackagesRefreshResult {
+  refreshed: number;
+  errors: BatchOpFailure[];
+}
+
+/** POST /api/packages/refresh：即时逐账号查询上游积分批次。计数缺失按 0，errors 逐条防御。 */
+export async function refreshPackages(): Promise<PackagesRefreshResult> {
+  const res = await fetch('/api/packages/refresh', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  let parsed: unknown;
+  try {
+    parsed = await res.json();
+  } catch {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  if (!res.ok) {
+    const msg = isObject(parsed) && typeof parsed['error'] === 'string' ? parsed['error'] : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  if (!isObject(parsed)) throw new Error('packages/refresh: 响应非对象');
+  const errors: BatchOpFailure[] = [];
+  const rawErrors = Array.isArray(parsed['errors']) ? parsed['errors'] : [];
+  for (const item of rawErrors) {
+    if (!isObject(item)) continue;
+    if (typeof item['id'] !== 'string' || typeof item['error'] !== 'string') continue;
+    errors.push({ id: item['id'], error: item['error'] });
+  }
+  return { refreshed: numOrZero(parsed['refreshed']), errors };
 }

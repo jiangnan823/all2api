@@ -275,7 +275,7 @@ describe('usageApi 解析', () => {
     const bare = parseUsageSnapshot({});
     expect(bare).toEqual({
       window: '', requests: 0, fail: 0, promptTokens: 0, completionTokens: 0,
-      byPlatform: {}, byModel: {},
+      byPlatform: {}, byModel: {}, accounts: {},
     });
   });
 });

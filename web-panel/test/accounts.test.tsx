@@ -2,15 +2,16 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act, within, waitFor } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { AccountsScreen } from '../src/app/AccountsScreen';
-import { ACCOUNTS_POLL_MS, relativeTime } from '../src/lib/poolApi';
+import { ACCOUNTS_POLL_MS, expiryLabel, relativeTime } from '../src/lib/poolApi';
 import { ACCOUNTS } from '../src/i18n/zh';
 
 /**
- * 账号池屏门禁（M5b → M6b 富列 + 行内操作）：fetch 全程 mock（wire 蛇形，形状按任务书冻结契约）。
- * 断言面：就绪渲染（状态卡行 + 富列表格全列 + 状态徽色 + 积分进度条 + 相对时间）、
- * 错误态 + 重试、空池引导、30s 轮询自愈、账号 ID 短码点击复制（clipboard mock）、
- * 暂停/恢复/删除行内操作端点与 confirm 流、{error} 信封逐字上抛、relativeTime 边界、
- * 积分条百分比边界、axe 零违规。
+ * 账号池屏门禁（M5b → M6b 富列 → M10-C wb2api 对齐）：fetch 全程 mock（wire 蛇形，
+ * 形状按任务书冻结契约）。断言面：就绪渲染（七张状态卡 + 富列表格全列 + 状态徽色与
+ * status_note 副行 + 积分进度条 + 相对时间 + 用量徽章组 join）、批量操作接线、
+ * 禁用/启用行内操作、错误态 + 重试、空池引导、30s 轮询自愈、账号 ID 短码点击复制、
+ * 暂停/恢复/删除行内操作端点与 confirm 流、{error} 信封逐字上抛、relativeTime/expiryLabel
+ * 边界、积分条百分比边界、axe 零违规。
  */
 expect.extend(toHaveNoViolations);
 
@@ -19,6 +20,7 @@ const WB_PAUSED_ID = 'wb-pausedaccount01';
 const NOW_SEC = Math.floor(Date.now() / 1000);
 
 /** 服务端 wire 形状（蛇形）。M6b 起每条可带 success/fail/in_flight/paused/last_success/credit_total；
+ * M10 起快照带 paused_count/sticky_sessions/credit_sum、条目带 status_note；
  * trae 一条刻意保持旧形状（无任何新字段）验证防御式解析：不丢条目、新列按默认值渲染。 */
 const ACCOUNTS_WIRE = {
   accounts: [
@@ -27,6 +29,7 @@ const ACCOUNTS_WIRE = {
       id: WB_ID,
       nickname: '40 多岁的年轻小伙',
       status: 'active',
+      status_note: '429 rate limit',
       credit: 1234.5,
       health: 'good',
       expires_at: { unix: 1790000000, local: '2026-10-15 22:00:00' },
@@ -40,7 +43,7 @@ const ACCOUNTS_WIRE = {
       credit_total: 6679,
     },
     {
-      // M6b 防御面：旧形状（新字段全缺）→ 计数 0 / 暂停 false / 时间 — ，条目不丢
+      // M6b 防御面：旧形状（新字段全缺）→ 计数 0 / 暂停 false / 时间 — / 副行无，条目不丢
       platform: 'trae',
       id: 'tr-ffff00001111',
       status: 'cooling',
@@ -54,6 +57,7 @@ const ACCOUNTS_WIRE = {
       platform: 'qoder',
       id: 'qd-deadbeef42',
       status: 'disabled',
+      status_note: '',
       credit: 0,
       health: '',
       expires_at: 0,
@@ -90,6 +94,25 @@ const ACCOUNTS_WIRE = {
   cooling: 1,
   disabled: 1,
   credit_total: 1322.5,
+  /* M10 快照汇总：已暂停选号 / 粘性会话 / 积分剩余和（= 1234.5 + 88 + 0 + 600） */
+  paused_count: 1,
+  sticky_sessions: 2,
+  credit_sum: 1922.5,
+};
+
+/** M10 GET /api/usage accounts 桶：键 = 账号 ShortID（uid 前 8）。qd 账号给空对象（全键缺失 → 全 "—"）。 */
+const USAGE_WIRE = {
+  window: 'process',
+  requests: 2699,
+  fail: 3,
+  prompt_tokens: 100,
+  completion_tokens: 200,
+  by_platform: {},
+  by_model: {},
+  accounts: {
+    'wb-01234': { requests: 2698, tokens: 463_600_000, duration_sec: 49, tok_per_sec: 40.6 },
+    'qd-deadbeef42': {},
+  },
 };
 
 type Route = { status?: number; body?: unknown; reject?: boolean };
@@ -131,33 +154,40 @@ afterEach(() => {
 });
 
 describe('账号池屏 — 就绪渲染', () => {
-  it('状态卡行五行齐备且数值取自服务端汇总字段（等宽数字容器）', async () => {
-    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE } });
+  it('状态卡行七张齐备且数值取自服务端汇总字段（等宽数字容器）', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
     render(<AccountsScreen />);
     expect(await screen.findByText(ACCOUNTS.CARD_TOTAL)).toBeTruthy();
     const cards = document.querySelector('ul.pool-cards') as HTMLElement;
     expect(cards).toBeTruthy();
-    // 数值文案走 toLocaleString（等宽数字容器内），credit_total 含千分位
-    expect(cards.textContent).toContain('1,322.5'); // credit_total
-    expect(cards.textContent).toContain(ACCOUNTS.CARD_TOTAL);
+    // 数值文案走 toLocaleString（等宽数字容器内），credit_sum / credit_total 含千分位
+    expect(cards.textContent).toContain('1,922.5'); // credit_sum（M10 积分剩余和）
+    expect(cards.textContent).toContain('1,322.5'); // credit_total（总额）
     const totalCard = cards.querySelectorAll('li.pool-card')[0] as HTMLElement;
     expect(totalCard.textContent).toBe(`${ACCOUNTS.CARD_TOTAL}4`);
-    // 五张卡 = 总数/可用/冷却/禁用/积分
-    expect(cards.querySelectorAll('li.pool-card')).toHaveLength(5);
+    // 七张卡 = 总数/可用/冷却/禁用/已暂停选号(M10)/粘性会话(M10)/积分剩余·总额双值
+    expect(cards.querySelectorAll('li.pool-card')).toHaveLength(7);
     // 状态徽标同文案（可用/冷却中/已禁用）也在文档里，getByText 会撞多个 → 限定在卡片容器内
     for (const label of [
       ACCOUNTS.CARD_TOTAL,
       ACCOUNTS.CARD_ACTIVE,
       ACCOUNTS.CARD_COOLING,
       ACCOUNTS.CARD_DISABLED,
+      ACCOUNTS.STATUS_PAUSED,
+      '粘性会话',
       ACCOUNTS.CARD_CREDIT,
     ]) {
       expect(within(cards).getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
+    // M10 新卡取数：已暂停选号=1、粘性会话=2、积分剩余/总额双值
+    const cardText = cards.textContent ?? '';
+    expect(cardText).toContain(`已暂停选号1`);
+    expect(cardText).toContain('粘性会话2');
+    expect(cardText).toContain('1,922.5 / 1,322.5');
   });
 
-  it('表格 M6b 十一列齐备：平台/账号/状态/积分/成功 失败/在途/健康度/到期/冷却至/最近成功/操作', async () => {
-    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE } });
+  it('表格 M10 十二列齐备：平台/账号/状态/积分/成功 失败/在途/用量/健康度/到期/冷却至/最近成功/操作', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
     render(<AccountsScreen />);
     await findRow(WB_ID);
     const table = document.querySelector('table.pool-table') as HTMLTableElement;
@@ -169,6 +199,7 @@ describe('账号池屏 — 就绪渲染', () => {
       ACCOUNTS.COL_CREDIT,
       ACCOUNTS.COL_SUCCESS,
       ACCOUNTS.COL_INFLIGHT,
+      '用量',
       ACCOUNTS.COL_HEALTH,
       ACCOUNTS.COL_EXPIRES,
       ACCOUNTS.COL_COOLDOWN,
@@ -396,6 +427,123 @@ describe('账号池屏 — 行内操作（M6b）', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe(`${ACCOUNTS.ACTION_ERR_PREFIX}该账号正在冷却，暂不能暂停`);
   });
+
+  it('禁用/启用（M10）：active 行点「禁用」→ POST /disable，快照翻 disabled 后按钮切「启用」', async () => {
+    let disabledNow = false;
+    const wireDisabled = {
+      ...ACCOUNTS_WIRE,
+      accounts: ACCOUNTS_WIRE.accounts.map((a) => (a.id === WB_ID ? { ...a, status: 'disabled' } : a)),
+    };
+    const fn = vi.fn(async (...args: unknown[]) => {
+      const url = String(args[0]);
+      if (url === '/api/accounts') {
+        return { ok: true, status: 200, json: async () => (disabledNow ? wireDisabled : ACCOUNTS_WIRE) };
+      }
+      if (url === '/api/usage') return { ok: true, status: 200, json: async () => USAGE_WIRE };
+      if (url === `/api/accounts/workbuddy:${WB_ID}/disable`) {
+        disabledNow = true;
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fn);
+    render(<AccountsScreen />);
+    const row = await findRow(WB_ID);
+    // active 行初始为「禁用」；qoder disabled 行初始为「启用」
+    fireEvent.click(within(row).getByRole('button', { name: '禁用' }));
+    const call = fn.mock.calls.find((c) => String(c[0]).endsWith('/disable'));
+    expect(call).toBeTruthy();
+    expect((call?.[1] as RequestInit).method).toBe('POST');
+    // 重拉后 status=disabled → 徽标「凭证失效」+ 按钮翻「启用」
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '启用' }).length).toBe(2));
+    const rowAfter = await findRow(WB_ID);
+    expect(within(rowAfter).queryByRole('button', { name: '禁用' })).toBeNull();
+  });
+
+  it('启用（M10）：disabled 行点「启用」→ POST /enable', async () => {
+    const fn = installFetch({
+      '/api/accounts': { body: ACCOUNTS_WIRE },
+      '/api/usage': { body: USAGE_WIRE },
+      [`/api/accounts/qoder:qd-deadbeef42/enable`]: { body: { ok: true } },
+    });
+    render(<AccountsScreen />);
+    const row = await findRow('qd-deadbeef42');
+    fireEvent.click(within(row).getByRole('button', { name: '启用' }));
+    await waitFor(() =>
+      expect(fn.mock.calls.some((c) => String(c[0]) === '/api/accounts/qoder:qd-deadbeef42/enable')).toBe(true),
+    );
+  });
+});
+
+describe('账号池屏 — M10-C wb2api 对齐（状态副行 / 用量徽章 / 到期相对 / 批量操作）', () => {
+  it('状态副行：status_note 非空 → 徽标下小字渲染；空串/缺失 → 无副行', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
+    render(<AccountsScreen />);
+    const wbRow = await findRow(WB_ID);
+    const note = wbRow.querySelector('.pool-status__note') as HTMLElement;
+    expect(note).toBeTruthy();
+    expect(note.textContent).toBe('429 rate limit');
+    // trae 旧形状（键缺失）与 qoder 空串 → 无副行
+    const traeRow = await findRow('tr-ffff00001111');
+    expect(traeRow.querySelector('.pool-status__note')).toBeNull();
+    const qoderRow = await findRow('qd-deadbeef42');
+    expect(qoderRow.querySelector('.pool-status__note')).toBeNull();
+  });
+
+  it('用量列（M10）：ShortID join 出四徽章；空对象/无记录 → 全 "—" 占位', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
+    render(<AccountsScreen />);
+    const wbRow = await findRow(WB_ID);
+    const badges = Array.from(wbRow.querySelectorAll('.pool-usage__badge')).map((b) => b.textContent);
+    // 2698次 · 463.6mtok · 49s · 40.6tok/s（wb2api 同式；tokens 百万级 → mtok 一位小数）
+    expect(badges).toEqual(['2,698次', '463.6mtok', '49s', '40.6tok/s']);
+    // qoder：键在场但全缺 → 四 "—"；trae：无记录 → 四 "—"
+    for (const id of ['qd-deadbeef42', 'tr-ffff00001111']) {
+      const row = await findRow(id);
+      const emptyBadges = Array.from(row.querySelectorAll('.pool-usage__badge')).map((b) => b.textContent);
+      expect(emptyBadges).toEqual(['—', '—', '—', '—']);
+    }
+  });
+
+  it('用量列降级：/api/usage 拉取失败 → 列全 "—"，账号池屏本体不受影响', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE } }); // 无 /api/usage 路由 → 抛 unexpected
+    render(<AccountsScreen />);
+    const wbRow = await findRow(WB_ID);
+    const badges = Array.from(wbRow.querySelectorAll('.pool-usage__badge')).map((b) => b.textContent);
+    expect(badges).toEqual(['—', '—', '—', '—']);
+  });
+
+  it('到期列（M10）：绝对日期 + 相对天数双值；无到期概念（0/缺失）→ —', async () => {
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
+    render(<AccountsScreen />);
+    const wbRow = await findRow(WB_ID);
+    const exp = wbRow.querySelector('.pool-exp') as HTMLElement;
+    expect(exp).toBeTruthy();
+    const label = expiryLabel(1790000000);
+    expect(exp.textContent).toContain(label?.date ?? '');
+    expect(exp.textContent).toContain(`（${label?.rel}）`);
+    // qoder expires_at=0 → 无到期概念 → —
+    const qoderRow = await findRow('qd-deadbeef42');
+    expect(qoderRow.querySelector('.pool-exp')).toBeNull();
+  });
+
+  it('批量操作（M10）：明细页卡头出现；总览页不出现（端点按平台）', async () => {
+    // 总览（无 platform）：无批量操作组
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
+    const { unmount } = render(<AccountsScreen />);
+    await findRow(WB_ID);
+    expect(document.querySelector('.pool-batch')).toBeNull();
+    unmount();
+    cleanup();
+    // 明细页（platform=workbuddy）：批量组在场且四键齐（含 travel）
+    installFetch({ '/api/accounts': { body: ACCOUNTS_WIRE }, '/api/usage': { body: USAGE_WIRE } });
+    render(<AccountsScreen platform="workbuddy" />);
+    await findRow(WB_ID);
+    const batch = document.querySelector('.pool-batch') as HTMLElement;
+    expect(batch).toBeTruthy();
+    const labels = Array.from(batch.querySelectorAll('button')).map((b) => b.textContent);
+    expect(labels).toEqual(['全部签到', '旅行巡检', '活跃上报', '全部保活']);
+  });
 });
 
 describe('账号池屏 — 错误态 / 空态 / 轮询', () => {
@@ -495,6 +643,35 @@ describe('relativeTime 相对时间（M6b 最近成功列）', () => {
     freezeAt(1_800_000_000);
     expect(relativeTime(1_800_000_000 - 86400)).toBe('1 天前');
     expect(relativeTime(1_800_000_000 - 86400 * 3)).toBe('3 天前');
+  });
+});
+
+describe('expiryLabel 到期双值（M10 到期列：绝对日期 + 相对天数）', () => {
+  /** 冻结时钟：unix 秒。 */
+  function freezeAt(sec: number) {
+    vi.useFakeTimers();
+    vi.setSystemTime(sec * 1000);
+  }
+
+  it('null/0 → null（调用方显示 —，不编造时间）', () => {
+    expect(expiryLabel(null)).toBeNull();
+    expect(expiryLabel(0)).toBeNull();
+  });
+
+  it('未来 3 天 → 本地 YYYY-MM-DD + 「3 天后」', () => {
+    const base = 1_800_000_000;
+    freezeAt(base);
+    const label = expiryLabel(base + 3 * 86_400);
+    expect(label).not.toBeNull();
+    expect(label?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(label?.rel).toBe('3 天后');
+  });
+
+  it('当天（不足一天）→ 「今天到期」；过去 2 天 → 「已过期 2 天」（不带负号）', () => {
+    const base = 1_800_000_000;
+    freezeAt(base);
+    expect(expiryLabel(base + 3600)?.rel).toBe('今天到期');
+    expect(expiryLabel(base - 2 * 86_400)?.rel).toBe('已过期 2 天');
   });
 });
 
