@@ -1043,3 +1043,16 @@ wb2api 行内按钮组的已签/余额两键落地（任务/暂停选号/删除�
 工具调用/视觉/流式三列几乎全是「支持」，三个列位零信息密度。收进模型名下：CapChip 徽章行（工具✓/视觉✗/流式—，sup 亮色/uns 灰/unk 灰三态不造假），表格 10 列 → 7 列（免费额度保留独立列）。样式入 panel.css（models-screen__caps/cap--sup|uns|unk）。测试同步：列序断言 7 列、qoder 未知态断言徽章「—」、显式 false 断言「✗」。352 前端用例全绿。
 
 - 运维注：本批浏览器验收时 IAB 点击通道连续超时（截图正常、input 超时）——改用页内 evaluate 派发 DOM click 过 React 卡片处理，验收不受阻。IAB 输入通道偶发失联是环境现象，不是面板缺陷。
+
+
+## 9.39 全量对抗性审查（2026-10-16，主人「全量审查、特别是对抗性」驱动；子 agent 配额 1308 打断后由本会话自查）
+
+四域并行审查 agent 全撞 5 小时限额，改由主会话定向自查（认证矩阵/凭据泄漏/输入面/并发与无界/SSE 状态机/前端红线）。
+
+**修复三项**：
+- **P0 packages/refresh 路由缺失**：前端「检查」按钮调 POST /api/packages/refresh，冻结契约给了前端却漏分派给后端——按钮 404。补齐（复用 GET 聚合的 4 并发礼貌上限，探测结果丢弃、返回 refreshed 计数 + errors 逐账号；单一读路径原则不破坏）。实测 {"refreshed":4,"errors":[]}。
+- **P1 Responses 工具循环第二轮 400**：input 对 function_call / function_call_output / reasoning 项直接拒绝——ZCode 这类 agent 第一轮工具调用后回传结果即断。映射：function_call→assistant tool_calls（call_id 键）、function_call_output→tool 消息（对象 payload 保真）、reasoning 丢弃。实测模型读到 "a.go b.go" 工具结果并继续对话。
+- **P2 流式迟到 delta 守卫**：finish_reason 之后上游若再吐 delta，会给客户端已见 done 的 item 重发事件——rsDone/msgDone 终止守卫，迟到 delta 丢弃。
+
+**查过无虞（对抗清单存档）**：面板全部 20+ 路由 withAPIKey 覆盖（含 M10 新增五端点）；usage accounts 聚合除零有守卫（DurationSec>0 才除，无 Inf 进 JSON）；error message 全链 200 字截断且只取上游业务信封 message（无 token 通道）；凭据日志旁路无命中（Printf/observability 参数审计）；auth 文件含 token 属设计（0600 + 临时文件 + rename 原子）；restore-defaults 连接四项保留代码验证；splitAccountID 冒号切分对怪输入只会 404 不会错位；sticky 键空间实际有界（caller×model，惰性 TTL）；batch-op 每账号 30s 预算 × 串行已文档化；前端 localStorage/sessionStorage/dangerouslySetInnerHTML 零命中；usage join 的 ShortID 前缀回落歧义风险记 P3（同前缀账号并存才触发）。
+**记档不修**：/api/packages GET 每次实时全量探测（面板 60s 轮询 × 4 账号，上游礼貌上限内）；双面板并发 batch-op 各自串行（上游 2×）；Responses 流式 usage 缺失（M8 挂账不变）。
