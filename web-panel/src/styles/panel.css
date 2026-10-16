@@ -1804,3 +1804,28 @@ input.add-account__input {
   border-color: var(--brand);
   color: var(--brand);
 }
+
+/* ---- 模型能力徽章行（工具/视觉/流式，收进模型名下） ---- */
+.models-screen__caps {
+  display: flex;
+  gap: var(--sp-1);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.models-screen__cap {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-border);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+.models-screen__cap--sup {
+  color: var(--accent, #2563eb);
+  border-color: var(--accent-border, #93b4f8);
+}
+.models-screen__cap--uns,
+.models-screen__cap--unk {
+  color: var(--text-dim, #8b93a7);
+}

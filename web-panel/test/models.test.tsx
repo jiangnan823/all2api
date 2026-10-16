@@ -106,13 +106,15 @@ describe('模型屏 — 表格内容与三态能力', () => {
     expect(row.textContent).toContain('支持');
   });
 
-  it('qoder 行能力字段缺失 → 「—」（未知），只有流式有据；不编造 yes/no', async () => {
+  it('qoder 行能力字段缺失 → 徽章「—」（未知），只有流式有据；不编造 yes/no', async () => {
     await renderReady();
     const row = [...document.querySelectorAll('tr[data-platform="qoder"]')].find(
       (r) => r.textContent?.includes('DeepSeek-V4-Pro'),
     )!;
-    expect(row.textContent).toContain('—');
-    expect((row.textContent?.match(/支持/g) ?? []).length).toBe(1); // 仅 supports_stream 一格
+    expect(row.textContent).toContain('工具—');
+    expect(row.textContent).toContain('视觉—');
+    expect(row.textContent).toContain('流式✓');
+    expect((row.textContent?.match(/✓/g) ?? []).length).toBe(1); // 仅流式徽章亮起
   });
 
   it('明确 false 如实渲染「不支持」，不粉饰', async () => {
@@ -128,7 +130,8 @@ describe('模型屏 — 表格内容与三态能力', () => {
       't-model',
     );
     const row = document.querySelector('tr[data-platform="trae"]')!;
-    expect(row.textContent).toContain('不支持');
+    expect(row.textContent).toContain('工具✗');
+    expect(row.textContent).not.toContain('工具✓');
   });
 
   it('note 附加说明原样展示（本地目录附注通道）', async () => {
@@ -222,13 +225,12 @@ describe('模型屏 — M8 实时目录列（积分倍率 / 思考档位）', ()
     ],
   };
 
-  it('积分倍率数字原样、思考档位数组 join；列序 = 平台/模型/倍率/档位/上下文/最大输出/工具/视觉/流式', async () => {
+  it('积分倍率数字原样、思考档位数组 join；列序 = 平台/模型/倍率/档位/上下文/最大输出/免费额度（能力收进徽章）', async () => {
     await renderReady({ '/api/models': { body: UPSTREAM_WIRE } }, 'deepseek-v4-flash');
     const head = [...document.querySelectorAll('thead th')].map((th) => th.textContent);
     expect(head).toEqual([
       MODELS.COL_PLATFORM, MODELS.COL_MODEL, MODELS.COL_CREDIT, MODELS.COL_TIERS,
-      MODELS.COL_CONTEXT, MODELS.COL_MAX_OUTPUT, MODELS.COL_TOOL, MODELS.COL_VISION,
-      MODELS.COL_STREAM, MODELS.COL_FREE,
+      MODELS.COL_CONTEXT, MODELS.COL_MAX_OUTPUT, MODELS.COL_FREE,
     ]);
     const row = document.querySelector('tr[data-platform="workbuddy"]')!;
     expect(row.textContent).toContain('0.05');
@@ -259,7 +261,7 @@ describe('模型屏 — M8 实时目录列（积分倍率 / 思考档位）', ()
     }, 'solo');
     const row = document.querySelector('tr[data-platform="workbuddy"]')!;
     expect(row.textContent).toContain('max');
-    expect(row.textContent).toContain('不支持');
+    expect(row.textContent).toContain('工具✗');
   });
 });
 

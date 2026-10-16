@@ -189,9 +189,6 @@ export function ModelsScreen() {
                 <th scope="col">{MODELS.COL_TIERS}</th>
                 <th scope="col">{MODELS.COL_CONTEXT}</th>
                 <th scope="col">{MODELS.COL_MAX_OUTPUT}</th>
-                <th scope="col">{MODELS.COL_TOOL}</th>
-                <th scope="col">{MODELS.COL_VISION}</th>
-                <th scope="col">{MODELS.COL_STREAM}</th>
                 <th scope="col">{MODELS.COL_FREE}</th>
               </tr>
             </thead>
@@ -210,14 +207,18 @@ export function ModelsScreen() {
                         {m.note !== null && m.note}
                       </span>
                     )}
+                    {/* 能力徽章行（主人验收：三列全「支持」没信息密度，收进模型名下）：
+                        ✓ 支持（亮）/ ✗ 不支持（灰）/ — 未声明（灰），三态不造假 */}
+                    <span className="models-screen__caps">
+                      <CapChip label="工具" state={m.supportsTool} />
+                      <CapChip label="视觉" state={m.supportsVision} />
+                      <CapChip label="流式" state={m.supportsStream} />
+                    </span>
                   </td>
                   <td className="models-screen__num">{m.creditMultiplier !== null ? String(m.creditMultiplier) : MODELS.UNKNOWN}</td>
                   <td>{m.thinkingTiers !== null ? m.thinkingTiers.join('/') : MODELS.UNKNOWN}</td>
                   <td className="models-screen__num">{m.contextSize !== null && m.contextSize > 0 ? m.contextSize.toLocaleString() : numOrUnknown(null)}</td>
                   <td className="models-screen__num">{numOrUnknown(m.maxOutput)}</td>
-                  <td>{triCopy(m.supportsTool)}</td>
-                  <td>{triCopy(m.supportsVision)}</td>
-                  <td>{triCopy(m.supportsStream)}</td>
                   <td>{triCopy(m.isFree)}</td>
                 </tr>
               ))}
@@ -238,6 +239,19 @@ function triCopy(v: boolean | null): string {
   if (v === true) return modelCapLabel('yes');
   if (v === false) return modelCapLabel('no');
   return MODELS.UNKNOWN;
+}
+
+/** 能力徽章：✓ 支持（亮）/ ✗ 不支持（灰）/ — 未声明（灰）。 */
+function CapChip(props: { label: string; state: boolean | null }) {
+  const { label, state } = props;
+  const mark = state === true ? '✓' : state === false ? '✗' : '—';
+  const mod = state === true ? 'sup' : state === false ? 'uns' : 'unk';
+  return (
+    <span className={`models-screen__cap models-screen__cap--${mod}`}>
+      {label}
+      {mark}
+    </span>
+  );
 }
 
 /** 目录来源行：三种诚实标注（upstream/local/mixed），未知值原样透传。 */
