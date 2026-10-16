@@ -182,7 +182,7 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 	// instructions is the Responses system prompt; it rides in front of the
 	// converted input so upstream sees the canonical message order.
 	if strings.TrimSpace(raw.Instructions) != "" {
-		msgs = append([]adapter.ChatMessage{{Role: "system", Content: json.RawMessage(mustJSON(raw.Instructions))}}, msgs...)
+		msgs = append([]adapter.ChatMessage{{Role: "system", Content: mustJSON(raw.Instructions)}}, msgs...)
 	}
 	effort := ""
 	if raw.Reasoning != nil {
