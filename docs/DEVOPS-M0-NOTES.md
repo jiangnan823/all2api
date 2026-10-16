@@ -1073,5 +1073,5 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 主人报 qoder/DeepSeek-Flash 失败。排查链：账号被上游 401/403 "Login expired" 自动禁用（fail 计数与 status 禁用联动正确）；换新 PAT（pt-3s0a…，20:25 面板录入）后**重启网关全新加载仍被拒**。决定性实验：编译参考实现 Qoder-2API-Go，同机同时刻用同一张 PAT 直打——参考实现连交换都过不了（`HTTP 401 personal token is invalid`），我方反而交换通过、进聊天流才被拒。**结论：上游判定该 PAT 无效，与网关实现无关**（参考实现拒绝得更早更干脆）。
 
 - 排查方法沉淀：**"用参考实现同输入复测"是最高效的实现vs凭证归因手段**——一次实验同时排除/坐实整条客户端链。
-- 待主人确认：PAT 来源页（CN qoder.com.cn vs 国际 qoder.com 站别要对上）、复制完整性（当前文件 64 字符）、账号是否有 OpenAPI 配额（两次配额探测均 0）。
+- **已确认（主人提供 PAT 来源页）**：PAT 生成于 `https://qoder.com/account/integrations` ——**国际站**。国际 OpenAPI 平面（openapi.qoder.sh）认这张令牌（交换+userinfo 成功），但 agent 对话端点只存在于 CN 网关（gateway.qoder.com.cn），且国际侧无同构对话域名（gateway.qoder.com DNS 不存在）。**qoder 对话当前仅支持 CN 站 PAT**；国际站令牌只能配额/用户信息。国际站对话 API 若存在，需抓包国际版 IDE 才能逆向——记入平台协议批研究项。
 - 附带发现：台账 20:05:59 的 6 连 0ms 错误 = 账号禁用期间的模型遍历秒 503；"Model request was cancelled" 是 ZCode 对「SSE 流中途断开」的包装措辞，根因同上。
