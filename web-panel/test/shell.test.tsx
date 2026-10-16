@@ -7,13 +7,14 @@ import { PanelApp } from '../src/app/PanelApp';
 import { CONNECT, NAV, PANEL } from '../src/i18n/zh';
 
 /**
- * 外壳门禁（M5b 信息架构重建 + M8-connect 恢复「连接」真屏）：axe 基线 + 六项可见中文页签导航
- * + 占位屏 + 主题切换的内存态承诺 + 接线批的安全红线自查。
- * 导航 = 账号池（首屏，挂 AccountsScreen）/ 任务中心 / 模型（并行批真实屏）/ 连接（挂 ConnectScreen）/
- * 配置（挂 SettingsScreen）/ 日志（挂 LogsScreen）。默认 fetch 桩永不 settle：各功能屏
- * / pill 各自钉在加载态——外壳断言不依赖各屏内部实现（各有专属测试文件）。
- * 安全扫描面 = 本批新增的入口层（src/app/PanelApp.tsx、src/main.tsx、index.html）；
- * freeze.test.ts 的 IMPL_DIRS 不含这几处，故红线在本文件自证，不动冻结测试。
+ * 外壳门禁（M5b 信息架构重建 + M8-connect 恢复「连接」真屏 + M10-A 任务中心退役）：
+ * axe 基线 + 五项可见中文页签导航 + 占位屏 + 主题切换的内存态承诺 + 接线批的安全红线自查。
+ * 导航 = 账号池（首屏，挂 AccountsScreen；平台明细页下挂 PlatformTasksCard 定时任务卡）/
+ * 模型（并行批真实屏）/ 连接（挂 ConnectScreen）/ 配置（挂 SettingsScreen）/ 日志（挂 LogsScreen）。
+ * 顶层不再有任务中心节（M10-A：任务随平台页走，配置页定时任务区同步下放）。
+ * 默认 fetch 桩永不 settle：各功能屏 / pill 各自钉在加载态——外壳断言不依赖各屏内部实现
+ * （各有专属测试文件）。安全扫描面 = 本批新增的入口层（src/app/PanelApp.tsx、src/main.tsx、
+ * index.html）；freeze.test.ts 的 IMPL_DIRS 不含这几处，故红线在本文件自证，不动冻结测试。
  */
 expect.extend(toHaveNoViolations);
 
@@ -30,22 +31,21 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
 });
 
-describe('外壳结构（M5b）', () => {
-  it('渲染标题、六项可见中文页签与 pill（首次探测未落定 = 未接线）', () => {
+describe('外壳结构（M5b → M10-A）', () => {
+  it('渲染标题、五项可见中文页签与 pill（首次探测未落定 = 未接线）；任务中心页签退役', () => {
     render(<PanelApp />);
     expect(screen.getByRole('heading', { level: 1, name: PANEL.TITLE })).toBeTruthy();
     expect(screen.getByText(PANEL.STATUS_UNWIRED)).toBeTruthy();
 
     const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
     const links = within(rail).getAllByRole('link');
-    // v1.2 二级菜单紧跟「账号池」项下方（主人裁定：子菜单必须贴近父项）
+    // v1.2 二级菜单紧跟「账号池」项下方（主人裁定：子菜单必须贴近父项）；M10-A 无任务中心页签
     expect(links.map((l) => l.querySelector('.shell__nav-text')?.textContent)).toEqual([
       NAV.ACCOUNTS,
       PANEL.ACC_OVERVIEW,
       'WorkBuddy',
       'Qoder',
       'Trae',
-      NAV.TASKS,
       NAV.MODELS,
       NAV.CONNECT,
       NAV.CONFIG,
@@ -53,6 +53,7 @@ describe('外壳结构（M5b）', () => {
     ]);
     expect(within(rail).getByRole('link', { name: NAV.ACCOUNTS })).toBeTruthy();
     expect(within(rail).getByRole('link', { name: NAV.LOGS })).toBeTruthy();
+    expect(within(rail).queryByRole('link', { name: '任务中心' })).toBeNull();
     for (const l of links) {
       // 页签文字可见（不再 hidden），可访问名 = 图标 aria-hidden 后的纯文字
       expect(l.textContent!.trim().length).toBeGreaterThan(0);
@@ -106,16 +107,24 @@ describe('导航与主题（键盘可达）', () => {
     expect(screen.getByText('正在读取网关配置…')).toBeTruthy();
   });
 
-  it('任务中心 / 模型两页签挂载真实屏（v1.2 集成，加载态）', () => {
+  it('模型页签挂载真实屏（v1.2 集成，加载态）；#tasks 锚点随任务中心退役', () => {
     render(<PanelApp />);
-    for (const [id, name, loading] of [
-      ['tasks', NAV.TASKS, '正在读取任务调度状态…'],
-      ['models', NAV.MODELS, '正在读取模型目录…'],
-    ] as const) {
-      fireEvent.click(screen.getByRole('link', { name }));
-      expect(document.getElementById(id)).toBeTruthy();
-      expect(screen.getByText(loading)).toBeTruthy();
-    }
+    fireEvent.click(screen.getByRole('link', { name: NAV.MODELS }));
+    expect(document.getElementById('models')).toBeTruthy();
+    expect(screen.getByText('正在读取模型目录…')).toBeTruthy();
+    expect(document.getElementById('tasks')).toBeNull();
+  });
+
+  it('M10-A：平台明细页 = AccountsScreen + PlatformTasksCard 上下组合（任务卡钉加载态）', () => {
+    render(<PanelApp />);
+    const rail = screen.getByRole('complementary', { name: PANEL.RAIL_ARIA });
+    fireEvent.click(within(rail).getByRole('link', { name: 'WorkBuddy' }));
+    // 账号表格照旧（池加载态 role=status），其下挂平台定时任务卡（标题 + 加载态）
+    expect(screen.getByRole('heading', { level: 3, name: '定时任务' })).toBeTruthy();
+    expect(screen.getByText('正在读取任务调度状态…')).toBeTruthy();
+    // 总览页不挂任务卡（回到总览后标题消失）
+    fireEvent.click(within(rail).getByRole('link', { name: PANEL.ACC_OVERVIEW }));
+    expect(screen.queryByRole('heading', { level: 3, name: '定时任务' })).toBeNull();
   });
 
   it('连接页签挂载 ConnectScreen（M8-connect：三卡外壳 + 双卡钉加载态）', () => {

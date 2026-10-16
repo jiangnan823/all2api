@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FieldError, ServerTimeResponse, ThrottleBudget } from '../types/api-contract';
-import { AdvancedToggle, ThrottleForm } from '../components';
+import { AdvancedToggle, ThrottleForm, TimeSlotPicker } from '../components';
 import {
   fetchConfigGroups,
   restoreDefaults,
@@ -21,19 +21,29 @@ import {
   type SourceDraft,
 } from '../lib/settingsModel';
 import { budgetDiff, setDeliveredThrottleFields, throttlePatchToConfigPatch } from '../lib/throttle';
-import { buildDailyCron, parseDailyHours } from '../lib/cronHours';
-import { CRON_FIELD, SETTINGS, settingsLine, sourceDisplayName } from '../i18n/zh';
+import { SETTINGS, settingsLine, sourceDisplayName } from '../i18n/zh';
 
 /**
- * 设置屏容器（M2 B2 → M2 第二批）：进入时并行拉 GET /api/config + GET /api/config/fields，
- * 按源装配 ThrottleForm（元数据驱动）与 AdvancedToggle（指纹开关，内含 DangerAction 确认），
- * 并按交付元数据渲染通用配置组（gateway/routing/pooling/schedule，值取 raw 透传）。
+ * 设置屏容器（M2 B2 → M2 第二批 → M10-A 定时任务区下放）：进入时并行拉 GET /api/config +
+ * GET /api/config/fields，按源装配 ThrottleForm（元数据驱动）与 AdvancedToggle（指纹开关，
+ * 内含 DangerAction 确认），并按交付元数据渲染通用配置组（gateway/routing/pooling，值取 raw
+ * 透传）。schedule 组（定时任务）M10-A 起下放到账号池各平台页（PlatformTasksCard），
+ * 本屏对交付元数据里的 schedule 组整组不渲染。cron 字段仍以共享 TimeSlotPicker（24 时点）
+ * 呈现——元数据里若还有其他 cron 字段照常可编辑。
  * 保存流（M2 第二批）：dirty 非空时「保存全部改动」激活 → POST /api/config（ConfigPatch，
  * 只发改动字段的冻结 JSON path）；成功按服务端回读 applied 重建基线，字段级拒绝逐条红字，
  * 401/404 等按真实错误码如实展示（后端保存端点并行开发中，不硬编码假成功）。
  * X-API-Key：内存态输入（M1 红线——不落任何 storage），粘贴即生效于后续全部请求，
  * 清空即回到开放模式；刷新丢失是预期行为，UI 文案如实说明。
  */
+
+/**
+ * M10-A：定时任务（schedule 组）下放到账号池各平台页（PlatformTasksCard 承接编辑面），
+ * 配置页整组摘除——在模型装配后统一过滤，drafts/dirty/保存补丁三处自然不含 schedule。
+ */
+function withoutScheduleGroup(model: SettingsModel): SettingsModel {
+  return { ...model, generic: model.generic.filter((s) => s.group !== 'schedule') };
+}
 
 type LoadState =
   | { phase: 'loading' }
@@ -69,7 +79,7 @@ export function SettingsScreen() {
     try {
       const [config, groups] = await Promise.all([fetchPanelConfig(), fetchConfigGroups()]);
       if (seq !== seqRef.current) return;
-      const model = buildSettingsModel(config, groups);
+      const model = withoutScheduleGroup(buildSettingsModel(config, groups));
       // 元数据成为 ThrottleForm 的字段数据源（props/视觉不变，见 lib/throttle.ts 注册表注释）
       setDeliveredThrottleFields(model.throttleFields);
       setState({ phase: 'ready', model });
@@ -190,7 +200,7 @@ export function SettingsScreen() {
       const res = await savePanelConfig(patch);
       if (res.ok && res.applied) {
         // 服务端回读为准：重建全部基线，包括 generic 值与 advanced/enabled（可能与其他写入方合流）
-        const next = buildSettingsModel(res.applied, await fetchConfigGroups());
+        const next = withoutScheduleGroup(buildSettingsModel(res.applied, await fetchConfigGroups()));
         setDeliveredThrottleFields(next.throttleFields);
         setState({ phase: 'ready', model: next });
         setDrafts(next.server);
@@ -223,7 +233,7 @@ export function SettingsScreen() {
     try {
       await restoreDefaults();
       const applied = await fetchPanelConfig();
-      const next = buildSettingsModel(applied, await fetchConfigGroups());
+      const next = withoutScheduleGroup(buildSettingsModel(applied, await fetchConfigGroups()));
       setDeliveredThrottleFields(next.throttleFields);
       setState({ phase: 'ready', model: next });
       setDrafts(next.server);
@@ -460,7 +470,8 @@ function GenericConfigSections(props: {
                         onChange={(e) => onChange(s.group, f.key, e.target.checked)}
                       />
                     ) : f.type === 'cron' ? (
-                      <CronHoursField
+                      /* M10-A 起 cron 字段的 24 时点选择 UI 为共享组件（PlatformTasksCard 同款） */
+                      <TimeSlotPicker
                         name={f.key}
                         value={typeof value === 'string' ? value : ''}
                         onChange={(expr) => onChange(s.group, f.key, expr)}
@@ -541,59 +552,5 @@ function ApiKeySection() {
       </span>
       <p className="settings-screen__apikey-note">{SETTINGS.APIKEY_NOTE}</p>
     </section>
-  );
-}
-
-/**
- * cron 字段的用户形态（v1.2 主人裁定"用户不该面对 cron 语法"）：24 小时制时点多选
- * （0–23 勾选，如 9,21）。挂载时解析既有表达式——每日 `0 h,h * * *` 形态给选择器，
- * 其他形态（分钟非 0/通配/步进）如实回落到原生文本框并标注原因；勾选变化即时换算
- * 回 cron 落草稿（后端契约不变，看到的仍是 cron 值）。未勾选任何时点时保存被拦截
- * （提示至少选一个），不提交非法空表达式。
- */
-function CronHoursField(props: { name: string; value: string; onChange: (expr: string) => void }) {
-  const parsed = parseDailyHours(props.value);
-  // 回落是“当前值的形状”决定的展示分支，无需独立状态：值变每日形态即回选择器。
-  const fallback = parsed === null && props.value !== '';
-
-  if (fallback || parsed === null) {
-    return (
-      <span className="cron-field cron-field--fallback">
-        <input
-          type="text"
-          name={props.name}
-          value={props.value}
-          onChange={(e) => props.onChange(e.target.value)}
-        />
-        <span className="settings-screen__generic-desc">
-          {fallback ? CRON_FIELD.FALLBACK_EDITED : CRON_FIELD.FALLBACK_SHAPE}
-        </span>
-      </span>
-    );
-  }
-
-  const toggle = (hour: number, on: boolean) => {
-    const next = on ? [...parsed, hour] : parsed.filter((h) => h !== hour);
-    if (next.length === 0) return; // 至少保留一个时点
-    props.onChange(buildDailyCron(next));
-  };
-
-  return (
-    <span className="cron-field">
-      <span className="cron-field__hours" role="group" aria-label={CRON_FIELD.HOURS_LABEL}>
-        {Array.from({ length: 24 }, (_, h) => (
-          <label key={h} className={`cron-field__hour${parsed.includes(h) ? ' cron-field__hour--on' : ''}`}>
-            <input
-              type="checkbox"
-              name={`${props.name}:${h}`}
-              checked={parsed.includes(h)}
-              onChange={(e) => toggle(h, e.target.checked)}
-            />
-            {String(h).padStart(2, '0')}
-          </label>
-        ))}
-      </span>
-      <span className="settings-screen__generic-desc">{CRON_FIELD.HOURS_HINT}</span>
-    </span>
   );
 }

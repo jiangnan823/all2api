@@ -204,13 +204,12 @@ export const PANEL = {
 } as const;
 
 /**
- * 左栏页签标签（M5b）。五项信息架构对齐参考控制台：账号池为首屏；
- * 「用量 / 积分构成」暂不做，不留死链接。TASKS / MODELS 命名空间归并行批（M5c）所有，
- * 本文件不得出现这两个命名空间。
+ * 左栏页签标签（M5b → M10-A 任务中心退役）。五项信息架构对齐参考控制台：账号池为首屏；
+ * 「用量 / 积分构成」暂不做，不留死链接。定时任务随账号池各平台页走（PlatformTasksCard），
+ * 顶层不再有任务中心页签。
  */
 export const NAV = {
   ACCOUNTS: '账号池',
-  TASKS: '任务中心',
   MODELS: '模型',
   CONNECT: '连接',
   CONFIG: '配置',
@@ -405,17 +404,16 @@ export const CONFIG_FIELD_COPY: Record<string, string> = {
   'config.field.credit_floor.label': '额度下限',
   'config.field.max_retries.label': '最大重试',
   'config.field.pool_cooldown_sec.label': '池冷却时长',
-  'config.field.signin_cron.label': '签到定时',
-  'config.field.task_cron.label': '任务定时',
-  'config.field.token_keepalive_cron.label': '凭证保活定时',
+  // M10-A：signin_cron / task_cron / token_keepalive_cron 三条定时任务文案键随定时任务区
+  // 下放账号池各平台页（PlatformTasksCard 用 TASKS 命名空间）而删除，配置页不再渲染。
 };
 
-/** 通用配置组标题（组名 = 后端 configfields.go 交付的 group 字段，未识别组原样显示）。 */
+/** 通用配置组标题（组名 = 后端 configfields.go 交付的 group 字段，未识别组原样显示）。
+ *  M10-A：schedule（定时任务）组下放账号池各平台页，配置页整组不渲染，标题键随之删除。 */
 export const CONFIG_GROUP_TITLES: Record<string, string> = {
   gateway: '网关',
   routing: '路由',
   pooling: '池化',
-  schedule: '定时任务',
 };
 
 export function configFieldCopy(copyKey: string): string {
@@ -443,17 +441,20 @@ export function configUnitCopy(unit: string | undefined, fieldKey: string): stri
 }
 
 /**
- * 任务中心屏（M5c）。全部为**新增键**，不改动上方任何冻结段（并行批在同文件改
- * NAV/ACCOUNTS/LOGS 命名空间，本块独立追加）。边界如实：手动触发端点不存在
- * （仅账号级 recover），文案明示只读，不渲染假按钮。
+ * 平台定时任务卡（M10-A，任务中心拆散进账号池各平台页后的 TASKS 命名空间）。
+ * 全部为新增/改写键，不改动上方任何冻结段。消费方 PlatformTasksCard：每平台一卡，
+ * 每任务一行 = 任务名 + 24 小时时点选择器 + 启用徽标；调度值读写冻结配置键
+ * （signin_cron_{platform} / task_cron_{platform} / token_keepalive_{platform} / cat_travel_cron）。
+ * 边界如实：只做调度编辑，无手动触发端点（仅账号级修复），不渲染执行按钮；启用状态为网关实况只读。
  */
 export const TASKS = {
+  TITLE: '定时任务',
   LOADING: '正在读取任务调度状态…',
   ERROR_TITLE: '任务状态读取失败',
   ERROR_HINT: '面板与网关同源部署。请确认网关进程在运行、api_key 配置一致，然后重试。',
   RETRY: '重试',
-  /** 顶部诚实说明行：本屏只读 + 无手动触发端点。 */
-  NOTE: '任务由网关定时自动调度，面板只读展示；手动触发接口未提供（仅账号级修复可用）。',
+  /** 顶部诚实说明行：本卡只调调度时点 + 无手动触发端点 + 启用状态只读。 */
+  NOTE: '任务由网关定时自动调度，此页只调整每天几点跑；启用状态是网关实况；手动触发接口未提供（仅账号级修复可用）。',
   COUNT: '已注册 {count} 个定时任务',
   REFRESH: '刷新',
   EMPTY: '网关没有注册任何定时任务。',
@@ -461,13 +462,17 @@ export const TASKS = {
   ENABLED_ON: '已启用',
   ENABLED_OFF: '已停用',
   CRON_LABEL: '调度周期',
-  LAST_RUN_TITLE: '最近一次运行',
-  NEVER_RUN: '尚未运行',
-  STAT_TOTAL: '总数',
-  STAT_SUCCESS: '成功',
-  STAT_FAILED: '失败',
-  STAT_SKIPPED: '跳过',
-  RAN_AT: '运行时间：{at}',
+  /** 未知任务名（无冻结配置键）→ 只读行如实回显，不发明键名。 */
+  UNKNOWN_TASK: '未知任务，暂无可编辑的调度时点。',
+  /** 保存流（与配置页同一 POST /api/config，只发改动的冻结键）。 */
+  SYNCED: '调度与网关生效配置一致。',
+  DIRTY: '{count} 处调度改动未保存',
+  SAVE: '保存调度改动',
+  SAVING: '正在保存…',
+  SAVE_OK: '已保存，展示的是网关回读后的生效调度。',
+  SAVE_FAILED: '保存失败：{detail}',
+  SAVE_REJECTED_TITLE: '保存被网关拒绝（逐字段）',
+  DISCARD: '放弃改动',
 } as const;
 
 /** 任务名 → 中文名（未知任务名回退原始标识，如实可追溯）。 */
@@ -541,10 +546,15 @@ export function modelCapLabel(v: 'yes' | 'no'): string {
   return v === 'yes' ? '支持' : '不支持';
 }
 
-/** v1.2：cron 字段的 24 小时制时点选择（主人裁定——用户不面对 cron 语法）。 */
+/**
+ * v1.2：cron 字段的 24 小时制时点选择（主人裁定——用户不面对 cron 语法）。
+ * M10-A 起文案由共享组件 TimeSlotPicker 消费（配置页通用组 + 平台任务卡两处）。
+ */
 export const CRON_FIELD = {
-  HOURS_LABEL: '运行时点（24 小时制，勾选即生效）',
+  HOURS_LABEL: '运行时点（24 小时制）',
   HOURS_HINT: '勾选每天运行的小时；保存后自动转成调度表达式。',
+  /** 回落文本框的可访问名（axe label 规则：输入框必须有可读标签）。 */
+  FALLBACK_LABEL: '调度表达式（原始 cron）',
   FALLBACK_SHAPE: '该表达式不是"每日整点"形态，已回落为原始表达式编辑（懂 cron 可直接改）。',
   FALLBACK_EDITED: '已手动修改为非每日形态，已回落为原始表达式编辑。',
 } as const;
