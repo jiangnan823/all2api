@@ -109,7 +109,8 @@ function buildBaseline(tasks: TaskEntry[], platform: TaskPlatform, config: Panel
     if (t.platform !== platform) continue;
     const key = taskConfigKey(t.name, platform);
     if (key === null) continue;
-    baseline[key] = scheduleValue(config, key) ?? t.cron;
+    // 平台键空串 = 回落全局（B2 语义），编辑基线同样回落任务实况 cron——?? 不跳空串，用 ||。
+    baseline[key] = scheduleValue(config, key) || t.cron;
   }
   return baseline;
 }
