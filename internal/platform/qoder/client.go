@@ -366,7 +366,7 @@ func (s *senderImpl) exchangeREST(ctx context.Context, pat string) (*jobToken, e
 	} else if t, perr := time.Parse(time.RFC3339, er.ExpiresAt); perr == nil {
 		jt.ExpireAtMs = t.UnixMilli()
 	}
-	s.enrichUserinfo(ctx, jt)
+	s.enrichUserinfo(ctx, s.openapiBase(), jt)
 	return jt, nil
 }
 
@@ -423,7 +423,10 @@ func (s *senderImpl) exchangeDevice(ctx context.Context, st *acctState, deviceTo
 	} else if t, perr := time.Parse(time.RFC3339, er.ExpiresAt); perr == nil {
 		jt.ExpireAtMs = t.UnixMilli()
 	}
-	s.enrichUserinfo(ctx, jt)
+	// com.cn plane: device jt- tokens are only valid here (.sh userinfo
+	// rejects them with TOKEN_EXPIRE, which used to leave the session uid
+	// empty and the chat gateway rejecting every signed request with 101).
+	s.enrichUserinfo(ctx, prodOpenAPICNBase, jt)
 	return jt, nil
 }
 
@@ -431,8 +434,8 @@ func (s *senderImpl) exchangeDevice(ctx context.Context, st *acctState, deviceTo
 // jobToken). Best-effort: the legacy exchange carried these fields, the REST
 // one does not, and an empty uid degrades the session (chat still signs,
 // /user/status resolution is skipped).
-func (s *senderImpl) enrichUserinfo(ctx context.Context, jt *jobToken) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.openapiBase()+pathRESTUserinfo, nil)
+func (s *senderImpl) enrichUserinfo(ctx context.Context, base string, jt *jobToken) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+pathRESTUserinfo, nil)
 	if err != nil {
 		return
 	}

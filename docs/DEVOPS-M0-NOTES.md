@@ -1110,3 +1110,17 @@ M10-C 挂载双卡时没分平台：积分到期提醒卡（WorkBuddy 专属面�
 - **官方成功对话的请求体未捕获**——桌面版完成流绕过系统代理与 hosts（两路抓包均无），netstat 探测器本轮失效（解析问题待修）。下一轮：修探测器 → 主人在桌面版成功完成一次对话 → netstat 找到真实完成端点 → 针对该端点布抓包 → 解码官方请求体逐字段对齐。
 
 **环境还原确认**：系统代理关、hosts 摘除、mitmdump 停、Qoder 正常重启、网关 healthz 200。mitmproxy CA 留存机器+用户根库。WorkBuddy 主链不受影响。
+
+
+## 9.44 qoder 对话修复完成：设备令牌全链打通（2026-10-17 凌晨，§9.43 的完成流挂起收尾）
+
+**根因（最后一个）**：`enrichUserinfo` 打在 .sh 平面——设备会话的 jt-（com.cn 签发）在 .sh userinfo 被 401 TOKEN_EXPIRE 拒绝 → uid 空 → 机器签名 user/status 跳过 → 会话未在网关注册 → 聊天被 101 "Signature invalid" 拒。修复：设备交换的 userinfo 改走 com.cn（PAT 交换仍走 .sh），uid 即回填（实测 uid 与官方请求 Cosy-User 头完全一致）。
+
+**实测（直连真实上游）**：`qoder/DeepSeek-Flash` 非流式 200 "OK"（0.95s）；`qoder/GLM-5.2` 流式 SSE 正常。**qoder 对话全链复活**。
+
+**运维口径（重要）**：
+- qoder 凭证 = `auths/qoder-device.json`（dt- 设备令牌 + clientId，来自桌面版登录态，抓包提取）。dt- 在桌面版重新登录时轮换——若日后 qoder 对话再报 auth，重抓一次 dt- 更新该文件并重启网关即可（抓包工具链 §9.42/§9.43 已备好，一条命令的事）。
+- 设备令牌与 PAT 并存：PAT（pt-）仅 OpenAPI 查询面；对话能力只在设备令牌。旧 PAT 账号已从池中移除。
+- 抓包环境已全部还原（代理/hosts/mitmdump/Qoder 正常重启）。
+
+方法学归档：**"官方客户端同输入复测"归因 + "解码官方请求体逐字段 diff"对齐**，是协议逆向的两板斧；mitmproxy 反代截 SSE 必须 `--set stream_large_bodies`/流式转发意识——默认缓冲会让长流"看似挂起"（§9.42 的"挂起"实为截获伪象与 101 并存）。
