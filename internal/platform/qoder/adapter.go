@@ -75,7 +75,7 @@ func (a *Adapter) CredentialStatus() (*adapter.CredentialInfo, error) {
 // falls back to the static display-name table whenever the live fetch fails
 // (no credentialled session yet, upstream down, shape drift).
 func (a *Adapter) ListModels(ctx context.Context) ([]*adapter.ModelInfo, error) {
-	if rows, err := a.senderImpl.liveModelInfos(ctx); err == nil && len(rows) > 0 {
+	if rows, err := a.liveModelInfos(ctx); err == nil && len(rows) > 0 {
 		return rows, nil
 	}
 	out := make([]*adapter.ModelInfo, 0, len(defaultModelMap))

@@ -138,7 +138,7 @@ func truthy(v any) bool {
 	case bool:
 		return x
 	case string:
-		return !(x == "false" || x == "0" || x == "FALSE")
+		return x != "false" && x != "0" && x != "FALSE"
 	case float64:
 		return x != 0
 	default:
