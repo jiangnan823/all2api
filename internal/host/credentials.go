@@ -48,12 +48,12 @@ const QoderPlatform = "qoder"
 
 // auth file naming: workbuddy-<uid>.json plus the qoder PAT file.
 const (
-	authFilePrefix = "workbuddy-"
-	authFileSuffix = ".json"
-	qoderPatFile   = "qoder-pat.txt"
+	authFilePrefix    = "workbuddy-"
+	authFileSuffix    = ".json"
+	qoderPatFile      = "qoder-pat.txt"
 	qoderDeviceFile   = "qoder-device.json"
 	qoderDevicePrefix = "dt-"
-	qoderPatPrefix = "pt-"
+	qoderPatPrefix    = "pt-"
 )
 
 // fileCred is one loaded credential snapshot plus the auth-file path for

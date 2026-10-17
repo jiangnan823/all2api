@@ -70,13 +70,13 @@ const (
 // Wire paths. Auth-family paths carry the machine signature; the REST paths
 // carry plain JSON or a Bearer jobToken.
 const (
-	pathChat         = "/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
-	pathJobToken     = "/algo/api/v3/user/jobToken?Encode=1" // #nosec G101 -- endpoint path, not credential material
-	pathUserStatus   = "/algo/api/v3/user/status?Encode=1"
-	pathRESTExchange = "/api/v1/jobToken/exchange"
-	pathDeviceJobToken = "/api/v1/me/jobToken" // desktop-app device-token exchange (official client)
-	pathRESTUserinfo = "/api/v1/userinfo"
-	pathQuotaUsage   = "/api/v2/quota/usage"
+	pathChat           = "/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
+	pathJobToken       = "/algo/api/v3/user/jobToken?Encode=1" // #nosec G101 -- endpoint path, not credential material
+	pathUserStatus     = "/algo/api/v3/user/status?Encode=1"
+	pathRESTExchange   = "/api/v1/jobToken/exchange"
+	pathDeviceJobToken = "/api/v1/me/jobToken" // #nosec G101 -- endpoint path, not credential material
+	pathRESTUserinfo   = "/api/v1/userinfo"
+	pathQuotaUsage     = "/api/v2/quota/usage"
 )
 
 // Session renewal bounds, mirroring the reference bridge: renew 2h before the
