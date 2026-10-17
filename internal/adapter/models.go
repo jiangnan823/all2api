@@ -205,12 +205,12 @@ type CredentialInfo struct {
 
 // ModelInfo represents a model available on a platform. Used by P4 panel view.
 type ModelInfo struct {
-	ID              string   `json:"id"`               // full name: "platform/model_name" (e.g. "workbuddy/deepseek-v4-flash")
-	Name            string   `json:"name"`             // display name (e.g. "DeepSeek V4 Flash")
-	ContextSize     int      `json:"context_size"`     // max context window tokens
-	SupportsTool    bool     `json:"supports_tool"`    // supports tool_calls
-	SupportsStream  bool     `json:"supports_stream"`  // supports streaming responses
-	IsFree          bool     `json:"is_free"`          // available via free quota
+	ID              string   `json:"id"`                // full name: "platform/model_name" (e.g. "workbuddy/deepseek-v4-flash")
+	Name            string   `json:"name"`              // display name (e.g. "DeepSeek V4 Flash")
+	ContextSize     int      `json:"context_size"`      // max context window tokens
+	SupportsTool    bool     `json:"supports_tool"`     // supports tool_calls
+	SupportsStream  bool     `json:"supports_stream"`   // supports streaming responses
+	IsFree          bool     `json:"is_free"`           // available via free quota
 	MaxOutputTokens int      `json:"max_output_tokens"` // completion cap; 0 = catalog did not publish
 	SupportsVision  bool     `json:"supports_vision"`   // image input; false = not published (panel falls back to its static table)
 	ThinkingTiers   []string `json:"thinking_tiers"`    // reasoning tiers when the catalog publishes them
