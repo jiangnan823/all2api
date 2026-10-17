@@ -330,9 +330,10 @@ func buildModelRows(ctx context.Context, cat upstreamCatalog, refresh bool) ([]m
 				if m == nil {
 					continue
 				}
-				// The static table names models, marks streaming, and
-				// declares vision for the known rows (qoderVisionModels);
-				// every other fact stays null (undeclared, not false).
+				// The static table names models and marks streaming; the live
+				// catalog (ListModels, when the device session is available)
+				// additionally carries context/output caps and vision. Facts
+				// neither source publishes stay null (undeclared, not false).
 				stream := m.SupportsStream
 				row := modelWire{
 					Platform:       "qoder",
@@ -342,8 +343,19 @@ func buildModelRows(ctx context.Context, cat upstreamCatalog, refresh bool) ([]m
 					Model:          strings.TrimPrefix(m.ID, "qoder/"),
 					SupportsStream: &stream,
 				}
-				if v, ok := qoderVisionModels[m.Name]; ok {
+				if m.ContextSize > 0 {
+					row.ContextSize = &m.ContextSize
+				}
+				if m.MaxOutputTokens > 0 {
+					row.MaxOutput = &m.MaxOutputTokens
+				}
+				if m.SupportsVision {
+					row.SupportsVision = &m.SupportsVision
+				} else if v, ok := qoderVisionModels[m.Name]; ok {
 					row.SupportsVision = &v
+				}
+				if len(m.ThinkingTiers) > 0 {
+					row.ThinkingTiers = m.ThinkingTiers
 				}
 				resp.Models = append(resp.Models, row)
 			}

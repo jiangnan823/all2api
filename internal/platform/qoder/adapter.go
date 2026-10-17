@@ -70,7 +70,14 @@ func (a *Adapter) CredentialStatus() (*adapter.CredentialInfo, error) {
 
 // ListModels returns the static fallback catalog (display-name → qoder key
 // snapshot). A dynamic model/list fetch is not wired yet.
+// ListModels prefers the live model/list catalog (per-model context window,
+// completion cap, vision — the same metadata the desktop client reads) and
+// falls back to the static display-name table whenever the live fetch fails
+// (no credentialled session yet, upstream down, shape drift).
 func (a *Adapter) ListModels(ctx context.Context) ([]*adapter.ModelInfo, error) {
+	if rows, err := a.senderImpl.liveModelInfos(ctx); err == nil && len(rows) > 0 {
+		return rows, nil
+	}
 	out := make([]*adapter.ModelInfo, 0, len(defaultModelMap))
 	for _, name := range modelDisplayNames() {
 		out = append(out, &adapter.ModelInfo{

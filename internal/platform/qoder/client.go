@@ -169,6 +169,7 @@ type acctState struct {
 	refreshMu sync.Mutex // serializes renewal network calls
 	cur       atomic.Pointer[sessionData]
 	slots     chan struct{}
+	credToken string // last resolved credential string (dt- or pt-); catalog fetch reuses it
 }
 
 // sessionData is the immutable snapshot swapped in on every (re)bootstrap.
@@ -281,8 +282,10 @@ func (s *senderImpl) patFor(ctx context.Context, acct *pool.Account) (string, er
 	st := s.state(acct.ID)
 	st.clientID = cred.ClientID
 	if cred.DeviceToken != "" {
+		st.credToken = cred.DeviceToken
 		return cred.DeviceToken, nil
 	}
+	st.credToken = cred.PAT
 	if cred.PAT == "" {
 		return "", &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: account " + acct.ID + " has no PAT"}
 	}
