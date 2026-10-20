@@ -30,11 +30,12 @@ const (
 
 // Config for a single source's circuit breaker.
 type Config struct {
-	CooldownSec         int64   `json:"cooldown_sec"`         // base cooldown duration
-	SoftRateMax         int64   `json:"soft_rate_max"`        // max 429s before escalation
-	ConsecutiveFailures int     `json:"consecutive_failures"` // threshold for circuit open
-	BackoffMultiplier   float64 `json:"backoff_multiplier"`   // exponential backoff factor
-	InitialBackoffSec   int64   `json:"initial_backoff_sec"`  // initial exponential backoff start
+	CooldownSec         int64   `json:"cooldown_sec"`          // base cooldown duration
+	SoftRateMax         int64   `json:"soft_rate_max"`         // max 429s before escalation
+	ConsecutiveFailures int     `json:"consecutive_failures"`  // threshold for circuit open
+	BackoffMultiplier   float64 `json:"backoff_multiplier"`    // exponential backoff factor
+	InitialBackoffSec   int64   `json:"initial_backoff_sec"`   // initial exponential backoff start
+	TripAutoRecoverSec  int64   `json:"trip_auto_recover_sec"` // consecutive-failure trip window before a half-open probe
 }
 
 // DefaultConfig returns sensible defaults matching Panel behavior.
@@ -45,6 +46,7 @@ func DefaultConfig() Config {
 		ConsecutiveFailures: 5,
 		BackoffMultiplier:   2.0,
 		InitialBackoffSec:   60,
+		TripAutoRecoverSec:  1800,
 	}
 }
 
@@ -58,7 +60,6 @@ type Breaker struct {
 	failures      int
 	rateLimitHits int // consecutive 429 count — sole backoff exponent (P2: not polluted by 404/5xx failures)
 	nextReset     time.Time
-	noAutoRecover bool                     // set by trip(): stays open until Reset()
 	accountState  map[string]*AccountState // optional per-account tracking
 }
 
@@ -72,6 +73,9 @@ type AccountState struct {
 
 // NewBreaker creates a new circuit breaker for the given source.
 func NewBreaker(source string, cfg Config) *Breaker {
+	if cfg.TripAutoRecoverSec <= 0 {
+		cfg.TripAutoRecoverSec = DefaultConfig().TripAutoRecoverSec
+	}
 	return &Breaker{
 		config:       cfg,
 		state:        StateClosed,
@@ -89,9 +93,6 @@ func (b *Breaker) Allow() bool {
 	case StateClosed:
 		return true
 	case StateOpen:
-		if b.noAutoRecover {
-			return false // tripped: stays open until manual Reset()
-		}
 		deadline := b.nextReset
 		if deadline.IsZero() {
 			deadline = b.openedAt.Add(time.Duration(b.config.CooldownSec) * time.Second)
@@ -174,7 +175,6 @@ func (b *Breaker) Reset() {
 	b.rateLimitHits = 0
 	b.reason = ""
 	b.nextReset = time.Time{}
-	b.noAutoRecover = false
 }
 
 // State returns current breaker state.
@@ -234,12 +234,19 @@ func (b *Breaker) hardCooldown(until time.Time) {
 	b.reason = ReasonQuotaExhausted
 }
 
-// trip opens the circuit until manually reset.
+// trip opens the circuit after consecutive upstream failures. The window is
+// bounded (TripAutoRecoverSec, 30min default): an unattended gateway must
+// probe its way back after a transient upstream blip. The 2026-10-21
+// incident had one ~30-second workbuddy hiccup at 03:05 park the platform
+// behind a permanently open circuit for six hours because nothing but a
+// manual recover could clear the latch. A half-open probe that succeeds
+// closes the circuit (Record's 2xx path); five fresh consecutive failures
+// re-trip it. Sources that must stay off have sources.<id>.enabled:false —
+// the breaker is the wrong tool for a manual off-switch.
 func (b *Breaker) trip(reason Reason) {
 	b.state = StateOpen
 	b.openedAt = time.Now()
-	b.nextReset = time.Time{}
-	b.noAutoRecover = true
+	b.nextReset = b.openedAt.Add(time.Duration(b.config.TripAutoRecoverSec) * time.Second)
 	b.reason = reason
 	b.failures = 0 // reset counter on trip
 }

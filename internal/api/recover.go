@@ -2,11 +2,12 @@ package api
 
 // POST /api/accounts/{id}/recover — PM seq=445 ruling 1, bound to TC-M1-034.
 //
-// User-initiated exit for tripped (noAutoRecover) source circuits. The
-// semantics are strictly ordered: validate credentials via the adapter's
+// User-initiated, immediate exit for tripped source circuits (consecutive
+// failures otherwise self-recover after the breaker's bounded trip window).
+// The semantics are strictly ordered: validate credentials via the adapter's
 // HealthCheck FIRST; only a healthy credential may reset the source circuit
-// (which clears failures/rateLimitHits/noAutoRecover) and lift the account's
-// pool cooldown. There is no naked Reset endpoint — Reset() is reachable only
+// (which clears failures/rateLimitHits) and lift the account's pool
+// cooldown. There is no naked Reset endpoint — Reset() is reachable only
 // behind credential verification.
 //
 // Account id is source-namespaced: "{source}:{accountID}" (UI §task-ID
@@ -97,9 +98,10 @@ func handleRecover(h *host.Host) http.HandlerFunc {
 			return
 		}
 
-		// Verification passed: Reset clears failures, rateLimitHits and the
-		// noAutoRecover latch (the tripped-circuit exit the PM ruling asked
-		// for). The pool side only lifts cooldowns — a manually disabled
+		// Verification passed: Reset clears failures and rateLimitHits and
+		// closes the circuit immediately (the tripped-circuit exit the PM
+		// ruling asked for — without it the caller would wait out the trip
+		// window). The pool side only lifts cooldowns — a manually disabled
 		// account stays disabled (pool.RecoverAccount never overrides that).
 		br.Reset()
 		poolRecovered := h.Pool.RecoverAccount(source, accountID)
