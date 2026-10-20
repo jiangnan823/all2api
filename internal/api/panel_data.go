@@ -142,7 +142,9 @@ func handleAccounts(h *host.Host) http.HandlerFunc {
 				w := accountFromPool(acc)
 				w.Nickname = h.Creds.NicknameFor(acc.Platform, acc.ID)
 				resp.Accounts = append(resp.Accounts, w)
-				switch acc.Status {
+				// EffectiveStatus, not the stored field: an expired cooldown
+				// must not keep showing (and counting) as cooling.
+				switch acc.EffectiveStatus() {
 				case "cooling":
 					resp.Cooling++
 				case "disabled":
@@ -172,7 +174,7 @@ func accountFromPool(acc pool.Account) accountWire {
 	return accountWire{
 		Platform:     acc.Platform,
 		ID:           acc.ID,
-		Status:       acc.Status,
+		Status:       acc.EffectiveStatus(),
 		Credit:       acc.Credit,
 		Health:       acc.Health,
 		ExpiresAt:    timeLocalPtr(acc.ExpiresAt),

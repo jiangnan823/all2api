@@ -60,6 +60,20 @@ func (a *Account) IsCooling() bool {
 	return !a.CooldownEnd.IsZero() && time.Now().Before(a.CooldownEnd)
 }
 
+// EffectiveStatus is the live view of Status: a "cooling" account whose
+// cooldown window has closed reads as "active". Nothing resets the stored
+// string when the window ends, so gating selection on the raw field kept an
+// account out of rotation forever after its first rate-limit cooldown —
+// with a single-account platform that was a permanent 503 wall until a
+// manual recover or process restart. "disabled" (manual switch or
+// auth_error) is a stored decision, not a window, and survives verbatim.
+func (a *Account) EffectiveStatus() string {
+	if a.Status == "cooling" && !a.IsCooling() {
+		return "active"
+	}
+	return a.Status
+}
+
 // TriggerCooldown sets the cooldown end time (no recorded cause — use
 // TriggerCooldownReason when the trigger is known).
 func (a *Account) TriggerCooldown(dur time.Duration) {
@@ -162,7 +176,7 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 	// Collect eligible accounts (credit >= floor, not cooling, not disabled)
 	var candidates []*Account
 	for _, acc := range platformMap {
-		if acc.Status != "active" {
+		if acc.EffectiveStatus() != "active" {
 			continue
 		}
 		if acc.Credit < s.creditFloor {
@@ -261,7 +275,7 @@ func (s *WeightedRandomSelector) LeaseIfEligible(platform, accountID string) *Ac
 	if !ok {
 		return nil
 	}
-	if acc.Status != "active" || acc.Credit < s.creditFloor || acc.IsCooling() || acc.Paused {
+	if acc.EffectiveStatus() != "active" || acc.Credit < s.creditFloor || acc.IsCooling() || acc.Paused {
 		return nil
 	}
 	if _, leased := s.leases[acc.ID]; leased {
