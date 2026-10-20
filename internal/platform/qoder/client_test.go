@@ -738,6 +738,41 @@ func TestInStreamBusyClassifiesRateLimited(t *testing.T) {
 	}
 }
 
+// TestInStreamWrappedBusyClassifiesRateLimited pins the double-wrapped shape
+// seen in production: a 403 frame whose body is a {"code":"403",...} envelope
+// with the real 10605 rejection stringified inside its message field. Before
+// busyFromBody learned to unwrap, this classified as auth_expired and burned
+// a valid credential.
+func TestInStreamWrappedBusyClassifiesRateLimited(t *testing.T) {
+	u := &stubUpstream{jt: "jt-fake-1", jrt: "jrt-fake-1"}
+	u.chat = []chatReply{{sse: "data: " + mustJSON(map[string]any{
+		"body":            `{"code":"403","message":"{\"code\":\"10605\",\"message\":\"{\\\"isQueued\\\":true,\\\"modelKey\\\":\\\"dfmodel\\\",\\\"retryAfterSeconds\\\":30,\\\"serviceAvailable\\\":true,\\\"waitTime\\\":30}\"}"}`,
+		"statusCode":      "FORBIDDEN",
+		"statusCodeValue": 403,
+	}) + "\n\n"}}
+	s := newSender(t, u)
+
+	chunks, errCh, err := s.SendChatStream(httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/chat/completions", strings.NewReader("{}")).Context(),
+		testAccount(), chatReq("GLM-5.3"))
+	if err != nil {
+		t.Fatalf("SendChatStream: %v", err)
+	}
+	for range chunks {
+	}
+	select {
+	case err := <-errCh:
+		var ue *adapter.UpstreamError
+		if !errors.As(err, &ue) || ue.Reason != adapter.ReasonRateLimited {
+			t.Fatalf("in-stream err = %v, want rate_limited", err)
+		}
+		if !strings.Contains(ue.Message, "gateway busy (10605)") || !strings.Contains(ue.Message, "retry after 30s") {
+			t.Errorf("message = %q, want busy 10605 with the 30s retry hint", ue.Message)
+		}
+	default:
+		t.Fatal("no in-stream error delivered")
+	}
+}
+
 func TestTruncatedStreamFails(t *testing.T) {
 	u := &stubUpstream{jt: "jt-fake-1", jrt: "jrt-fake-1"}
 	u.chat = []chatReply{{sse: envFrame(`{"choices":[{"index":0,"delta":{"content":"cut"},"finish_reason":null}]}`)}}

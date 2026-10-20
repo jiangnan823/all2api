@@ -25,7 +25,8 @@ import (
 
 // busyCode is the gateway's business code for queue/admission-control
 // rejections. It rides HTTP 401/403 envelopes (and in-stream frames with a
-// matching statusCodeValue) even though the session is perfectly valid:
+// matching statusCodeValue) even though the session is perfectly valid —
+// sometimes re-wrapped one level deep inside the 403 envelope's message:
 //
 //	{"code":"10605","message":"{\"isQueued\":false,...,\"retryAfterSeconds\":2,...}"}
 //
@@ -821,7 +822,9 @@ func isDonePayload(payload string) bool {
 
 // busyFromBody detects the 10605 admission-control rejection inside an HTTP
 // error body (bodies seen in the wild are prefixed with an upstream status,
-// so decoding starts at the first '{').
+// so decoding starts at the first '{'). The 10605 envelope may sit at the top
+// level or one level down: in-stream 403 frames re-wrap it as a string inside
+// an outer {"code":"403","message":"<10605 envelope>"} body.
 func busyFromBody(statusCode int, body []byte) *busySignal {
 	s := string(body)
 	if i := strings.IndexByte(s, '{'); i > 0 {
@@ -831,13 +834,35 @@ func busyFromBody(statusCode int, body []byte) *busySignal {
 		Code    json.RawMessage `json:"code"`
 		Message string          `json:"message"`
 	}
-	if json.Unmarshal([]byte(s), &outer) != nil || rawCode(outer.Code) != busyCode {
+	if json.Unmarshal([]byte(s), &outer) != nil {
 		return nil //nolint:nilerr // not a busy envelope: fall through to the regular classification
+	}
+	if rawCode(outer.Code) != busyCode {
+		return busyFromWrapped(statusCode, outer.Message)
 	}
 	busy := &busySignal{StatusCode: statusCode}
 	if outer.Message != "" {
 		busy.Message = truncateRunes(outer.Message, 512)
 		busy.RetryAfter = busyRetryAfter(outer.Message)
+	}
+	return busy
+}
+
+// busyFromWrapped detects a 10605 envelope embedded as a JSON string inside a
+// non-10605 error envelope's message field (the in-stream 403 wrapper shape).
+func busyFromWrapped(statusCode int, msg string) *busySignal {
+	var nested struct {
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
+	}
+	if !strings.HasPrefix(strings.TrimSpace(msg), "{") ||
+		json.Unmarshal([]byte(msg), &nested) != nil || rawCode(nested.Code) != busyCode {
+		return nil //nolint:nilerr // not a busy envelope: fall through to the regular classification
+	}
+	busy := &busySignal{StatusCode: statusCode}
+	if nested.Message != "" {
+		busy.Message = truncateRunes(nested.Message, 512)
+		busy.RetryAfter = busyRetryAfter(nested.Message)
 	}
 	return busy
 }
