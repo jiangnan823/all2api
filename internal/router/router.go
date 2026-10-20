@@ -135,9 +135,12 @@ func (rt *Router) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 
 // responsesAPIRequest is the subset of the Responses API request the
 // interface-first router understands: model addressing, the stream flag, the
-// system prompt (instructions), the output budget (max_output_tokens) and
-// the reasoning effort (reasoning.effort — the Responses spelling of the
-// chat surface's flat reasoning_effort).
+// system prompt (instructions), the output budget (max_output_tokens), the
+// reasoning effort (reasoning.effort — the Responses spelling of the chat
+// surface's flat reasoning_effort) and the agent tool surface (tools +
+// tool_choice, Responses spellings of the chat fields — converted below, a
+// verbatim passthrough would ship the flat function declarations to upstreams
+// that only speak the nested chat shape).
 type responsesAPIRequest struct {
 	Model           string          `json:"model"`
 	Stream          bool            `json:"stream"`
@@ -147,6 +150,8 @@ type responsesAPIRequest struct {
 	Reasoning       *struct {
 		Effort string `json:"effort"`
 	} `json:"reasoning"`
+	Tools      json.RawMessage `json:"tools"`
+	ToolChoice json.RawMessage `json:"tool_choice"`
 }
 
 func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
@@ -188,12 +193,30 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 	if raw.Reasoning != nil {
 		effort = raw.Reasoning.Effort
 	}
+	tools, err := responsesToolsToChat(raw.Tools)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, apiError{
+			Message: err.Error(),
+			Type:    errTypeInvalidRequest,
+		})
+		return
+	}
+	toolChoice, err := responsesToolChoiceToChat(raw.ToolChoice)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, apiError{
+			Message: err.Error(),
+			Type:    errTypeInvalidRequest,
+		})
+		return
+	}
 	rt.dispatch(w, r, "responses", adapter.ChatRequest{
 		Model:           raw.Model,
 		Messages:        msgs,
 		Stream:          raw.Stream,
 		MaxTokens:       raw.MaxOutputTokens,
 		ReasoningEffort: effort,
+		Tools:           tools,
+		ToolChoice:      toolChoice,
 	})
 }
 
@@ -203,6 +226,89 @@ func (rt *Router) handleResponses(w http.ResponseWriter, r *http.Request) {
 func mustJSON(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return json.RawMessage(b)
+}
+
+// responsesToolsToChat converts the Responses tools array (flat function
+// declarations: {"type":"function","name":...,"parameters":...}) onto the
+// chat surface's nested shape ({"type":"function","function":{...}}). The
+// upstream senders forward req.Tools verbatim, so the shape must be exact —
+// a passthrough handed upstreams flat declarations their tool-call loop
+// never matched, leaving agent clients with models that improvised calls in
+// their native markup (the DSML leak). Unknown tool types are a hard error:
+// the upstreams cannot execute the Responses built-ins (web_search etc.),
+// and silently dropping one tool would desync the model's toolset from the
+// client's.
+func responsesToolsToChat(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, errors.New("tools: expected an array of tool objects")
+	}
+	out := make([]map[string]any, 0, len(items))
+	for i, item := range items {
+		typ := rawStringField(item["type"])
+		if typ != "function" {
+			return nil, fmt.Errorf("tools[%d]: unsupported tool type %q (only \"function\" is supported)", i, typ)
+		}
+		if rawStringField(item["name"]) == "" {
+			return nil, fmt.Errorf("tools[%d]: a function tool needs a \"name\"", i)
+		}
+		fn := make(map[string]any, len(item))
+		for k, v := range item {
+			if k != "type" {
+				fn[k] = v
+			}
+		}
+		out = append(out, map[string]any{"type": "function", "function": fn})
+	}
+	return mustJSON(out), nil
+}
+
+// responsesToolChoiceToChat maps the Responses tool_choice spellings onto the
+// chat one: "auto"/"none"/"required" pass through as strings, the object
+// wrappers {"type":"auto"|"none"|"required"} collapse to the string, and
+// {"type":"function","name":x} becomes the chat object
+// {"type":"function","function":{"name":x}}.
+func responsesToolChoiceToChat(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		switch s {
+		case "auto", "none", "required":
+			return mustJSON(s), nil
+		}
+		return nil, fmt.Errorf("tool_choice: unsupported value %q", s)
+	}
+	var obj struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, errors.New("tool_choice: expected a string or an object")
+	}
+	switch obj.Type {
+	case "auto", "none", "required":
+		return mustJSON(obj.Type), nil
+	case "function":
+		if strings.TrimSpace(obj.Name) == "" {
+			return nil, errors.New(`tool_choice: {"type":"function"} needs a "name"`)
+		}
+		return mustJSON(map[string]any{"type": "function", "function": map[string]any{"name": obj.Name}}), nil
+	}
+	return nil, fmt.Errorf("tool_choice: unsupported type %q", obj.Type)
+}
+
+// rawStringField decodes a JSON string value; absent/non-string yields "".
+func rawStringField(raw json.RawMessage) string {
+	var s string
+	if len(raw) == 0 || json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+	return s
 }
 
 // responsesInputToMessages converts the Responses input onto the chat message

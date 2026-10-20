@@ -196,6 +196,82 @@ func TestV1ResponsesFeatureFlag(t *testing.T) {
 	}
 }
 
+// TestV1ResponsesToolsReachUpstream pins the DSML-leak fix: the Responses
+// request's flat tools declarations must reach the sender's ChatRequest in
+// the nested chat shape (and tool_choice must map onto the chat spelling),
+// so agent clients' models can emit structured tool calls instead of
+// improvising their native markup in content.
+func TestV1ResponsesToolsReachUpstream(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0","router":{"responses_api":{"enabled":true}}}`)
+	fs := newSender("rtool")
+	reg := newRegistry(t, fs)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rtool")
+	mux := newMux(h, reg)
+
+	body := `{"model":"rtool/m","input":"run pwd",` +
+		`"tools":[{"type":"function","name":"bash","description":"Run a shell command",` +
+		`"parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":true}],` +
+		`"tool_choice":{"type":"function","name":"bash"}}`
+	rec := postJSON(t, mux, "/v1/responses", body, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/v1/responses with tools: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	_, reqs := fs.callLog()
+	if len(reqs) != 1 {
+		t.Fatalf("sender calls = %d, want 1", len(reqs))
+	}
+	var tools []map[string]any
+	if err := json.Unmarshal(reqs[0].Tools, &tools); err != nil {
+		t.Fatalf("converted tools not valid JSON: %v (%s)", err, reqs[0].Tools)
+	}
+	if len(tools) != 1 || tools[0]["type"] != "function" {
+		t.Fatalf("tools = %s, want one function entry", reqs[0].Tools)
+	}
+	fn, _ := tools[0]["function"].(map[string]any)
+	if fn["name"] != "bash" || fn["description"] != "Run a shell command" {
+		t.Fatalf("function = %v", fn)
+	}
+	if _, ok := fn["parameters"]; !ok {
+		t.Fatalf("parameters must ride inside function: %v", fn)
+	}
+	if fn["strict"] != true {
+		t.Fatalf("extra function fields must survive the conversion: %v", fn)
+	}
+	var choice map[string]any
+	if err := json.Unmarshal(reqs[0].ToolChoice, &choice); err != nil {
+		t.Fatalf("converted tool_choice not valid JSON: %v (%s)", err, reqs[0].ToolChoice)
+	}
+	if choice["type"] != "function" {
+		t.Fatalf("tool_choice = %s", reqs[0].ToolChoice)
+	}
+	fnChoice, _ := choice["function"].(map[string]any)
+	if fnChoice["name"] != "bash" {
+		t.Fatalf("tool_choice function = %v", fnChoice)
+	}
+
+	// A request without tools must not grow an empty tools array upstream.
+	rec = postJSON(t, mux, "/v1/responses", `{"model":"rtool/m","input":"hi"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tools-less request: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	_, reqs = fs.callLog()
+	if len(reqs) != 2 || len(reqs[1].Tools) != 0 {
+		t.Fatalf("tools-less request must send no tools, got %s", reqs[1].Tools)
+	}
+
+	// Unsupported tool types must 400 instead of silently shrinking the
+	// toolset the model sees.
+	rec = postJSON(t, mux, "/v1/responses", `{"model":"rtool/m","input":"hi","tools":[{"type":"web_search"}]}`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("web_search tool: got %d, want 400 (body %s)", rec.Code, rec.Body)
+	}
+	rec = postJSON(t, mux, "/v1/responses", `{"model":"rtool/m","input":"hi","tool_choice":"always"}`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad tool_choice string: got %d, want 400 (body %s)", rec.Code, rec.Body)
+	}
+}
+
 func TestV1ClientDisconnectCancelsStream(t *testing.T) {
 	loadRouterConfig(t, `{"listen":":0"}`)
 	fs := newSender("rgone")
