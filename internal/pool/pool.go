@@ -46,8 +46,9 @@ type Account struct {
 // is cooling. The 429 phrase matches the M9b model-lock reason string on
 // purpose: one rate-limit hit reads the same in both panel surfaces.
 const (
-	CooldownReasonRateLimit  = "429 rate limit"
-	CooldownReasonTaskFailed = "task failed"
+	CooldownReasonRateLimit    = "429 rate limit"
+	CooldownReasonTaskFailed   = "task failed"
+	CooldownReasonAuthRejected = "upstream auth rejected"
 )
 
 // SetStatus updates the account status.
@@ -65,8 +66,8 @@ func (a *Account) IsCooling() bool {
 // string when the window ends, so gating selection on the raw field kept an
 // account out of rotation forever after its first rate-limit cooldown —
 // with a single-account platform that was a permanent 503 wall until a
-// manual recover or process restart. "disabled" (manual switch or
-// auth_error) is a stored decision, not a window, and survives verbatim.
+// manual recover or process restart. "disabled" (manual switch) is a stored
+// decision, not a window, and survives verbatim.
 func (a *Account) EffectiveStatus() string {
 	if a.Status == "cooling" && !a.IsCooling() {
 		return "active"
@@ -332,9 +333,18 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 		account.Health = max(0.0, account.Health-0.1)
 		account.TriggerCooldownReason(2*time.Minute, CooldownReasonRateLimit)
 	case "auth_error":
+		// Upstream auth rejection parks the account for 15 minutes instead of
+		// disabling it. A single 403 is not proof the credential died: the
+		// 2026-10-21 workbuddy outage answered every chat request on every
+		// account with "request illegal" while the userinfo plane stayed
+		// healthy, and one dispatch retry storm sufficed to disable all four
+		// accounts permanently. A bounded cooldown keeps the account out of
+		// rotation, recovers on its own, and repeats visibly if the rejection
+		// persists; true credential death remains covered by the scheduled
+		// health checks and the panel's manual disable.
 		account.FailCount++
 		account.Health = 0.0
-		account.SetStatus("disabled")
+		account.TriggerCooldownReason(15*time.Minute, CooldownReasonAuthRejected)
 	case "timeout":
 		account.FailCount++
 		account.Health = max(0.0, account.Health-0.02)

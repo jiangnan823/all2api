@@ -59,10 +59,14 @@ func TestUpdateHealthCountsEveryFailureClass(t *testing.T) {
 	if !acc.LastSuccess.IsZero() {
 		t.Fatalf("LastSuccess must stay zero without a success, got %v", acc.LastSuccess)
 	}
-	// The unchanged semantics still fire: auth_error disabled the account,
-	// rate_limited put it into cooldown.
-	if acc.Status != "disabled" || !acc.IsCooling() {
-		t.Fatalf("status=%q cooling=%v, want disabled + cooling (existing UpdateHealth semantics)", acc.Status, acc.IsCooling())
+	// auth_error parks the account in a bounded cooldown (2026-10-21: one
+	// dispatch retry storm of upstream 403s must not permanently disable
+	// healthy accounts); rate_limited keeps its shorter cooldown.
+	if acc.Status != "cooling" || !acc.IsCooling() {
+		t.Fatalf("status=%q cooling=%v, want cooling via the auth_error cooldown", acc.Status, acc.IsCooling())
+	}
+	if !acc.CooldownEnd.After(time.Now().Add(14 * time.Minute)) {
+		t.Fatalf("auth cooldown ends %v, want ~15 minutes out", acc.CooldownEnd)
 	}
 }
 

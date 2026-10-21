@@ -315,7 +315,7 @@ func TestAuthExpiredTokenRefreshesBeforeSend(t *testing.T) {
 	}
 }
 
-func TestRefreshFailureSurfacesAuthExpiredAndDisablesPoolAccount(t *testing.T) {
+func TestRefreshFailureSurfacesAuthExpiredAndCoolsPoolAccount(t *testing.T) {
 	dir := t.TempDir()
 	staleAccess, staleRefresh := fakeAccessToken("ACCT3FAKE"), fakeRefreshToken("REF3FAKE")
 	path := writeAuthFile(t, dir, "uid-c", staleAccess, staleRefresh, time.Now().Add(time.Hour).Unix())
@@ -341,15 +341,17 @@ func TestRefreshFailureSurfacesAuthExpiredAndDisablesPoolAccount(t *testing.T) {
 		t.Error("failed refresh must not touch the auth file")
 	}
 
-	// Account-disable semantics: the router feeds "auth_error" into the pool
-	// for an auth_expired failure; the account must come out disabled.
+	// Auth-rejection semantics: the router feeds "auth_error" into the pool
+	// for an auth_expired failure; the account parks in the bounded auth
+	// cooldown at zero health (2026-10-21: a transient upstream 403 storm
+	// must not permanently disable healthy accounts).
 	p.UpdateHealth(WorkbuddyPlatform, "uid-c", "auth_error", 0)
 	snap := p.SnapshotAccounts()
 	if len(snap) != 1 {
 		t.Fatalf("pool accounts = %d, want 1", len(snap))
 	}
-	if snap[0].Status != "disabled" || snap[0].Health != 0 {
-		t.Errorf("after auth_error: status = %q health = %v, want disabled/0", snap[0].Status, snap[0].Health)
+	if snap[0].Status != "cooling" || snap[0].Health != 0 {
+		t.Errorf("after auth_error: status = %q health = %v, want cooling/0", snap[0].Status, snap[0].Health)
 	}
 }
 
