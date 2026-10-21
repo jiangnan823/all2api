@@ -541,6 +541,22 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 		return
 	}
 	ledger.Platform = platform
+	// Catalog pre-validation: an unknown model is a client config error and
+	// must die at the boundary. The 2026-10-21 incident: a client sent
+	// workbuddy/DeepSeek-Flash (a qoder catalog name); the junk name reached
+	// workbuddy, whose "request illegal" rejection classified as
+	// auth_expired and disabled all four healthy accounts one retry at a
+	// time, then the client's abort storm tripped the platform breaker. When
+	// the platform's live catalog is available and does not list the name,
+	// answer model_not_found without touching any account or the breaker.
+	if !rt.modelListedIn(r.Context(), platform, ledger.Model) {
+		writeError(w, http.StatusNotFound, apiError{
+			Message: "The model '" + req.Model + "' does not exist for platform '" + platform + "'.",
+			Type:    errTypeInvalidRequest,
+			Code:    "model_not_found",
+		})
+		return
+	}
 	sender, ok := a.(adapter.Sender)
 	if !ok {
 		// Interface-first reality: adapters ship without an upstream HTTP
@@ -697,6 +713,34 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 		rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(err), err)
 		rt.finishAttempt(platform, acct.ID, healthStatus(err))
 	}
+}
+
+// modelListedIn reports whether the platform's live catalog lists the bare
+// model name. Unjudgeable shapes pass: no lister wired, or no catalog rows
+// for the platform at all (the upstream remains the authority there) — the
+// gate only fires on a positive "this platform serves these names and this
+// is not one of them".
+func (rt *Router) modelListedIn(ctx context.Context, platform, bare string) bool {
+	if strings.TrimSpace(bare) == "" {
+		return true
+	}
+	lister := rt.models
+	if lister == nil {
+		lister = DefaultModelLister
+	}
+	if lister == nil {
+		return true
+	}
+	platformKnown := false
+	for _, m := range lister(ctx) {
+		if m.OwnedBy == platform {
+			platformKnown = true
+			if m.ID == bare {
+				return true
+			}
+		}
+	}
+	return !platformKnown
 }
 
 // bareModelName strips a "platform/" routing prefix for the ledger, matching

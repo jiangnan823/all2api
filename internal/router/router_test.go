@@ -633,3 +633,66 @@ func TestV1RetryAdvancesToNextAccount(t *testing.T) {
 		seen[c] = true
 	}
 }
+
+// TestModelCatalogGateRejectsUnknownModel pins the 2026-10-21 incident fix:
+// workbuddy/DeepSeek-Flash (a qoder catalog name) must die at the gateway as
+// model_not_found — never reach the upstream whose "request illegal" reply
+// classified as auth_expired and disabled every healthy workbuddy account
+// one retry at a time.
+func TestModelCatalogGateRejectsUnknownModel(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	fs := newSender("rcat")
+	fs2 := newSender("rcat2")
+	reg := newRegistry(t, fs, fs2)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rcat")
+	addAccount(t, h, "a2", "rcat2")
+	mux := newMux(h, reg)
+
+	previous := DefaultModelLister
+	t.Cleanup(func() { DefaultModelLister = previous })
+	DefaultModelLister = func(ctx context.Context) []PublicModel {
+		return []PublicModel{
+			{ID: "deepseek-v4-flash", OwnedBy: "rcat"},
+			{ID: "DeepSeek-Flash", OwnedBy: "other"},
+		}
+	}
+
+	// Known-bad: the name belongs to another platform's catalog → 404, and
+	// the sender must never be contacted.
+	rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rcat/DeepSeek-Flash"), nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign-catalog model: got %d, want 404 (body %s)", rec.Code, rec.Body)
+	}
+	var env struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil || env.Error.Code != "model_not_found" {
+		t.Fatalf("error envelope = %s (err %v)", rec.Body.String(), err)
+	}
+	if calls, _ := fs.callLog(); len(calls) != 0 {
+		t.Fatalf("sender must not be contacted for a catalog-rejected model, got %v", calls)
+	}
+
+	// Known-good: a listed name flows to the sender as before.
+	rec = postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rcat/deepseek-v4-flash"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("listed model: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+
+	// Platform absent from the catalog → cannot judge → pass through
+	// (rcat2 has an account but no catalog rows at all).
+	rec = postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rcat2/whatever-new"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unlisted platform must pass through: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+
+	// No lister wired → the upstream remains the authority.
+	DefaultModelLister = nil
+	rec = postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rcat/DeepSeek-Flash"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("no lister must pass through: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+}
