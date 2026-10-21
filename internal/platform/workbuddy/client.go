@@ -579,13 +579,16 @@ func classifyError(status int, body string, header http.Header) error {
 		containsAny(lower, "rate limit", "rate-limiting", "rate-limited", "too many requests", "usage limit", "请求过于频繁", "限流") {
 		return rateLimitedError(status, msg, header, body)
 	}
-	// Account-level authorization fault: 11140 "request illegal" on 403/429
-	// (report §6 account_fault row — requires re-login; rotating the account
-	// is the safe disposition). The rate-limit wording check above already
-	// captured the 11140 bodies that carry rate-limit text instead.
+	// Account-level risk-control restriction: 11140 "request illegal" on
+	// 403/429 (report §6 account_fault row). Ground truth 2026-10-21: the
+	// official client surfaces this as 「账号存在异常行为，已被限制使用」 with an
+	// appeal path — re-login does NOT lift it, so the old auth_expired
+	// disposition (re-exchange + rotate) just hammered a restricted account
+	// on every retry. account_restricted parks it in a long pool cooldown
+	// instead; only an appeal or upstream expiry ends it.
 	if (status == http.StatusForbidden || status == http.StatusTooManyRequests) &&
 		(hasCode && code == "11140" || containsAny(lower, "request illegal", "auth_forbidden")) {
-		return &adapter.UpstreamError{Status: status, Reason: adapter.ReasonAuthExpired, Message: msg}
+		return &adapter.UpstreamError{Status: status, Reason: adapter.ReasonAccountRestricted, Message: msg}
 	}
 	// WAF: 403 with no business envelope (HTML block page / empty body).
 	if status == http.StatusForbidden && !hasBusinessEnvelope(body) {

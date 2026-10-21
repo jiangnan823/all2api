@@ -95,16 +95,17 @@ var AllPlatformCapabilities = CapSet{Value: CapChatCompletion | CapResponsesStre
 type FailureReason string
 
 const (
-	ReasonOK               FailureReason = "ok"                // healthy
-	ReasonAuthExpired      FailureReason = "auth_expired"      // per-account removed from pool; does NOT enter source-level circuit
-	ReasonPlatformDown     FailureReason = "platform_down"     // platform unreachable; wait and degrade
-	ReasonRateLimited      FailureReason = "rate_limited"      // 429 — "触发限流·已降频" minute countdown
-	ReasonNotFound         FailureReason = "not_found"         // 404 — "接口或模型不存在", jump to model view
-	ReasonQuotaExhausted   FailureReason = "quota_exhausted"   // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
-	ReasonProtocolMismatch FailureReason = "protocol_mismatch" // upstream API version changed; needs patch release
-	ReasonTimeout          FailureReason = "timeout"           // request timeout exceeded
-	ReasonDisabled         FailureReason = "disabled"          // manual disable switch (account/source); no circuit display
-	ReasonConsecutive      FailureReason = "consecutive"       // consecutive failures threshold reached; maps to protocol_mismatch display
+	ReasonOK                FailureReason = "ok"                 // healthy
+	ReasonAuthExpired       FailureReason = "auth_expired"       // per-account removed from pool; does NOT enter source-level circuit
+	ReasonAccountRestricted FailureReason = "account_restricted" // upstream risk control restricted the account (workbuddy 11140); recovers only via appeal or time — long pool cooldown, not relogin
+	ReasonPlatformDown      FailureReason = "platform_down"      // platform unreachable; wait and degrade
+	ReasonRateLimited       FailureReason = "rate_limited"       // 429 — "触发限流·已降频" minute countdown
+	ReasonNotFound          FailureReason = "not_found"          // 404 — "接口或模型不存在", jump to model view
+	ReasonQuotaExhausted    FailureReason = "quota_exhausted"    // 402 — "额度耗尽·次日04:00重置" NEVER show as "cooling"
+	ReasonProtocolMismatch  FailureReason = "protocol_mismatch"  // upstream API version changed; needs patch release
+	ReasonTimeout           FailureReason = "timeout"            // request timeout exceeded
+	ReasonDisabled          FailureReason = "disabled"           // manual disable switch (account/source); no circuit display
+	ReasonConsecutive       FailureReason = "consecutive"        // consecutive failures threshold reached; maps to protocol_mismatch display
 )
 
 // HealthStatus carries health check result with detailed failure classification.

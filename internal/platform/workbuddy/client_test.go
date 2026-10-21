@@ -304,11 +304,12 @@ func TestErrorClassification(t *testing.T) {
 		{"plain 429", 429, `{"code":1,"msg":"too many requests"}`, nil, adapter.ReasonRateLimited},
 		{"11140 account fault as 429", 429, `{"code":11140,"msg":"The model provider is rate-limiting requests."}`, nil, adapter.ReasonRateLimited},
 		{"WAF 403 no envelope", 403, "<html>blocked</html>", nil, adapter.ReasonPlatformDown},
-		// 11140 "request illegal" is the account-level authorization fault
-		// (report §6 account_fault): the gateway vocabulary has no dedicated
-		// reason, so it maps to auth_expired — the pool rotates/cools the
-		// account, matching the sources' "re-login required" disposition.
-		{"business 403 not WAF", 403, `{"code":11140,"msg":"request illegal"}`, nil, adapter.ReasonAuthExpired},
+		// 11140 "request illegal" is the account-level risk-control
+		// restriction (2026-10-21 ground truth: the official client shows
+		// 「账号存在异常行为，已被限制使用」 with an appeal path; re-login does
+		// not lift it) — account_restricted parks the account in a long
+		// cooldown instead of re-authing and rotating on every retry.
+		{"business 403 not WAF", 403, `{"code":11140,"msg":"request illegal"}`, nil, adapter.ReasonAccountRestricted},
 		{"11102 model block", 404, `{"code":11102,"msg":"service info not found"}`, nil, adapter.ReasonNotFound},
 		{"11115 prompt too long", 400, `{"code":11115,"msg":"prompt is too long"}`, nil, adapter.ReasonNotFound},
 		{"11101 bad params", 400, `{"code":11101,"msg":"Unmarshal chat params failed"}`, nil, adapter.ReasonNotFound},

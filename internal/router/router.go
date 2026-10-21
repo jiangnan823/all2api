@@ -994,6 +994,8 @@ func healthStatus(err error) string {
 			return "rate_limited"
 		case adapter.ReasonAuthExpired:
 			return "auth_error"
+		case adapter.ReasonAccountRestricted:
+			return "account_restricted"
 		case adapter.ReasonTimeout:
 			return "timeout"
 		}
@@ -1034,6 +1036,10 @@ func upstreamErrorType(reason adapter.FailureReason) string {
 		return "rate_limit_error"
 	case adapter.ReasonAuthExpired:
 		return "authentication_error"
+	case adapter.ReasonAccountRestricted:
+		// Like quota, the account is unusable until an external action
+		// (appeal) — not a transient server fault.
+		return "insufficient_quota"
 	case adapter.ReasonNotFound:
 		return errTypeInvalidRequest
 	case adapter.ReasonQuotaExhausted:

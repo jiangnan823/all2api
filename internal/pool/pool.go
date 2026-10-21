@@ -49,6 +49,7 @@ const (
 	CooldownReasonRateLimit    = "429 rate limit"
 	CooldownReasonTaskFailed   = "task failed"
 	CooldownReasonAuthRejected = "upstream auth rejected"
+	CooldownReasonRestricted   = "account restricted (risk control)"
 )
 
 // SetStatus updates the account status.
@@ -345,6 +346,15 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 		account.FailCount++
 		account.Health = 0.0
 		account.TriggerCooldownReason(15*time.Minute, CooldownReasonAuthRejected)
+	case "account_restricted":
+		// Upstream risk control restricted the account (workbuddy 11140).
+		// The restriction does not lift by re-sending — every retry reads as
+		// more "abnormal behavior" to the risk engine — so the account parks
+		// for 12 hours and only an appeal or upstream expiry ends the cycle
+		// (the panel's enable/recover lifts it manually after an appeal).
+		account.FailCount++
+		account.Health = 0.0
+		account.TriggerCooldownReason(12*time.Hour, CooldownReasonRestricted)
 	case "timeout":
 		account.FailCount++
 		account.Health = max(0.0, account.Health-0.02)

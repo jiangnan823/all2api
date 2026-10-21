@@ -78,6 +78,27 @@ func TestUpdateHealthUnknownAccountIsNoop(t *testing.T) {
 	}
 }
 
+// TestAccountRestrictedCoolsForHalfADay: a risk-control restriction (workbuddy
+// 11140) must park the account far longer than the 15-minute auth cooldown —
+// every retry during a restriction reads as more abnormal behavior to the
+// risk engine.
+func TestAccountRestrictedCoolsForHalfADay(t *testing.T) {
+	s := NewWeightedRandomSelector(0, 3, 60)
+	s.AddAccount(&Account{ID: "a", Platform: "p", Status: "active", Credit: 10, Health: 1})
+
+	s.UpdateHealth("p", "a", "account_restricted", 0)
+	acc := snapshotOne(t, s, "p", "a")
+	if acc.Status != "cooling" || acc.Health != 0 {
+		t.Fatalf("status=%q health=%v, want cooling/0 after account_restricted", acc.Status, acc.Health)
+	}
+	if !acc.CooldownEnd.After(time.Now().Add(11 * time.Hour)) {
+		t.Fatalf("restricted cooldown ends %v, want ~12 hours out", acc.CooldownEnd)
+	}
+	if acc.StatusNote() != CooldownReasonRestricted {
+		t.Fatalf("status note = %q, want %q", acc.StatusNote(), CooldownReasonRestricted)
+	}
+}
+
 func TestInFlightAddRoundTrip(t *testing.T) {
 	s := NewWeightedRandomSelector(0, 3, 60)
 	s.AddAccount(&Account{ID: "a", Platform: "p", Status: "active", Credit: 10})
