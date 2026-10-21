@@ -287,7 +287,9 @@ func setAccountHeaders(req *http.Request, cred *Credential) {
 		if cred.Global {
 			domain = "www.workbuddy.ai"
 		} else {
-			domain = "www.codebuddy.cn"
+			// The chat base host itself — 2026-10 reference parity; the old
+			// www.codebuddy.cn value was an older observation.
+			domain = "copilot.tencent.com"
 		}
 	}
 	req.Header.Set("X-Domain", domain)
@@ -427,6 +429,7 @@ func (s *senderImpl) postStream(ctx context.Context, cred *Credential, body []by
 	}
 	setCommonHeaders(req, cred)
 	setAccountHeaders(req, cred)
+	setChatIdentityHeaders(req)
 	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
