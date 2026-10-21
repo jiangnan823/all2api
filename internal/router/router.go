@@ -666,10 +666,17 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 				ledger.RequestID = reqID
 			}
 			if !committed {
-				// Outright stream-start failure: same retry path as SendChat.
+				// Outright stream-start failure: same retry path as SendChat,
+				// except a risk-control restriction aborts the loop entirely
+				// (stopRetrying — rotating accounts on the same device is how
+				// one restricted account becomes a banned pool).
 				lastErr = streamErr
 				rt.recordSendOutcome(req.Model, platform, acct.ID, 0, streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
+				if stopRetrying(streamErr) {
+					writeSendError(w, streamErr)
+					return
+				}
 				continue
 			}
 			switch {
@@ -712,7 +719,27 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 		lastErr = err
 		rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(err), err)
 		rt.finishAttempt(platform, acct.ID, healthStatus(err))
+		if stopRetrying(err) {
+			// Risk-control restriction (workbuddy 11140): the fingerprint is
+			// what's flagged, so the remaining accounts must not be tried
+			// from this device — surface the error and stop.
+			writeSendError(w, err)
+			return
+		}
 	}
+}
+
+// stopRetrying reports whether a failed attempt must abort the dispatch loop
+// instead of rotating to the next account. Risk-control restrictions
+// (workbuddy 11140) are device-fingerprint-scoped: the community postmortem
+// red line is "stop on 11140 — rotating accounts from the same device reads
+// as more abnormal behavior and earns associated bans" (one workbuddy2api
+// user burned seven accounts in a single task that way). The restricted
+// account is already parked for 12h by the pool; the client sees the honest
+// account_restricted error instead of the loop quietly burning the pool.
+func stopRetrying(err error) bool {
+	var ue *adapter.UpstreamError
+	return errors.As(err, &ue) && ue.Reason == adapter.ReasonAccountRestricted
 }
 
 // modelListedIn reports whether the platform's live catalog lists the bare

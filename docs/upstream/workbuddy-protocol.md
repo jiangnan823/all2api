@@ -144,7 +144,7 @@
 
 两个实现独立收敛到同一组「拟真头」，反证上游按头形状做客户端识别：
 
-- UA 三段式：`WorkBuddy/<clientVer> WorkBuddy[ AI]/<clientVer> CLI/<cliVer>`（CN 段 `WorkBuddy`、global 段 `WorkBuddy AI`；报错品牌段可能 403 11140；版本须随官方发版更新——5.5.4/2.137.1 为 2026-09 观测值，xiaofan6ya 观测 5.5.6）
+- UA 三段式：`WorkBuddy/<desktopVer> <product>/<desktopVer> CLI/<cliVer>`（CN product 段 `WorkBuddy`、global 段小写 `workbuddy-ai`——product.json 的 applicationName；CLI 是独立 2.x 版本流，勿复用 desktop 版本号；**版本过期是 11140 风控诱因**，须随官方发版更新——2026-10-21 现值 CN `WorkBuddy/5.8.3 WorkBuddy/5.8.3 CLI/2.161.0`，与社区参考 workbuddy2api-hub 测试钉版一致；旧值 5.5.4/2.137.1 为 2026-09 观测）
 - `X-CodeBuddy-Request: 1`（官方所有 API 请求必带的闸门头）
 - `X-Requested-With: XMLHttpRequest`、`Accept-Language`（CN zh-CN / global en-US）
 - 用量归属：`X-Agent-Purpose: conversation` + `X-IDE-Name/Type: WorkBuddy` + `X-IDE-Version: <ver>` + `X-Product: WorkBuddy`

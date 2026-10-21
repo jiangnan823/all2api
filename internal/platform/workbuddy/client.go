@@ -66,8 +66,14 @@ const (
 // wireClientVersion is the WorkBuddy desktop version segment in the UA.
 // Fingerprint discipline (report §8): the version must track the official
 // distribution — it is a var so integrators can update it without a protocol
-// change. The value is observational (5.5.4, 2026-09 captures).
-var wireClientVersion = "5.5.4"
+// change. Stale versions are a documented 11140 risk-control trigger; the
+// 2026-10-21 restrictions hit while 5.5.4 (2026-09 captures) was two minor
+// releases behind. Current values track the community-maintained reference
+// (workbuddy2api-hub wb_identity.py, test-pinned) and the locally installed
+// official client (5.8.3). The CLI segment is its own 2.x release stream —
+// the old single-version UA was a fingerprint mismatch of its own.
+var wireClientVersion = "5.8.3"
+var wireCLIVersion = "2.161.0"
 
 // Credential is the account credential snapshot one send needs.
 // pool.Account deliberately carries no secrets (pool.go), so credentials are
@@ -218,16 +224,17 @@ func originFor(cred *Credential) string {
 	return wireOriginCN
 }
 
-// userAgent assembles the three-segment official UA (report §8):
-// "WorkBuddy/<ver> WorkBuddy[ AI]/<ver> CLI/<ver>". The global realm uses the
-// "WorkBuddy AI" platform segment — the CN brand there reportedly trips
-// 403 code 11140 (report §8).
+// userAgent assembles the official UA (report §8, 2026-10 shape):
+// "WorkBuddy/<desktop> <product>/<desktop> CLI/<cli>". The product segment is
+// the lowercase applicationName on the global realm (workbuddy-ai) and
+// WorkBuddy on CN — tracked from the reference implementation's test-pinned
+// values, not the older "WorkBuddy AI" spelling.
 func userAgent(cred *Credential) string {
 	platform := "WorkBuddy"
 	if cred != nil && cred.Global {
-		platform = "WorkBuddy AI"
+		platform = "workbuddy-ai"
 	}
-	return "WorkBuddy/" + wireClientVersion + " " + platform + "/" + wireClientVersion + " CLI/" + wireClientVersion
+	return "WorkBuddy/" + wireClientVersion + " " + platform + "/" + wireClientVersion + " CLI/" + wireCLIVersion
 }
 
 // setCommonHeaders applies the header set every upstream call shares

@@ -696,3 +696,34 @@ func TestModelCatalogGateRejectsUnknownModel(t *testing.T) {
 		t.Fatalf("no lister must pass through: got %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
 }
+
+// TestRestrictedAccountStopsRotation pins the 11140 red line: when the
+// upstream answers with a risk-control account restriction, the dispatch
+// loop must abort instead of rotating to the next account — the restriction
+// is device-fingerprint-scoped, and rotating is how one restricted account
+// becomes a banned pool (the 2026-10-21 workbuddy incident burned all four
+// accounts from one request).
+func TestRestrictedAccountStopsRotation(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	first := newSender("rstop1")
+	second := newSender("rstop2")
+	reg := newRegistry(t, first, second)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rstop1")
+	addAccount(t, h, "a2", "rstop2")
+	mux := newMux(h, reg)
+
+	first.sendErr = &adapter.UpstreamError{Status: http.StatusForbidden,
+		Reason: adapter.ReasonAccountRestricted, Message: "workbuddy: request illegal"}
+
+	rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rstop1/m"), nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("restricted: got %d, want 403 (body %s)", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "account_restricted") {
+		t.Fatalf("error envelope must carry account_restricted, got %s", rec.Body.String())
+	}
+	if calls, _ := second.callLog(); len(calls) != 0 {
+		t.Fatalf("second account must stay untouched after a restriction, got %v", calls)
+	}
+}

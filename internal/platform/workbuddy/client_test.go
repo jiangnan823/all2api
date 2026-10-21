@@ -199,8 +199,8 @@ func TestGlobalRealmHeaders(t *testing.T) {
 		t.Errorf("Origin = %q, want global brand", got)
 	}
 	ua := gotHeaders.Get("User-Agent")
-	if !strings.Contains(ua, " WorkBuddy AI/"+wireClientVersion+" ") {
-		t.Errorf("User-Agent = %q, want WorkBuddy AI platform segment", ua)
+	if !strings.Contains(ua, " workbuddy-ai/"+wireClientVersion+" CLI/"+wireCLIVersion) {
+		t.Errorf("User-Agent = %q, want workbuddy-ai product segment with the CLI version stream", ua)
 	}
 	if got := gotHeaders.Get("Accept-Language"); got != "en-US" {
 		t.Errorf("Accept-Language = %q", got)
