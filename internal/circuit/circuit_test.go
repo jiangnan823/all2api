@@ -111,3 +111,48 @@ func TestSuccessClearsConsecutiveCounters(t *testing.T) {
 		t.Fatal("interleaved successes must never trip the breaker")
 	}
 }
+
+// TestHalfOpenSingleProbe pins the probe discipline: the half-open state
+// passes exactly one request — concurrent callers queue behind the probe
+// until its Record lands, and a failing probe re-opens immediately with the
+// base cooldown instead of letting the herd through.
+func TestHalfOpenSingleProbe(t *testing.T) {
+	b := NewBreaker("p", Config{ConsecutiveFailures: 2, CooldownSec: 60, TripAutoRecoverSec: 60})
+
+	b.Record(500, "a")
+	b.Record(500, "a")
+	if !b.IsTripped() {
+		t.Fatal("expected trip")
+	}
+	forceExpiry(b)
+
+	if !b.Allow() {
+		t.Fatal("window closed: the probe must flow")
+	}
+	if b.Allow() {
+		t.Fatal("half-open must pass exactly one probe; concurrent callers wait")
+	}
+
+	// Probe fails: re-open immediately, and nothing flows until the next
+	// window.
+	b.Record(503, "a")
+	if b.Allow() {
+		t.Fatal("failed probe must re-open the circuit")
+	}
+	if b.State() != StateOpen || b.Reason() != ReasonConsecutive {
+		t.Fatalf("state/reason = %v/%q, want open/consecutive", b.State(), b.Reason())
+	}
+
+	// Next window: one fresh probe; success closes for real.
+	forceExpiry(b)
+	if !b.Allow() || b.Allow() {
+		t.Fatal("second window must again pass exactly one probe")
+	}
+	b.Record(200, "a")
+	if b.State() != StateClosed || b.Allow() != true {
+		t.Fatalf("successful probe must close: state=%v", b.State())
+	}
+	if !b.Allow() {
+		t.Fatal("closed circuit passes traffic again")
+	}
+}

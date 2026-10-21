@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"all2api/internal/adapter"
@@ -52,6 +53,47 @@ type Router struct {
 	// models is the /v1/models list source, injectable for tests; nil falls
 	// back to DefaultModelLister (main wires it to the panel catalog).
 	models func(ctx context.Context) []PublicModel
+	// catalog cache: the panel catalog build performs live upstream work
+	// (qoder's model/list fetch has no TTL of its own), so the per-request
+	// catalog gate must not dial it every time — that would couple every
+	// platform's request path to every other platform's upstream availability
+	// and roughly double the upstream request volume. Guarded by catalogMu.
+	catalogMu   sync.Mutex
+	catalogSnap []PublicModel
+	catalogAt   time.Time
+}
+
+// catalogCacheTTL bounds how stale the gate's catalog view may be. A refresh
+// that comes back empty keeps the previous snapshot: a stale catalog that
+// passes a model through to the upstream authority beats a gate that 404s
+// everything because one upstream hiccuped.
+const catalogCacheTTL = time.Minute
+
+// catalogRows returns the model catalog through the cache. Rows are shared
+// with handleV1Models and the dispatch gate; callers must treat the slice as
+// immutable.
+func (rt *Router) catalogRows(ctx context.Context) []PublicModel {
+	rt.catalogMu.Lock()
+	defer rt.catalogMu.Unlock()
+	lister := rt.models
+	if lister == nil {
+		lister = DefaultModelLister
+	}
+	if lister == nil {
+		return nil
+	}
+	if rt.catalogSnap != nil && time.Since(rt.catalogAt) < catalogCacheTTL {
+		return rt.catalogSnap
+	}
+	rows := lister(ctx)
+	if len(rows) == 0 && rt.catalogSnap != nil {
+		return rt.catalogSnap
+	}
+	if len(rows) > 0 {
+		rt.catalogSnap = rows
+		rt.catalogAt = time.Now()
+	}
+	return rows
 }
 
 // Register wires POST /v1/chat/completions, POST /v1/responses and
@@ -669,9 +711,11 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 				// Outright stream-start failure: same retry path as SendChat,
 				// except a risk-control restriction aborts the loop entirely
 				// (stopRetrying — rotating accounts on the same device is how
-				// one restricted account becomes a banned pool).
+				// one restricted account becomes a banned pool). The
+				// classification carries the real upstream status — 0 would
+				// misfile a 429 into the consecutive-failure bucket.
 				lastErr = streamErr
-				rt.recordSendOutcome(req.Model, platform, acct.ID, 0, streamErr)
+				rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(streamErr), streamErr)
 				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
 				if stopRetrying(streamErr) {
 					writeSendError(w, streamErr)
@@ -746,23 +790,23 @@ func stopRetrying(err error) bool {
 // model name. Unjudgeable shapes pass: no lister wired, or no catalog rows
 // for the platform at all (the upstream remains the authority there) — the
 // gate only fires on a positive "this platform serves these names and this
-// is not one of them".
+// is not one of them". Both bare and "platform/bare" row forms match: the
+// catalog de-duplicates bare names globally (first provider wins), so a
+// platform whose bare row was shadowed still carries its namespaced row.
 func (rt *Router) modelListedIn(ctx context.Context, platform, bare string) bool {
 	if strings.TrimSpace(bare) == "" {
 		return true
 	}
-	lister := rt.models
-	if lister == nil {
-		lister = DefaultModelLister
-	}
-	if lister == nil {
+	rows := rt.catalogRows(ctx)
+	if len(rows) == 0 {
 		return true
 	}
 	platformKnown := false
-	for _, m := range lister(ctx) {
+	namespaced := platform + "/" + bare
+	for _, m := range rows {
 		if m.OwnedBy == platform {
 			platformKnown = true
-			if m.ID == bare {
+			if m.ID == bare || m.ID == namespaced {
 				return true
 			}
 		}

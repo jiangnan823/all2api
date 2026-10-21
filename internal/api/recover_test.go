@@ -84,7 +84,8 @@ func postRecover(t *testing.T, h *host.Host, path string) *httptest.ResponseReco
 }
 
 // tripConsecutive opens the breaker through the consecutive-failure path,
-// which latches noAutoRecover (PM 裁一: tripped circuits never self-heal).
+// which parks the breaker past the bounded trip window (PM 裁一: recover is
+// the immediate, credential-verified exit — the window self-heals without it).
 func tripConsecutive(t *testing.T, h *host.Host, source string) {
 	t.Helper()
 	br, ok := h.Breaker(source)
@@ -98,7 +99,7 @@ func tripConsecutive(t *testing.T, h *host.Host, source string) {
 		t.Fatalf("breaker for %q should be tripped after 5 consecutive failures", source)
 	}
 	if br.Allow() {
-		t.Fatalf("tripped (noAutoRecover) breaker must not allow traffic before recover")
+		t.Fatalf("tripped breaker must not allow traffic before recover")
 	}
 }
 

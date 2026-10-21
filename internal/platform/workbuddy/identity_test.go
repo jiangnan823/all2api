@@ -5,7 +5,6 @@ package workbuddy
 import (
 	"net/http"
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -85,7 +84,7 @@ func TestChatIdentityHeaderFamily(t *testing.T) {
 	if req2.Header.Get("X-Trace-ID") == trace {
 		t.Error("trace id must be generated per request")
 	}
-	if strings.Contains(req2.Header.Get("X-Conversation-ID"), "") && !hyphenUUID7.MatchString(req2.Header.Get("X-Conversation-ID")) {
+	if !hyphenUUID7.MatchString(req2.Header.Get("X-Conversation-ID")) {
 		t.Error("second conversation id malformed")
 	}
 }

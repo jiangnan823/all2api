@@ -47,23 +47,19 @@ func (rt *Router) handleV1Models(w http.ResponseWriter, r *http.Request) {
 	if !authorize(w, r) {
 		return
 	}
-	lister := rt.models
-	if lister == nil {
-		lister = DefaultModelLister
-	}
+	// Through the cache: /v1/models is the connectivity probe most clients
+	// hammer, and the underlying panel catalog build can dial upstreams.
 	rows := []modelObjectWire{}
-	if lister != nil {
-		for _, m := range lister(r.Context()) {
-			if m.ID == "" {
-				continue
-			}
-			rows = append(rows, modelObjectWire{
-				ID:      m.ID,
-				Object:  "model",
-				Created: modelListCreated,
-				OwnedBy: m.OwnedBy,
-			})
+	for _, m := range rt.catalogRows(r.Context()) {
+		if m.ID == "" {
+			continue
 		}
+		rows = append(rows, modelObjectWire{
+			ID:      m.ID,
+			Object:  "model",
+			Created: modelListCreated,
+			OwnedBy: m.OwnedBy,
+		})
 	}
 	writeJSON(w, http.StatusOK, modelListWire{Object: "list", Data: rows})
 }

@@ -1,3 +1,5 @@
+//go:build qoder || full || (!qoder && !trae && !workbuddy)
+
 package qoder
 
 import (

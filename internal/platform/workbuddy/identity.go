@@ -18,13 +18,13 @@ import (
 	"time"
 )
 
-// uuid7 renders an RFC 9562 UUIDv7 (48-bit millisecond timestamp, version 7,
-// variant 10) in hyphenated form — the 5.8.x desktop client's
-// X-Conversation-ID shape.
-func uuid7() string {
-	ms := time.Now().UnixMilli() & ((1 << 48) - 1)
+// uuid7Bytes builds an RFC 9562 UUIDv7 (48-bit millisecond timestamp,
+// version 7, variant 10); uuid7 and newMessageID render it in the two wire
+// shapes the desktop client uses.
+func uuid7Bytes() [16]byte {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
+	ms := time.Now().UnixMilli() & ((1 << 48) - 1)
 	b[0] = byte(ms >> 40)
 	b[1] = byte(ms >> 32)
 	b[2] = byte(ms >> 24)
@@ -33,23 +33,20 @@ func uuid7() string {
 	b[5] = byte(ms)
 	b[6] = (b[6] & 0x0f) | 0x70
 	b[8] = (b[8] & 0x3f) | 0x80
+	return b
+}
+
+// uuid7 renders an RFC 9562 UUIDv7 in hyphenated form — the 5.8.x desktop
+// client's X-Conversation-ID shape.
+func uuid7() string {
+	b := uuid7Bytes()
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // newMessageID renders a UUIDv7 as bare 32-hex — the client's
 // request/message id shape.
 func newMessageID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	ms := time.Now().UnixMilli() & ((1 << 48) - 1)
-	b[0] = byte(ms >> 40)
-	b[1] = byte(ms >> 32)
-	b[2] = byte(ms >> 24)
-	b[3] = byte(ms >> 16)
-	b[4] = byte(ms >> 8)
-	b[5] = byte(ms)
-	b[6] = (b[6] & 0x0f) | 0x70
-	b[8] = (b[8] & 0x3f) | 0x80
+	b := uuid7Bytes()
 	return hex.EncodeToString(b[:])
 }
 

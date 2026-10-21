@@ -147,7 +147,7 @@
 - UA 三段式：`WorkBuddy/<desktopVer> <product>/<desktopVer> CLI/<cliVer>`（CN product 段 `WorkBuddy`、global 段小写 `workbuddy-ai`——product.json 的 applicationName；CLI 是独立 2.x 版本流，勿复用 desktop 版本号；**版本过期是 11140 风控诱因**，须随官方发版更新——2026-10-21 现值 CN `WorkBuddy/5.8.3 WorkBuddy/5.8.3 CLI/2.161.0`，与社区参考 workbuddy2api-hub 测试钉版一致；旧值 5.5.4/2.137.1 为 2026-09 观测）
 - `X-CodeBuddy-Request: 1`（官方所有 API 请求必带的闸门头）
 - `X-Requested-With: XMLHttpRequest`、`Accept-Language`（CN zh-CN / global en-US）
-- 用量归属：`X-Agent-Purpose: conversation` + `X-IDE-Name/Type: WorkBuddy` + `X-IDE-Version: <ver>` + `X-Product: WorkBuddy`
+- 用量归属：`X-Agent-Purpose: conversation` + `X-IDE-Name/Type: WorkBuddy` + `X-IDE-Version: <ver>` + `X-Product: SaaS`（2026-10 值；旧值 WorkBuddy 已过期）
 - 会话头族：`X-Conversation-ID`（透传）、`X-Conversation-Request-ID`/`X-Root-Request-ID`（**对话轮级聚合主键**，换号重试必须复用同值）、`X-Conversation-Message-ID`/`X-Request-ID`（消息级 32hex）、`X-Trace-ID`、`X-B3-TraceId/X-B3-SpanId/X-B3-Sampled`（16/32hex 规范）；xiaofan6ya 另发 W3C `traceparent`+单头 `b3`（与 B3 同值）
 - 设备标识：`X-Machine-ID`/`X-Session-ID`（按 uid 稳定派生，「每账号一台固定虚拟设备」；xiaofan6ya 用 md5(salt:uid) 截断，HanawaBanana 用 sha256 截 36hex——形态自由，稳定性是关键）
 - 反向证据（**不能发**的头）：`X-Moderation-Type`/`X-Expert-Id`/`X-Expert-Team-Task` 在 5.5.6 CLI bundle 命中数为 0；`X-B3-ParentSpanId` 仅父 span 存在时官方才带；`X-Machine-Id`（官方仅此拼写）不在模型请求上——多发比不发更易识别

@@ -60,6 +60,7 @@ type Breaker struct {
 	failures      int
 	rateLimitHits int // consecutive 429 count — sole backoff exponent (P2: not polluted by 404/5xx failures)
 	nextReset     time.Time
+	probing       bool                     // half-open: one probe in flight until the next Record
 	accountState  map[string]*AccountState // optional per-account tracking
 }
 
@@ -100,12 +101,17 @@ func (b *Breaker) Allow() bool {
 		if time.Now().Before(deadline) {
 			return false // still in cooldown
 		}
-		// Cooldown expired: transition to half-open and allow a probe.
+		// Cooldown expired: transition to half-open and release exactly one
+		// probe. Everything else queues behind it until that probe's Record
+		// lands — "limited probe traffic" without a limit is a thundering
+		// herd against a still-broken upstream.
 		b.state = StateHalfOpen
+		b.probing = true
 		b.nextReset = time.Time{}
 		return true
 	default:
-		return true // half-open allows limited probe traffic
+		// Half-open: only the in-flight probe passes.
+		return !b.probing
 	}
 }
 
@@ -125,6 +131,11 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 		st.TotalCalls++
 		st.LastResponse = statusCode
 	}
+
+	// The probe's outcome landed: whatever it is, the single-probe gate
+	// reopens for the next expiry cycle.
+	wasProbing := b.probing
+	b.probing = false
 
 	switch statusCode {
 	case 429:
@@ -157,7 +168,14 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 				b.nextReset = time.Time{}
 			}
 		} else if statusCode >= 500 || statusCode == 0 {
-			// Server error or connection error
+			// Server error or connection error. A failing half-open probe
+			// re-opens immediately with the base cooldown — the upstream told
+			// us it is still broken, so the full ConsecutiveFailures streak
+			// would just let the next queued probe through sooner.
+			if wasProbing && b.state == StateHalfOpen {
+				b.cooldown(b.config.CooldownSec, ReasonConsecutive)
+				return
+			}
 			b.failures++
 			if b.failures >= b.config.ConsecutiveFailures {
 				b.trip(ReasonConsecutive)
@@ -172,6 +190,7 @@ func (b *Breaker) Reset() {
 	defer b.mu.Unlock()
 	b.state = StateClosed
 	b.failures = 0
+	b.probing = false
 	b.rateLimitHits = 0
 	b.reason = ""
 	b.nextReset = time.Time{}

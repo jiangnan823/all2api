@@ -727,3 +727,90 @@ func TestRestrictedAccountStopsRotation(t *testing.T) {
 		t.Fatalf("second account must stay untouched after a restriction, got %v", calls)
 	}
 }
+
+// TestRestrictedAccountStopsStreamStartRotation covers the stream path of
+// the 11140 red line: a stream that fails before committing must abort the
+// dispatch loop on a risk-control restriction — the second account stays
+// untouched and the client sees the honest 403.
+func TestRestrictedAccountStopsStreamStartRotation(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	first := newSender("rstr1")
+	second := newSender("rstr2")
+	reg := newRegistry(t, first, second)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rstr1")
+	addAccount(t, h, "a2", "rstr2")
+	mux := newMux(h, reg)
+
+	first.sendErr = &adapter.UpstreamError{Status: http.StatusForbidden,
+		Reason: adapter.ReasonAccountRestricted, Message: "workbuddy: request illegal"}
+
+	body := `{"model":"rstr1/m","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+	rec := postJSON(t, mux, "/v1/chat/completions", body, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("restricted stream start: got %d, want 403 (body %s)", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "account_restricted") {
+		t.Fatalf("error envelope must carry account_restricted, got %s", rec.Body.String())
+	}
+	if calls, _ := second.callLog(); len(calls) != 0 {
+		t.Fatalf("second account must stay untouched after a restriction, got %v", calls)
+	}
+}
+
+// TestModelCatalogGateUsesCache pins the gate's cache discipline: the panel
+// catalog build dials upstreams (qoder's model/list has no TTL), so the
+// per-request gate must serve from the 60s snapshot — N requests, one build.
+func TestModelCatalogGateUsesCache(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	fs := newSender("rcache")
+	reg := newRegistry(t, fs)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rcache")
+	mux := newMux(h, reg)
+
+	previous := DefaultModelLister
+	t.Cleanup(func() { DefaultModelLister = previous })
+	calls := 0
+	DefaultModelLister = func(ctx context.Context) []PublicModel {
+		calls++
+		return []PublicModel{{ID: "deepseek-v4-flash", OwnedBy: "rcache"}}
+	}
+
+	for i := 0; i < 3; i++ {
+		rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rcache/deepseek-v4-flash"), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d: got %d, want 200 (body %s)", i, rec.Code, rec.Body)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("catalog built %d times for 3 requests, want exactly 1 (cache must absorb the rest)", calls)
+	}
+}
+
+// TestModelCatalogGateMatchesNamespacedRow: when another platform's bare row
+// shadows this platform's (the catalog de-duplicates bare names first-wins),
+// the namespaced row must still satisfy the gate instead of hard-404ing a
+// model the platform genuinely serves.
+func TestModelCatalogGateMatchesNamespacedRow(t *testing.T) {
+	loadRouterConfig(t, `{"listen":":0"}`)
+	fs := newSender("rshadow")
+	reg := newRegistry(t, fs)
+	h := newTestHost(t)
+	addAccount(t, h, "a1", "rshadow")
+	mux := newMux(h, reg)
+
+	previous := DefaultModelLister
+	t.Cleanup(func() { DefaultModelLister = previous })
+	DefaultModelLister = func(ctx context.Context) []PublicModel {
+		return []PublicModel{
+			{ID: "m", OwnedBy: "other"},           // shadowed the bare row
+			{ID: "rshadow/m", OwnedBy: "rshadow"}, // namespaced row survives
+		}
+	}
+
+	rec := postJSON(t, mux, "/v1/chat/completions", fmtChatBody("rshadow/m"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("namespaced-row model: got %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+}
