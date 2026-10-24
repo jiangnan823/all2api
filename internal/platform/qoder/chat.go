@@ -838,7 +838,17 @@ func busyFromBody(statusCode int, body []byte) *busySignal {
 		return nil //nolint:nilerr // not a busy envelope: fall through to the regular classification
 	}
 	if rawCode(outer.Code) != busyCode {
-		return busyFromWrapped(statusCode, outer.Message)
+		if busy := busyFromWrapped(statusCode, outer.Message); busy != nil {
+			return busy
+		}
+		// The queue family has a second wording — community issue #38/#51:
+		// "RESOURCE_LIMIT" rides 403/503 envelopes as the same
+		// admission-control rejection with a different marker. Treat it as
+		// busy (no retry hint in this shape).
+		if strings.Contains(s, "RESOURCE_LIMIT") {
+			return &busySignal{StatusCode: statusCode, Message: truncateRunes(outer.Message, 512)}
+		}
+		return nil //nolint:nilerr // not a busy envelope: fall through to the regular classification
 	}
 	busy := &busySignal{StatusCode: statusCode}
 	if outer.Message != "" {

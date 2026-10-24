@@ -817,3 +817,25 @@ func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// TestResourceLimitWordingClassifiesBusy pins the queue family's second
+// wording (community issue #38/#51): "RESOURCE_LIMIT" on a 403 envelope is
+// the same admission-control rejection as 10605 and must ride the busy
+// backoff path, not trip the auth/5xx buckets.
+func TestResourceLimitWordingClassifiesBusy(t *testing.T) {
+	u := &stubUpstream{jt: "jt-fake-1", jrt: "jrt-fake-1"}
+	u.chat = []chatReply{{status: http.StatusForbidden, sse: `{"code":"500504","message":"RESOURCE_LIMIT: model queue is full"}`}}
+	s := newSender(t, u)
+
+	_, err := s.SendChat(httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/chat/completions", strings.NewReader("{}")).Context(),
+		testAccount(), chatReq("GLM-5.3"))
+	// Exhausted-busy semantics (TestBusyExhaustedClassifiesRateLimited): the
+	// signal retries once, then surfaces as the canonical rate-limited error.
+	var ue *adapter.UpstreamError
+	if !errors.As(err, &ue) || ue.Reason != adapter.ReasonRateLimited {
+		t.Fatalf("err = %v, want rate_limited for the RESOURCE_LIMIT wording", err)
+	}
+	if !strings.Contains(ue.Message, "RESOURCE_LIMIT") {
+		t.Fatalf("message = %q, want the upstream wording preserved", ue.Message)
+	}
+}
