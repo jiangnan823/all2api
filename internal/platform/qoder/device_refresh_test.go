@@ -1,6 +1,10 @@
 package qoder
 
-import "testing"
+import (
+	"testing"
+
+	"all2api/internal/adapter"
+)
 
 // TestNormalizeDevicePair pins the rotation reply shapes seen across planes
 // and versions: flat dt- fields, the data-nested variant, session-shaped
@@ -42,5 +46,29 @@ func TestNormalizeDevicePair(t *testing.T) {
 	dt, rt, _ = normalizeDevicePair(map[string]any{"device_token": "dt-only"}, "drt-keep")
 	if dt != "dt-only" || rt != "drt-keep" {
 		t.Fatalf("fallback: dt=%q rt=%q", dt, rt)
+	}
+}
+
+// TestBuildParametersClampsMaxTokens pins the upstream cap (community issue
+// #101: "Range of max_tokens should be [1, 131072]" — larger values are a
+// hard 400): the gateway clamps instead of relaying a doomed request.
+func TestBuildParametersClampsMaxTokens(t *testing.T) {
+	over := 200000
+	req := adapter.ChatRequest{MaxTokens: &over}
+	p, err := buildParameters(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(p) != `{"max_tokens":131072}` {
+		t.Fatalf("parameters = %s, want the clamped max_tokens", p)
+	}
+	// At-or-under the cap passes through untouched.
+	at := 131072
+	p, err = buildParameters(adapter.ChatRequest{MaxTokens: &at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(p) != `{"max_tokens":131072}` {
+		t.Fatalf("parameters = %s, want the at-cap value verbatim", p)
 	}
 }

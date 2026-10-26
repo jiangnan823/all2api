@@ -20,7 +20,7 @@ var (
 // the trace family consistency.
 func TestChatIdentityHeaderFamily(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost, "https://copilot.tencent.com/v2/chat/completions", nil)
-	setChatIdentityHeaders(req)
+	setChatIdentityHeaders(req, "uid-fixture")
 	h := req.Header
 
 	for k, want := range map[string]string{
@@ -75,9 +75,27 @@ func TestChatIdentityHeaderFamily(t *testing.T) {
 		t.Errorf("b3 = %q, want the single-header shape", h.Get("b3"))
 	}
 
+	// Stable device fingerprints: present, 36-hex, and identical for the
+	// same uid across requests while differing per uid.
+	machine := h.Get("X-Machine-ID")
+	sessionID := h.Get("X-Session-ID")
+	if len(machine) != 36 || len(sessionID) != 36 || machine == sessionID {
+		t.Fatalf("machine/session = %q/%q, want two distinct 36-hex ids", machine, sessionID)
+	}
+	req1b, _ := http.NewRequest(http.MethodPost, "https://copilot.tencent.com/v2/chat/completions", nil)
+	setChatIdentityHeaders(req1b, "uid-fixture")
+	if req1b.Header.Get("X-Machine-ID") != machine || req1b.Header.Get("X-Session-ID") != sessionID {
+		t.Error("stable headers must be identical for the same uid across requests")
+	}
+	reqOther, _ := http.NewRequest(http.MethodPost, "https://copilot.tencent.com/v2/chat/completions", nil)
+	setChatIdentityHeaders(reqOther, "uid-other")
+	if reqOther.Header.Get("X-Machine-ID") == machine {
+		t.Error("different uids must produce different machine ids")
+	}
+
 	// A second application must produce fresh ids (per-request generation).
 	req2, _ := http.NewRequest(http.MethodPost, "https://copilot.tencent.com/v2/chat/completions", nil)
-	setChatIdentityHeaders(req2)
+	setChatIdentityHeaders(req2, "uid-fixture")
 	if req2.Header.Get("X-Conversation-ID") == h.Get("X-Conversation-ID") {
 		t.Error("conversation id must be generated per request")
 	}

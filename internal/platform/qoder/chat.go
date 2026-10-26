@@ -590,6 +590,12 @@ func (o *orderedObject) marshal() (json.RawMessage, error) {
 	return buf.Bytes(), nil
 }
 
+// upstreamMaxTokensCap is the upstream's enforced range ceiling
+// ("Range of max_tokens should be [1, 131072]" — community issue #101):
+// values above it are a hard 400, so the gateway clamps instead of relaying
+// a request the upstream is guaranteed to reject.
+const upstreamMaxTokensCap = 131072
+
 // buildParameters assembles the gateway "parameters" object: the
 // gateway-defined max_tokens and tool_choice first, then the verbatim
 // passthrough keys in the official client's order. Only an absent max_tokens
@@ -599,6 +605,10 @@ func buildParameters(req adapter.ChatRequest) (json.RawMessage, error) {
 	maxTokens := defaultMaxTokens
 	if req.MaxTokens != nil {
 		maxTokens = *req.MaxTokens
+	}
+	if maxTokens > upstreamMaxTokensCap {
+		fmt.Printf("[qoder] clamping max_tokens %d → %d (upstream cap)\n", maxTokens, upstreamMaxTokensCap)
+		maxTokens = upstreamMaxTokensCap
 	}
 	p.setInt("max_tokens", maxTokens)
 	if len(req.ToolChoice) > 0 && string(req.ToolChoice) != "null" {

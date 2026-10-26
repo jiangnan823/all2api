@@ -68,12 +68,13 @@ const (
 // distribution — it is a var so integrators can update it without a protocol
 // change. Stale versions are a documented 11140 risk-control trigger; the
 // 2026-10-21 restrictions hit while 5.5.4 (2026-09 captures) was two minor
-// releases behind. Current values track the community-maintained reference
-// (workbuddy2api-hub wb_identity.py, test-pinned) and the locally installed
-// official client (5.8.3). The CLI segment is its own 2.x release stream —
-// the old single-version UA was a fingerprint mismatch of its own.
-var wireClientVersion = "5.8.3"
-var wireCLIVersion = "2.161.0"
+// releases behind. 5.9.2/2.165.0 read from the locally installed 5.9.2
+// distribution (install-manifest.json + cli/package.json, 2026-10-26; its
+// product.json keeps the camel WorkBuddy applicationName). The CLI segment
+// is its own 2.x release stream — the old single-version UA was a
+// fingerprint mismatch of its own.
+var wireClientVersion = "5.9.2"
+var wireCLIVersion = "2.165.0"
 
 // Credential is the account credential snapshot one send needs.
 // pool.Account deliberately carries no secrets (pool.go), so credentials are
@@ -429,7 +430,11 @@ func (s *senderImpl) postStream(ctx context.Context, cred *Credential, body []by
 	}
 	setCommonHeaders(req, cred)
 	setAccountHeaders(req, cred)
-	setChatIdentityHeaders(req)
+	uid := ""
+	if cred != nil {
+		uid = cred.UID
+	}
+	setChatIdentityHeaders(req, uid)
 	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		if ctx.Err() != nil {

@@ -12,6 +12,7 @@ package workbuddy
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -50,14 +51,28 @@ func newMessageID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// deriveAccountStableID renders a per-account stable 36-hex device/session
+// identifier: sha256 over a purpose salt plus the uid — constant across
+// restarts, distinct across accounts, identical for the same account. The
+// official desktop client sends exactly such stable X-Machine-ID /
+// X-Session-ID headers (5.8.x captures); a gateway whose requests never
+// carry them reads as a device fingerprint that is missing or drifting —
+// one of the correlation vectors upstream grades.
+func deriveAccountStableID(uid, purpose string) string {
+	sum := sha256.Sum256([]byte("all2api:" + purpose + ":" + uid))
+	return hex.EncodeToString(sum[:18])
+}
+
 // setChatIdentityHeaders applies the desktop chat identity on top of the
 // common/account headers, 5.8.x capture shape. Header semantics per the
 // reference: X-Conversation-ID is a hyphenated UUID (new per request on the
 // desktop identity); X-Conversation-Request-ID and X-Root-Request-ID share
 // one per-turn value while X-Conversation-Message-ID and X-Request-ID share
 // a per-request one; the trace family carries the same 32-hex trace id
-// across X-Trace-ID / traceparent / b3 / X-B3-* with a fresh 16-hex span.
-func setChatIdentityHeaders(req *http.Request) {
+// across X-Trace-ID / traceparent / b3 / X-B3-* with a fresh 16-hex span;
+// X-Machine-ID / X-Session-ID are the account's stable device/session
+// fingerprints (empty uid → omitted, matching the client's anonymous shape).
+func setChatIdentityHeaders(req *http.Request, uid string) {
 	convReqID := newMessageID()
 	msgID := newMessageID()
 	span := make([]byte, 8)
@@ -84,4 +99,8 @@ func setChatIdentityHeaders(req *http.Request) {
 	req.Header.Set("X-B3-TraceId", trace)
 	req.Header.Set("X-B3-SpanId", spanHex)
 	req.Header.Set("X-B3-Sampled", "1")
+	if uid != "" {
+		req.Header.Set("X-Machine-ID", deriveAccountStableID(uid, "machine"))
+		req.Header.Set("X-Session-ID", deriveAccountStableID(uid, "session"))
+	}
 }
