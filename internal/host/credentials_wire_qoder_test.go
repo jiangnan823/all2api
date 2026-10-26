@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -230,4 +232,54 @@ func TestQoderSendThroughWiredSender(t *testing.T) {
 		t.Errorf("chat calls = %d, want 1", u.count("chat"))
 	}
 	_ = store // the store served the credential through the wired source
+}
+
+// TestQoderDeviceRotationRoundTrip pins the keepalive persistence: loading a
+// device file without a refresh token, then accepting a rotation, rewrites
+// the file with the new pair under a STABLE account id (client-id
+// fingerprint — the device token itself rotates).
+func TestQoderDeviceRotationRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	original := `{"device_token":"dt-old","client_id":"cid-1234"}`
+	path := filepath.Join(dir, "qoder-device.json")
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewCredentialStore(nil)
+	if n := s.loadQoderDevice(dir); n != 1 {
+		t.Fatalf("load = %d, want 1", n)
+	}
+
+	// The account id derives from the client id — stable across rotations.
+	cred, ok := s.lookup(credKey(QoderPlatform, patFingerprint("cid-1234")))
+	if !ok || cred.AccessToken != "dt-old" || cred.RefreshToken != "" {
+		t.Fatalf("initial cred = %+v", cred)
+	}
+
+	if err := s.AcceptQoderDeviceRotation("dt-new", "drt-first"); err != nil {
+		t.Fatalf("rotation: %v", err)
+	}
+
+	cred, ok = s.lookup(credKey(QoderPlatform, patFingerprint("cid-1234")))
+	if !ok {
+		t.Fatal("account id must stay stable across the rotation")
+	}
+	if cred.AccessToken != "dt-new" || cred.RefreshToken != "drt-first" {
+		t.Fatalf("post-rotation cred = %+v", cred)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		DeviceToken  string `json:"device_token"`
+		ClientID     string `json:"client_id"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.DeviceToken != "dt-new" || doc.RefreshToken != "drt-first" || doc.ClientID != "cid-1234" {
+		t.Fatalf("file doc = %+v", doc)
+	}
 }

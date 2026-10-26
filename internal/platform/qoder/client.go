@@ -107,7 +107,7 @@ func ResolveRegion(_ string) *Region {
 }
 
 // PATCredential is the account credential snapshot one send needs: the static
-// personal access token. Qoder PATs carry no refresh token and no expiry.
+// personal access token, or the desktop app's device-login credential.
 type PATCredential struct {
 	PAT string
 	// DeviceToken/ClientID carry the Qoder desktop app's device-login
@@ -117,6 +117,22 @@ type PATCredential struct {
 	// the chat gateway with 105 "Login expired" for app-login accounts.
 	DeviceToken string
 	ClientID    string
+	// RefreshToken is the drt-… companion of a device credential (persisted
+	// next to the device token once an exchange or rotation produced one).
+	// It is the keepalive renewal input: the legacy jobToken needRefresh
+	// mode trades it for a fresh pair. Empty = never captured.
+	RefreshToken string
+}
+
+// DeviceRotation is one renewed device credential pair. Empty fields mean
+// "unchanged" — the caller persists only what came back. A rotation that
+// answers with a session-shaped token (jt-…) rather than a new device token
+// leaves DeviceToken empty: session tokens must never be persisted as the
+// long-lived device credential.
+type DeviceRotation struct {
+	DeviceToken  string
+	RefreshToken string
+	ExpiresAt    time.Time // zero = not reported
 }
 
 // CredentialSource supplies the credential for one pool account. An error (or
@@ -431,6 +447,124 @@ func (s *senderImpl) exchangeDevice(ctx context.Context, st *acctState, deviceTo
 	// empty and the chat gateway rejecting every signed request with 101).
 	s.enrichUserinfo(ctx, prodOpenAPICNBase, jt)
 	return jt, nil
+}
+
+// RefreshDeviceCredential runs one keepalive rotation of the stored device
+// pair. The preferred path is the legacy jobToken needRefresh mode — a drt-
+// refresh token trades for a fresh device/refresh pair (community research:
+// device credentials expire on a ~15-day cycle, and once both halves die the
+// account silently fails until a manual re-login). Without a stored refresh
+// token — or when the refresh path rejects — it falls back to a plain device
+// exchange, whose response's refresh_token bootstraps the stored pair. Only
+// the returned pair is new: the caller persists it through the credential
+// store; session state here stays untouched.
+func (s *senderImpl) RefreshDeviceCredential(ctx context.Context, acct *pool.Account) (DeviceRotation, error) {
+	if acct == nil {
+		return DeviceRotation{}, &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: no account selected"}
+	}
+	src := s.options().Credentials
+	if src == nil {
+		return DeviceRotation{}, &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: no credential source configured"}
+	}
+	cred, err := src.CredentialFor(ctx, acct)
+	if err != nil || cred == nil {
+		return DeviceRotation{}, &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: credential lookup failed"}
+	}
+	if cred.DeviceToken == "" {
+		return DeviceRotation{}, &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: account " + acct.ID + " holds no device credential"}
+	}
+	st := s.state(acct.ID)
+	st.clientID = cred.ClientID
+
+	if rt := strings.TrimSpace(cred.RefreshToken); rt != "" {
+		rot, rerr := s.refreshDevicePair(ctx, st, rt)
+		if rerr == nil {
+			return rot, nil
+		}
+		fmt.Printf("[qoder] device pair refresh rejected (%v); falling back to device exchange\n", rerr)
+	}
+	jt, err := s.exchangeDevice(ctx, st, cred.DeviceToken, cred.ClientID)
+	if err != nil {
+		return DeviceRotation{}, err
+	}
+	var exp time.Time
+	if jt.ExpireAtMs > 0 {
+		exp = time.UnixMilli(jt.ExpireAtMs)
+	}
+	return DeviceRotation{RefreshToken: jt.RefreshToken, ExpiresAt: exp}, nil
+}
+
+// refreshDevicePair trades a drt- refresh token for a fresh pair through the
+// legacy machine-signed jobToken endpoint, needRefresh mode (personalToken
+// empty — the drt- token is the sole credential, per the community
+// reference's wire shape).
+func (s *senderImpl) refreshDevicePair(ctx context.Context, st *acctState, refreshToken string) (DeviceRotation, error) {
+	inner, err := marshalNoEscape(struct {
+		PersonalToken      string `json:"personalToken"`
+		SecurityOauthToken string `json:"securityOauthToken"`
+		RefreshToken       string `json:"refreshToken"`
+		NeedRefresh        bool   `json:"needRefresh"`
+		AuthInfo           string `json:"authInfo"`
+	}{RefreshToken: refreshToken, NeedRefresh: true, AuthInfo: "{}"})
+	if err != nil {
+		return DeviceRotation{}, err
+	}
+	raw, err := s.postEncoded(ctx, st, pathJobToken, inner)
+	if err != nil {
+		return DeviceRotation{}, err
+	}
+	dt, rt, expMs := normalizeDevicePair(raw, refreshToken)
+	if dt == "" && rt == refreshToken {
+		return DeviceRotation{}, fmt.Errorf("qoder: refresh reply carried no new token (keys: %d)", len(raw))
+	}
+	rot := DeviceRotation{DeviceToken: dt, RefreshToken: rt}
+	if expMs > 0 {
+		rot.ExpiresAt = time.UnixMilli(expMs)
+	}
+	return rot, nil
+}
+
+// normalizeDevicePair pulls the rotated pair out of a jobToken reply. Field
+// spellings vary across planes and versions (device_token/deviceToken/
+// access_token/accessToken, optionally nested under "data"); a session-shaped
+// "token" (jt-…) is never taken as the device credential. A missing refresh
+// token keeps the old one.
+func normalizeDevicePair(raw map[string]any, oldRefresh string) (deviceToken, refreshToken string, expireAtMs int64) {
+	pick := func(m map[string]any, keys ...string) string {
+		for _, k := range keys {
+			if v, ok := m[k].(string); ok {
+				if s := strings.TrimSpace(v); s != "" {
+					return s
+				}
+			}
+		}
+		return ""
+	}
+	data, _ := raw["data"].(map[string]any)
+	dt := pick(raw, "device_token", "deviceToken", "access_token", "accessToken", "token")
+	rt := pick(raw, "refresh_token", "refreshToken")
+	if data != nil {
+		if dt == "" {
+			dt = pick(data, "device_token", "deviceToken", "access_token", "accessToken", "token")
+		}
+		if rt == "" {
+			rt = pick(data, "refresh_token", "refreshToken")
+		}
+		if expireAtMs == 0 {
+			if v, ok := data["expireTime"].(float64); ok {
+				expireAtMs = int64(v)
+			}
+		}
+	}
+	// Only a genuine device token may replace the stored one; anything else
+	// (session jt-…) stays out of the long-lived credential.
+	if !strings.HasPrefix(dt, "dt-") {
+		dt = ""
+	}
+	if rt == "" {
+		rt = oldRefresh
+	}
+	return dt, rt, expireAtMs
 }
 
 // enrichUserinfo fills uid/name/org from GET /api/v1/userinfo (Bearer

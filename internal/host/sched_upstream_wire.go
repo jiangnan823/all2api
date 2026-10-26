@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"all2api/internal/adapter"
 	"all2api/internal/platform/workbuddy"
@@ -33,7 +34,9 @@ import (
 var _ schedule.Upstream = (*wbScheduleUpstream)(nil)
 
 // newScheduleUpstream is the production constructor: the task client over the
-// store with realm-default endpoint bases.
+// store with realm-default endpoint bases. The store itself is the qoder
+// device-refresher seam (RotateQoderDevice), so qoder's token_keepalive
+// routes through the same upstream without a second construction path.
 func newScheduleUpstream(creds *CredentialStore) schedule.Upstream {
 	return newWBScheduleUpstream(creds, workbuddy.TaskClientOptions{
 		Credentials: creds,
@@ -53,6 +56,14 @@ func newWBScheduleUpstream(creds *CredentialStore, opts workbuddy.TaskClientOpti
 type wbScheduleUpstream struct {
 	store *CredentialStore
 	tasks *workbuddy.TaskClient
+}
+
+// qoderDeviceRefresher is the qoder keepalive seam: the credential store's
+// rotation entry point (which drives the registered qoder sender and lands
+// the rotated pair back in the store + device file). Structural, so the
+// qoder platform needs no import here.
+type qoderDeviceRefresher interface {
+	RotateQoderDevice(ctx context.Context, acct *pool.Account) (time.Time, error)
 }
 
 // resolve maps a schedule.Account onto a stored credential. Lookup goes
@@ -157,9 +168,24 @@ func (u *wbScheduleUpstream) CatTravel(ctx context.Context, acc *schedule.Accoun
 // store's AcceptRefreshed lands the rotated pair in memory, the pool and the
 // auth file before this returns. The honest ExpiresAt rides the result; zero
 // (upstream gave no expiresIn) writes nothing back, per the handler contract.
+// qoder accounts route through the device-pair rotation instead: the store's
+// RotateQoderDevice drives the sender's needRefresh exchange (age-gated) and
+// persists the rotated pair to qoder-device.json — without it the ~15-day
+// device credential dies silently and takes the only qoder account with it.
 func (u *wbScheduleUpstream) TokenKeepalive(ctx context.Context, acc *schedule.Account) (schedule.KeepaliveResult, error) {
 	if acc == nil {
 		return schedule.KeepaliveResult{}, errors.New("schedule upstream: no account given")
+	}
+	if acc.Platform == QoderPlatform {
+		if u.store == nil {
+			return schedule.KeepaliveResult{}, fmt.Errorf("schedule upstream: no credential store wired (account %s/%s)", acc.Platform, acc.ID)
+		}
+		var refresher qoderDeviceRefresher = u.store
+		exp, err := refresher.RotateQoderDevice(ctx, &pool.Account{ID: acc.ID, Platform: acc.Platform})
+		if err != nil {
+			return schedule.KeepaliveResult{}, translateTaskError("token_keepalive", err)
+		}
+		return schedule.KeepaliveResult{ExpiresAt: exp}, nil
 	}
 	if acc.Platform != WorkbuddyPlatform {
 		return schedule.KeepaliveResult{}, unsupportedPlatform("token_keepalive", acc)

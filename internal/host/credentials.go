@@ -226,19 +226,29 @@ func (s *CredentialStore) LoadAuthDir(dir string) (int, error) {
 }
 
 // loadQoderDevice loads auth_dir/qoder-device.json — the Qoder desktop app's
-// device-login credential {"device_token":"dt-…","client_id":"…"} captured
-// from the official client. Device tokens yield chat-capable jobTokens on
-// /api/v1/me/jobToken; PAT-exchanged sessions are rejected by the chat
-// gateway (105) for app-login accounts. The account ID is the first 8 hex
-// chars of the device token's SHA-256 fingerprint. Returns 1 on success.
+// device-login credential
+//
+//	{"device_token":"dt-…","client_id":"…","refresh_token":"drt-…"}
+//
+// captured from the official client (refresh_token appears once an exchange
+// or keepalive rotation produced one; older files without it load fine).
+// Device tokens yield chat-capable jobTokens on /api/v1/me/jobToken;
+// PAT-exchanged sessions are rejected by the chat gateway (105) for
+// app-login accounts. The account ID is the first 8 hex chars of the
+// CLIENT ID's SHA-256 fingerprint — the client id never rotates, so the
+// account identity survives device-token keepalive rotations (the token
+// fingerprint it used to be derived from changed on every rotation, churning
+// the pool account). Returns 1 on success.
 func (s *CredentialStore) loadQoderDevice(dir string) int {
-	raw, err := os.ReadFile(filepath.Join(dir, qoderDeviceFile))
+	path := filepath.Join(dir, qoderDeviceFile)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
 	var doc struct {
-		DeviceToken string `json:"device_token"`
-		ClientID    string `json:"client_id"`
+		DeviceToken  string `json:"device_token"`
+		ClientID     string `json:"client_id"`
+		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		fmt.Printf("credentials: skip %s: %v\n", qoderDeviceFile, err)
@@ -250,7 +260,13 @@ func (s *CredentialStore) loadQoderDevice(dir string) int {
 		fmt.Printf("credentials: skip %s: expected a %q-prefixed device_token and a client_id\n", qoderDeviceFile, qoderDevicePrefix)
 		return 0
 	}
-	cred := fileCred{AccessToken: dt, ClientID: cid, UID: patFingerprint(dt)}
+	cred := fileCred{
+		AccessToken:  dt,
+		RefreshToken: strings.TrimSpace(doc.RefreshToken),
+		ClientID:     cid,
+		UID:          patFingerprint(cid),
+		Path:         path,
+	}
 	s.put(credKey(QoderPlatform, cred.UID), cred)
 	if s.pool != nil {
 		s.pool.AddAccount(&pool.Account{
@@ -261,6 +277,56 @@ func (s *CredentialStore) loadQoderDevice(dir string) int {
 	}
 	fmt.Printf("credentials: qoder device credential registered (%s)\n", qoderDeviceFile)
 	return 1
+}
+
+// AcceptQoderDeviceRotation persists a keepalive-rotated device pair: the
+// in-memory entry updates and qoder-device.json is rewritten atomically with
+// the new refresh_token (and device token, when the rotation produced one).
+// The client id is immutable, so the account identity — and with it the pool
+// registration, ledger and sticky bindings — stays stable across rotations.
+// No-op when neither half changed.
+func (s *CredentialStore) AcceptQoderDeviceRotation(deviceToken, refreshToken string) error {
+	s.mu.Lock()
+	var key string
+	var cred fileCred
+	for k, v := range s.entries {
+		if strings.HasPrefix(k, QoderPlatform+"/") && strings.HasPrefix(v.AccessToken, qoderDevicePrefix) {
+			key, cred = k, v
+			break
+		}
+	}
+	s.mu.Unlock()
+	if key == "" {
+		return fmt.Errorf("credentials: no qoder device credential loaded")
+	}
+	changed := false
+	if deviceToken != "" && deviceToken != cred.AccessToken {
+		cred.AccessToken = deviceToken
+		changed = true
+	}
+	if refreshToken != "" && refreshToken != cred.RefreshToken {
+		cred.RefreshToken = refreshToken
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	if cred.Path == "" {
+		cred.Path = filepath.Join(s.dir, qoderDeviceFile)
+	}
+	doc, err := json.Marshal(struct {
+		DeviceToken  string `json:"device_token"`
+		ClientID     string `json:"client_id"`
+		RefreshToken string `json:"refresh_token,omitempty"`
+	}{cred.AccessToken, cred.ClientID, cred.RefreshToken})
+	if err != nil {
+		return err
+	}
+	if err := atomicWriteFile(cred.Path, doc, 0o600); err != nil {
+		return err
+	}
+	s.put(key, cred)
+	return nil
 }
 
 // loadQoderPAT loads auth_dir/qoder-pat.txt (one "pt-"-prefixed line) and
@@ -436,5 +502,35 @@ func writeBackAuthFile(path string, cred fileCred) error {
 		return fmt.Errorf("credentials: rename %s → %s: %w", tmpName, path, err)
 	}
 	tmpName = "" // consumed by the rename; deferred cleanup must not run
+	return nil
+}
+
+// atomicWriteFile lands data at path through a temp file + same-directory
+// rename — the shared tail of every credential write-back.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
+	if err != nil {
+		return fmt.Errorf("credentials: temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if tmpName != "" {
+			_ = os.Remove(tmpName) // best-effort cleanup when rename did not consume it
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("credentials: write %s: %w", tmpName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("credentials: close %s: %w", tmpName, err)
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return fmt.Errorf("credentials: chmod %s: %w", tmpName, err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("credentials: rename %s → %s: %w", tmpName, path, err)
+	}
+	tmpName = ""
 	return nil
 }

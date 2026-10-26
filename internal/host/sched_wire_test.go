@@ -285,8 +285,11 @@ func TestScheduleUpstreamNonWorkbuddyPlatformSkips(t *testing.T) {
 	if _, err := up.CatTravel(req.Context(), acc); !errors.Is(err, schedule.ErrUnsupportedTask) {
 		t.Fatalf("CatTravel on qoder: err = %v, want ErrUnsupportedTask wrap", err)
 	}
-	if _, err := up.TokenKeepalive(req.Context(), acc); !errors.Is(err, schedule.ErrUnsupportedTask) {
-		t.Fatalf("TokenKeepalive on qoder: err = %v, want ErrUnsupportedTask wrap", err)
+	// TokenKeepalive on qoder is SUPPORTED since the device-pair rotation
+	// (2026-10-24): with no stored credential it fails explicitly, not as an
+	// unsupported task.
+	if _, err := up.TokenKeepalive(req.Context(), acc); err == nil || errors.Is(err, schedule.ErrUnsupportedTask) {
+		t.Fatalf("TokenKeepalive on qoder without a credential: err = %v, want an explicit credential error", err)
 	}
 }
 
