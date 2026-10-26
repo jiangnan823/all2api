@@ -86,6 +86,10 @@ type CredentialStore struct {
 
 	mu      sync.RWMutex
 	entries map[string]fileCred // "platform/accountID" → credential
+	// rotateMu serializes qoder device-pair rotations: refresh tokens are
+	// single-use upstream, and the cron plus a manual batch-op could
+	// otherwise race two needRefresh exchanges with the same drt- half.
+	rotateMu sync.Mutex
 }
 
 // NewCredentialStore builds an empty store over the shared pool: accounts
@@ -273,31 +277,32 @@ func (s *CredentialStore) loadQoderDevice(dir string) int {
 			ID:       cred.UID,
 			Platform: QoderPlatform,
 			Status:   "active",
+			// Optimistic start, same as the PAT loader: Health 0 weights the
+			// account's draw to zero, and this is the only chat-capable
+			// credential shape app-login accounts have.
+			Health: 1,
 		})
 	}
 	fmt.Printf("credentials: qoder device credential registered (%s)\n", qoderDeviceFile)
 	return 1
 }
 
-// AcceptQoderDeviceRotation persists a keepalive-rotated device pair: the
-// in-memory entry updates and qoder-device.json is rewritten atomically with
-// the new refresh_token (and device token, when the rotation produced one).
-// The client id is immutable, so the account identity — and with it the pool
-// registration, ledger and sticky bindings — stays stable across rotations.
-// No-op when neither half changed.
-func (s *CredentialStore) AcceptQoderDeviceRotation(deviceToken, refreshToken string) error {
+// AcceptQoderDeviceRotation persists a keepalive-rotated device pair for one
+// named account: the in-memory entry updates and qoder-device.json is
+// rewritten atomically with the new refresh_token (and device token, when the
+// rotation produced one). The whole operation runs under the store lock —
+// resolve, file write and publish are one critical section, so two
+// concurrent rotations cannot interleave file and memory into different
+// generations. The client id is immutable, so the account identity — and
+// with it the pool registration, ledger and sticky bindings — stays stable
+// across rotations. No-op when neither half changed.
+func (s *CredentialStore) AcceptQoderDeviceRotation(accountID, deviceToken, refreshToken string) error {
 	s.mu.Lock()
-	var key string
-	var cred fileCred
-	for k, v := range s.entries {
-		if strings.HasPrefix(k, QoderPlatform+"/") && strings.HasPrefix(v.AccessToken, qoderDevicePrefix) {
-			key, cred = k, v
-			break
-		}
-	}
-	s.mu.Unlock()
-	if key == "" {
-		return fmt.Errorf("credentials: no qoder device credential loaded")
+	defer s.mu.Unlock()
+	key := credKey(QoderPlatform, accountID)
+	cred, ok := s.entries[key]
+	if !ok || !strings.HasPrefix(cred.AccessToken, qoderDevicePrefix) {
+		return fmt.Errorf("credentials: no qoder device credential loaded for %s", key)
 	}
 	changed := false
 	if deviceToken != "" && deviceToken != cred.AccessToken {
@@ -325,7 +330,7 @@ func (s *CredentialStore) AcceptQoderDeviceRotation(deviceToken, refreshToken st
 	if err := atomicWriteFile(cred.Path, doc, 0o600); err != nil {
 		return err
 	}
-	s.put(key, cred)
+	s.entries[key] = cred
 	return nil
 }
 

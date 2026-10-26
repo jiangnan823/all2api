@@ -195,7 +195,14 @@ func (s *Scheduler) tickLoop() {
 			s.mu.RLock()
 			var needsFiring []*Task
 			for _, task := range s.tasks {
-				if task.Enabled && !now.Before(task.NextRunAt) {
+				// Status==Running is part of the predicate: NextRunAt only
+				// advances when the handler FINISHES (in execute's goroutine),
+				// so without this check a long-running task re-fired every
+				// 1s tick until it completed — one slow batch meant
+				// ceil(duration/1s) concurrent copies of itself hammering the
+				// upstreams (2026-10-21 log evidence: 5-6 duplicate "schedule
+				// run" lines per fire).
+				if task.Enabled && task.Status != StatusRunning && !now.Before(task.NextRunAt) {
 					needsFiring = append(needsFiring, task)
 				}
 			}
@@ -217,14 +224,18 @@ func (s *Scheduler) execute(task *Task) {
 	start := time.Now()
 
 	s.mu.Lock()
+	// Optimistically advance NextRunAt at DISPATCH time: between this lock
+	// and the handler goroutine's first lock, later ticks would otherwise see
+	// the stale NextRunAt. The Status check in the tick predicate is the
+	// primary guard; this closes the dispatch-to-goroutine window.
 	task.Status = StatusRunning
+	task.NextRunAt = s.nextOccurrence(time.Now(), task.CronSpec)
 	handler, ok := s.handlers[task.Name]
 	if !ok {
 		// No handler registered yet (stub)
 		task.Status = StatusSuccess
 		task.LastRunAt = start
 		task.Duration = time.Since(start).Round(time.Millisecond)
-		task.NextRunAt = s.nextOccurrence(time.Now(), task.CronSpec)
 		s.mu.Unlock()
 		return
 	}
@@ -243,6 +254,7 @@ func (s *Scheduler) execute(task *Task) {
 			task.Error = err.Error()
 			task.Status = StatusFailed
 		} else {
+			task.Error = "" // a stale failure must not outlive a successful run
 			task.Status = StatusSuccess
 		}
 		task.NextRunAt = s.nextOccurrence(time.Now(), task.CronSpec)

@@ -61,7 +61,22 @@ type Breaker struct {
 	rateLimitHits int // consecutive 429 count — sole backoff exponent (P2: not polluted by 404/5xx failures)
 	nextReset     time.Time
 	probing       bool                     // half-open: one probe in flight until the next Record
+	probeStarted  time.Time                // when the current probe was released (liveness backstop)
 	accountState  map[string]*AccountState // optional per-account tracking
+}
+
+// probeBackstop bounds how long a half-open breaker waits for the probe's
+// Record. A probe whose outcome never arrives (client vanished mid-flight,
+// no account was selectable after the gate passed) would otherwise pin
+// probing=true forever and wall the platform off behind a half-open circuit
+// even after the upstream recovered. Generous: a probe may legitimately be a
+// minutes-long stream.
+func (b *Breaker) probeBackstop() time.Duration {
+	d := time.Duration(b.config.CooldownSec*10) * time.Second
+	if d < 5*time.Minute {
+		d = 5 * time.Minute
+	}
+	return d
 }
 
 // AccountState tracks circuit state per account within a source.
@@ -107,11 +122,19 @@ func (b *Breaker) Allow() bool {
 		// herd against a still-broken upstream.
 		b.state = StateHalfOpen
 		b.probing = true
+		b.probeStarted = time.Now()
 		b.nextReset = time.Time{}
 		return true
 	default:
-		// Half-open: only the in-flight probe passes.
-		return !b.probing
+		// Half-open: only the in-flight probe passes — unless the probe's
+		// Record never landed and the backstop expired, in which case a
+		// fresh probe releases (liveness over strictness).
+		if b.probing && time.Since(b.probeStarted) < b.probeBackstop() {
+			return false
+		}
+		b.probing = true
+		b.probeStarted = time.Now()
+		return true
 	}
 }
 
@@ -136,6 +159,7 @@ func (b *Breaker) Record(statusCode int, accountID string) {
 	// reopens for the next expiry cycle.
 	wasProbing := b.probing
 	b.probing = false
+	b.probeStarted = time.Time{}
 
 	switch statusCode {
 	case 429:
@@ -191,6 +215,7 @@ func (b *Breaker) Reset() {
 	b.state = StateClosed
 	b.failures = 0
 	b.probing = false
+	b.probeStarted = time.Time{}
 	b.rateLimitHits = 0
 	b.reason = ""
 	b.nextReset = time.Time{}

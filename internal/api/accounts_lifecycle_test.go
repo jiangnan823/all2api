@@ -53,9 +53,12 @@ func TestEnableEndpointSetsActiveButKeepsCooldown(t *testing.T) {
 	loadM5Config(t, `{"listen":":0"}`)
 	h := newTestHost(t, "qa")
 	h.Creds = host.NewCredentialStore(h.Pool)
-	h.Pool.AddAccount(&pool.Account{ID: "acc-1", Platform: "qa", Status: "disabled", Credit: 500})
+	h.Pool.AddAccount(&pool.Account{ID: "acc-1", Platform: "qa", Status: "active", Credit: 500})
 	// A running 429 backoff must survive enable — recover owns that unlock.
+	// (Cooldown first, then the manual disable: the task-failure cooldown
+	// writer no-ops on disabled accounts by guard.)
 	h.Pool.SetAccountCooldown("qa", "acc-1", time.Now().Add(time.Minute))
+	h.Pool.SetAccountStatus("qa", "acc-1", "disabled")
 
 	rec := postLifecycle(t, newLifecycleMux(t, h), "/api/accounts/qa:acc-1/enable")
 	if rec.Code != http.StatusOK {

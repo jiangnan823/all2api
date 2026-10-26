@@ -71,10 +71,21 @@ const qoderRefreshMinAgeDays = 12
 
 // RotateQoderDevice drives one device-credential keepalive through the
 // registered qoder sender and lands the rotated pair back in the store and
-// the device file. The age gate keeps routine runs no-op; the bootstrap case
-// (no refresh token stored yet) always runs. Returns the reported expiry
-// (zero when the upstream did not say).
+// the device file. Single-flighted: refresh tokens are single-use upstream,
+// and two concurrent rotations (cron + a manual batch-op) would invalidate
+// the loser's pair mid-flight. The age gate keeps routine runs no-op; the
+// bootstrap case (no refresh token stored yet) always runs. After every run
+// the credit balance is re-probed when the account sits at zero — seeding is
+// boot-once otherwise, and one failed startup probe would hold the only
+// chat-capable account below the credit floor for the process lifetime.
+// Returns the reported expiry (zero when the upstream did not say).
 func (s *CredentialStore) RotateQoderDevice(ctx context.Context, acct *pool.Account) (time.Time, error) {
+	s.rotateMu.Lock()
+	defer s.rotateMu.Unlock()
+
+	if acct == nil {
+		return time.Time{}, fmt.Errorf("schedule upstream: no account given")
+	}
 	a := adapter.Default.Get(QoderPlatform)
 	if a == nil {
 		return time.Time{}, fmt.Errorf("schedule upstream: no qoder adapter in this build")
@@ -89,22 +100,50 @@ func (s *CredentialStore) RotateQoderDevice(ctx context.Context, acct *pool.Acco
 	if !ok {
 		return time.Time{}, fmt.Errorf("schedule upstream: no credential for %s/%s", QoderPlatform, acct.ID)
 	}
+	var exp time.Time
 	if cred.RefreshToken != "" && cred.Path != "" {
 		if st, err := os.Stat(cred.Path); err == nil {
 			ageDays := int(time.Since(st.ModTime()).Hours() / 24)
 			if ageDays < qoderRefreshMinAgeDays {
-				return time.Time{}, nil // young pair: routine no-op
+				// Young pair: rotation is a no-op, but the credit re-probe
+				// below still runs.
+			} else {
+				rot, err := refresher.RefreshDeviceCredential(ctx, acct)
+				if err != nil {
+					return time.Time{}, err
+				}
+				if err := s.AcceptQoderDeviceRotation(acct.ID, rot.DeviceToken, rot.RefreshToken); err != nil {
+					return rot.ExpiresAt, fmt.Errorf("schedule upstream: persist rotated device pair: %w", err)
+				}
+				exp = rot.ExpiresAt
+			}
+		}
+	} else {
+		// Bootstrap: no stored drt- half yet — capture it via a device
+		// exchange so the first keepalive after this ships seeds the pair.
+		rot, err := refresher.RefreshDeviceCredential(ctx, acct)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if err := s.AcceptQoderDeviceRotation(acct.ID, rot.DeviceToken, rot.RefreshToken); err != nil {
+			return rot.ExpiresAt, fmt.Errorf("schedule upstream: persist bootstrapped device pair: %w", err)
+		}
+		exp = rot.ExpiresAt
+	}
+
+	// Credit re-probe for a starved account (floored at boot by one failed
+	// seed): without this nothing can ever lift a qoder account above the
+	// credit floor until the next restart.
+	if s.pool != nil {
+		if probe, ok := a.(interface {
+			QuotaRemaining(ctx context.Context, acct *pool.Account) (int64, error)
+		}); ok {
+			if credits, err := probe.QuotaRemaining(ctx, acct); err == nil {
+				s.pool.SetAccountCredit(QoderPlatform, acct.ID, credits)
 			}
 		}
 	}
-	rot, err := refresher.RefreshDeviceCredential(ctx, acct)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if err := s.AcceptQoderDeviceRotation(rot.DeviceToken, rot.RefreshToken); err != nil {
-		return rot.ExpiresAt, fmt.Errorf("schedule upstream: persist rotated device pair: %w", err)
-	}
-	return rot.ExpiresAt, nil
+	return exp, nil
 }
 
 // WireQoderSender injects the store into the registered qoder adapter as the

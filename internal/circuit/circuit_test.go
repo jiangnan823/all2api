@@ -156,3 +156,35 @@ func TestHalfOpenSingleProbe(t *testing.T) {
 		t.Fatal("closed circuit passes traffic again")
 	}
 }
+
+// TestProbeBackstopReleasesStuckHalfOpen pins the liveness fix: a probe whose
+// Record never lands (client gone, nothing selectable after the gate) used to
+// pin probing=true forever, walling the platform behind a half-open circuit.
+// After the backstop, a fresh probe releases.
+func TestProbeBackstopReleasesStuckHalfOpen(t *testing.T) {
+	b := NewBreaker("p", Config{ConsecutiveFailures: 2, CooldownSec: 60, TripAutoRecoverSec: 60})
+	b.Record(500, "a")
+	b.Record(500, "a")
+	forceExpiry(b)
+
+	if !b.Allow() {
+		t.Fatal("probe must flow")
+	}
+	if b.Allow() {
+		t.Fatal("second caller must queue behind the probe")
+	}
+
+	// The probe's Record never arrives; the backstop expires.
+	b.mu.Lock()
+	b.probeStarted = time.Now().Add(-10 * time.Minute)
+	b.mu.Unlock()
+	if !b.Allow() {
+		t.Fatal("backstop must release a fresh probe when the old one went silent")
+	}
+
+	// A late Record from the silent probe still clears the flag cleanly.
+	b.Record(200, "a")
+	if b.State() != StateClosed {
+		t.Fatalf("late success must close: state=%v", b.State())
+	}
+}

@@ -94,8 +94,10 @@ func setChatIdentityHeaders(req *http.Request, uid string) {
 	req.Header.Set("X-Conversation-Message-ID", msgID)
 	req.Header.Set("X-Request-ID", msgID)
 	req.Header.Set("X-Trace-ID", trace)
-	req.Header.Set("traceparent", "00-"+trace+"-"+spanHex+"-01")
-	req.Header.Set("b3", trace+"-"+spanHex+"-1")
+	// traceparent/b3 go out lowercase on the wire (direct map keys — Set
+	// would canonicalize to Traceparent/B3; captures document lowercase).
+	req.Header["traceparent"] = []string{"00-" + trace + "-" + spanHex + "-01"}
+	req.Header["b3"] = []string{trace + "-" + spanHex + "-1"}
 	req.Header.Set("X-B3-TraceId", trace)
 	req.Header.Set("X-B3-SpanId", spanHex)
 	req.Header.Set("X-B3-Sampled", "1")

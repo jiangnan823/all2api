@@ -68,11 +68,13 @@ func TestChatIdentityHeaderFamily(t *testing.T) {
 	if h.Get("X-B3-TraceId") != trace {
 		t.Errorf("X-B3-TraceId must equal X-Trace-ID")
 	}
-	if h.Get("traceparent") != "00-"+trace+"-"+span+"-01" {
-		t.Errorf("traceparent = %q, want the W3C shape over the same trace/span", h.Get("traceparent"))
+	// Direct map reads: the lowercase wire keys are deliberately
+	// non-canonical (Set would uppercase them).
+	if tp := h["traceparent"]; len(tp) != 1 || tp[0] != "00-"+trace+"-"+span+"-01" {
+		t.Errorf("traceparent = %v, want the W3C shape over the same trace/span", tp)
 	}
-	if h.Get("b3") != trace+"-"+span+"-1" {
-		t.Errorf("b3 = %q, want the single-header shape", h.Get("b3"))
+	if b3 := h["b3"]; len(b3) != 1 || b3[0] != trace+"-"+span+"-1" {
+		t.Errorf("b3 = %v, want the single-header shape", b3)
 	}
 
 	// Stable device fingerprints: present, 36-hex, and identical for the

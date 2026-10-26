@@ -267,7 +267,10 @@ func (s *senderImpl) state(accountID string) *acctState {
 	if st, ok := s.states[accountID]; ok {
 		return st
 	}
-	machineID, machineToken, machineType := newMachineIdentity()
+	// Placeholder identity derived from the account id; patFor re-derives
+	// from the resolved credential so the fingerprint tracks the credential
+	// (stable across restarts), never the process.
+	machineID, machineToken, machineType := deriveMachineIdentity("account:" + accountID)
 	st := &acctState{
 		machineID:    machineID,
 		machineToken: machineToken,
@@ -299,12 +302,16 @@ func (s *senderImpl) patFor(ctx context.Context, acct *pool.Account) (string, er
 	st.clientID = cred.ClientID
 	if cred.DeviceToken != "" {
 		st.credToken = cred.DeviceToken
+		// The machine fingerprint tracks the credential: stable across
+		// restarts for the same credential, distinct per credential.
+		st.machineID, st.machineToken, st.machineType = deriveMachineIdentity("cred:" + cred.DeviceToken)
 		return cred.DeviceToken, nil
 	}
 	st.credToken = cred.PAT
 	if cred.PAT == "" {
 		return "", &adapter.UpstreamError{Status: http.StatusUnauthorized, Reason: adapter.ReasonAuthExpired, Message: "qoder: account " + acct.ID + " has no PAT"}
 	}
+	st.machineID, st.machineToken, st.machineType = deriveMachineIdentity("cred:" + cred.PAT)
 	return cred.PAT, nil
 }
 

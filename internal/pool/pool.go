@@ -86,6 +86,12 @@ func (a *Account) TriggerCooldown(dur time.Duration) {
 // the panel's status_note column renders for as long as the account stays
 // cooling (M10-B2 snapshot extension).
 func (a *Account) TriggerCooldownReason(dur time.Duration, reason string) {
+	if a.Status == "disabled" {
+		// A manual disable is an operator decision: request-path health
+		// bookkeeping must not resurrect the account by flipping it into a
+		// cooldown that EffectiveStatus later reads back to active.
+		return
+	}
 	a.CooldownEnd = time.Now().Add(dur)
 	a.Status = "cooling"
 	a.CooldownReason = reason
@@ -219,7 +225,10 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 		totalWeight += weights[i]
 	}
 
-	// Weighted random selection
+	// Top-5 note: with more than five eligible candidates the weighted draw
+	// runs over an arbitrary map-ordered subset (no explicit sort — the
+	// comment above predates the code); with the fleet sizes this gateway
+	// runs, topN is the full candidate set and the point is moot.
 	r := s.rng.Float64() * totalWeight
 	accum := 0.0
 	for i, w := range weights {
@@ -246,7 +255,21 @@ func (s *WeightedRandomSelector) Select(ctx context.Context, platform string) (*
 		}
 	}
 
-	return topN[len(topN)-1], nil
+	// Float-accumulation edge: hand out the last candidate, but through the
+	// same lease discipline as the draw above — an unleasned return would
+	// let concurrent selects pick the same account.
+	fallback := topN[len(topN)-1]
+	token := fmt.Sprintf("%016x", s.rng.Uint64())
+	s.leases[fallback.ID] = token
+	go func(id, tok string) {
+		time.Sleep(s.leaseTTL)
+		s.mu.Lock()
+		if s.leases[id] == tok {
+			delete(s.leases, id)
+		}
+		s.mu.Unlock()
+	}(fallback.ID, token)
+	return fallback, nil
 }
 
 // ReleaseLease lifts the send-path lease on an account. The router calls it
@@ -479,9 +502,14 @@ func (s *WeightedRandomSelector) SetAccountStatus(platform, accountID, status st
 // form). The only callers are the task-failure write-backs (scheduled batch
 // and the panel batch-op), so the recorded status_note cause is
 // CooldownReasonTaskFailed — 429s reach TriggerCooldownReason through
-// UpdateHealth instead. Returns false when the account is unknown.
+// UpdateHealth instead. A manually disabled account stays disabled (same
+// guard as TriggerCooldownReason: task bookkeeping must not resurrect an
+// operator decision). Returns false when the account is unknown.
 func (s *WeightedRandomSelector) SetAccountCooldown(platform, accountID string, until time.Time) bool {
 	return s.applyAccount(platform, accountID, func(acc *Account) {
+		if acc.Status == "disabled" {
+			return
+		}
 		acc.CooldownEnd = until
 		acc.SetStatus("cooling")
 		acc.CooldownReason = CooldownReasonTaskFailed

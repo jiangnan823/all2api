@@ -144,7 +144,7 @@
 
 两个实现独立收敛到同一组「拟真头」，反证上游按头形状做客户端识别：
 
-- UA 三段式：`WorkBuddy/<desktopVer> <product>/<desktopVer> CLI/<cliVer>`（CN product 段 `WorkBuddy`、global 段小写 `workbuddy-ai`——product.json 的 applicationName；CLI 是独立 2.x 版本流，勿复用 desktop 版本号；**版本过期是 11140 风控诱因**，须随官方发版更新——2026-10-21 现值 CN `WorkBuddy/5.8.3 WorkBuddy/5.8.3 CLI/2.161.0`，与社区参考 workbuddy2api-hub 测试钉版一致；旧值 5.5.4/2.137.1 为 2026-09 观测）
+- UA 三段式：`WorkBuddy/<desktopVer> <product>/<desktopVer> CLI/<cliVer>`（CN product 段 `WorkBuddy`、global 段小写 `workbuddy-ai`——product.json 的 applicationName；CLI 是独立 2.x 版本流，勿复用 desktop 版本号；**版本过期是 11140 风控诱因**，须随官方发版更新——2026-10-26 现值 CN `WorkBuddy/5.9.2 WorkBuddy/5.9.2 CLI/2.165.0`（自本机 5.9.2 分发包 install-manifest.json + cli/package.json 解剖取得；hub 测试钉版仍为 5.8.3/2.161.0 系其 10-20 抓包时点）；旧值 5.5.4/2.137.1 为 2026-09 观测）
 - `X-CodeBuddy-Request: 1`（官方所有 API 请求必带的闸门头）
 - `X-Requested-With: XMLHttpRequest`、`Accept-Language`（CN zh-CN / global en-US）
 - 用量归属：`X-Agent-Purpose: conversation` + `X-IDE-Name/Type: WorkBuddy` + `X-IDE-Version: <ver>` + `X-Product: SaaS`（2026-10 值；旧值 WorkBuddy 已过期）

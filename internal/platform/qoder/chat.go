@@ -603,7 +603,7 @@ const upstreamMaxTokensCap = 131072
 func buildParameters(req adapter.ChatRequest) (json.RawMessage, error) {
 	p := newOrderedObject()
 	maxTokens := defaultMaxTokens
-	if req.MaxTokens != nil {
+	if req.MaxTokens != nil && *req.MaxTokens > 0 {
 		maxTokens = *req.MaxTokens
 	}
 	if maxTokens > upstreamMaxTokensCap {

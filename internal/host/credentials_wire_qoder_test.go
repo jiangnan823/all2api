@@ -256,7 +256,7 @@ func TestQoderDeviceRotationRoundTrip(t *testing.T) {
 		t.Fatalf("initial cred = %+v", cred)
 	}
 
-	if err := s.AcceptQoderDeviceRotation("dt-new", "drt-first"); err != nil {
+	if err := s.AcceptQoderDeviceRotation(patFingerprint("cid-1234"), "dt-new", "drt-first"); err != nil {
 		t.Fatalf("rotation: %v", err)
 	}
 

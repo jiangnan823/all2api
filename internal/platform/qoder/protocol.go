@@ -22,8 +22,10 @@ import (
 	cosyMD5 "crypto/md5" // #nosec G505 -- the Qoder COSY protocol mandates MD5 for its wire signatures; changing the hash breaks authentication.
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -359,12 +361,23 @@ func newUUIDString() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// newMachineIdentity mints the per-account machine fingerprint triple. Sizes
-// mirror the reference: uuid id, 50-char token, 18-char type.
-func newMachineIdentity() (machineID, machineToken, machineType string) {
-	machineID = newUUIDString()
-	machineToken = (newUUIDString() + newUUIDString())[:50]
-	machineType = newUUIDString()[:18]
+// deriveMachineIdentity derives the per-account machine fingerprint triple
+// deterministically from the credential: uuid-shaped id, 50-char token,
+// 18-char type (sizes mirror the reference). The community implementation
+// seeds its machine identity from the credential for the same reason this
+// must not be random: the upstream grades device consistency, and a triple
+// re-rolled every process restart reads as a device that changes identity
+// on every restart.
+func deriveMachineIdentity(seed string) (machineID, machineToken, machineType string) {
+	id := sha256.Sum256([]byte("machine-id:" + seed))
+	id[6] = (id[6] & 0x0f) | 0x40
+	id[8] = (id[8] & 0x3f) | 0x80
+	machineID = fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])
+	tok := sha256.Sum256([]byte("machine-token:" + seed))
+	tok2 := sha256.Sum256([]byte("machine-token-2:" + seed))
+	machineToken = hex.EncodeToString(tok[:])[:34] + hex.EncodeToString(tok2[:])[:16]
+	typ := sha256.Sum256([]byte("machine-type:" + seed))
+	machineType = hex.EncodeToString(typ[:])[:18]
 	return machineID, machineToken, machineType
 }
 

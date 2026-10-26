@@ -57,10 +57,12 @@ type Router struct {
 	// (qoder's model/list fetch has no TTL of its own), so the per-request
 	// catalog gate must not dial it every time — that would couple every
 	// platform's request path to every other platform's upstream availability
-	// and roughly double the upstream request volume. Guarded by catalogMu.
-	catalogMu   sync.Mutex
-	catalogSnap []PublicModel
-	catalogAt   time.Time
+	// and roughly double the upstream request volume. Guarded by catalogMu;
+	// catalogAttempt throttles miss fan-out when the upstream is dead.
+	catalogMu      sync.Mutex
+	catalogSnap    []PublicModel
+	catalogAt      time.Time
+	catalogAttempt time.Time
 }
 
 // catalogCacheTTL bounds how stale the gate's catalog view may be. A refresh
@@ -69,30 +71,50 @@ type Router struct {
 // everything because one upstream hiccuped.
 const catalogCacheTTL = time.Minute
 
+// catalogMissThrottle bounds how often a cache miss may trigger an upstream
+// fetch — during an upstream outage every dispatch would otherwise pay the
+// lister timeout concurrently.
+const catalogMissThrottle = 15 * time.Second
+
 // catalogRows returns the model catalog through the cache. Rows are shared
 // with handleV1Models and the dispatch gate; callers must treat the slice as
 // immutable.
 func (rt *Router) catalogRows(ctx context.Context) []PublicModel {
-	rt.catalogMu.Lock()
-	defer rt.catalogMu.Unlock()
 	lister := rt.models
 	if lister == nil {
 		lister = DefaultModelLister
 	}
 	if lister == nil {
+		// No catalog source wired: the upstream remains the authority.
 		return nil
 	}
+	rt.catalogMu.Lock()
 	if rt.catalogSnap != nil && time.Since(rt.catalogAt) < catalogCacheTTL {
-		return rt.catalogSnap
+		rows := rt.catalogSnap
+		rt.catalogMu.Unlock()
+		return rows
 	}
+	// The refresh runs OUTSIDE the mutex: the lister dials upstreams (qoder's
+	// model/list, up to its 15s timeout), and holding the lock across that
+	// would serialize every platform's dispatch behind one platform's slow
+	// upstream. catalogAttempt throttles the miss fan-out: concurrent and
+	// back-to-back misses inside the window reuse the current state (stale
+	// rows, or none) instead of each dialing a possibly-dead upstream.
+	if time.Since(rt.catalogAttempt) < catalogMissThrottle {
+		snap := rt.catalogSnap
+		rt.catalogMu.Unlock()
+		return snap
+	}
+	rt.catalogAttempt = time.Now()
+	rt.catalogMu.Unlock()
 	rows := lister(ctx)
-	if len(rows) == 0 && rt.catalogSnap != nil {
+	rt.catalogMu.Lock()
+	defer rt.catalogMu.Unlock()
+	if len(rows) == 0 {
 		return rt.catalogSnap
 	}
-	if len(rows) > 0 {
-		rt.catalogSnap = rows
-		rt.catalogAt = time.Now()
-	}
+	rt.catalogSnap = rows
+	rt.catalogAt = time.Now()
 	return rows
 }
 
@@ -287,6 +309,9 @@ func responsesToolsToChat(raw json.RawMessage) (json.RawMessage, error) {
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return nil, errors.New("tools: expected an array of tool objects")
+	}
+	if len(items) == 0 {
+		return nil, nil // explicit empty array ≡ no tools; do not ship "tools":[] upstream
 	}
 	out := make([]map[string]any, 0, len(items))
 	for i, item := range items {
@@ -611,8 +636,18 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 		return
 	}
 	// The upstream sees the bare model name; "platform/" is routing only.
+	// An empty bare ("qoder/") would otherwise ride the platform's default
+	// model — exactly the junk-name class the catalog gate exists to stop.
 	if i := strings.Index(req.Model, "/"); i > 0 {
 		req.Model = req.Model[i+1:]
+	}
+	if strings.TrimSpace(req.Model) == "" {
+		writeError(w, http.StatusNotFound, apiError{
+			Message: "The model '" + ledger.Model + "/' does not name a model.",
+			Type:    errTypeInvalidRequest,
+			Code:    "model_not_found",
+		})
+		return
 	}
 	// Platform circuit breaker gate (§9.21-e.2): the per-source breaker owns
 	// open/half-open recovery semantics (circuit.Allow) — when it refuses, the
@@ -730,10 +765,13 @@ func (rt *Router) dispatch(w http.ResponseWriter, r *http.Request, proto string,
 				rt.finishAttempt(platform, acct.ID, "success")
 			case errors.Is(streamErr, context.Canceled):
 				// Client disconnect mid-stream: the upstream outcome stays
-				// unobserved — recorded as interrupted, not as a failure.
+				// unobserved — recorded as interrupted, and the pool books
+				// NO failure (healthStatus would map the cancel to "error"
+				// and bleed the account's weight for every abort-heavy
+				// client); only the in-flight counter unwinds.
 				ledger.Result = usage.ResultInterrupted
 				rt.recordSendOutcome(req.Model, platform, acct.ID, upstreamStatus(streamErr), streamErr)
-				rt.finishAttempt(platform, acct.ID, healthStatus(streamErr))
+				rt.host.Pool.InFlightAdd(platform, acct.ID, -1)
 			default:
 				// Mid-stream failure: the classification of the upstream error
 				// (429 vs 5xx vs timeout) still feeds the breaker — Record is
@@ -848,7 +886,11 @@ func (rt *Router) recordSendOutcome(model, platform, accountID string, statusCod
 	if err != nil && errors.Is(err, context.Canceled) {
 		return
 	}
-	if st := upstreamStatus(err); st == http.StatusTooManyRequests {
+	// Book by CLASSIFICATION, not carrier status: qoder's admission-control
+	// family (10605/RESOURCE_LIMIT) answers on 401/403/503 envelopes with
+	// Reason rate_limited — a status check misses every one of them.
+	var lockUE *adapter.UpstreamError
+	if errors.As(err, &lockUE) && lockUE.Reason == adapter.ReasonRateLimited {
 		rt.locks.NoteRateLimited(model, platform, accountID, retryHintFromError(err))
 	}
 	br, ok := rt.host.Breaker(platform)
