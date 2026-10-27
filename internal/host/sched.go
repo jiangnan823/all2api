@@ -82,10 +82,11 @@ func (s *poolSource) Accounts(_ context.Context, taskType string) ([]*schedule.A
 			continue
 		}
 		result = append(result, &schedule.Account{
-			ID:          acc.ID,
-			Platform:    acc.Platform,
-			Status:      acc.Status,
-			CooldownEnd: acc.CooldownEnd,
+			ID:             acc.ID,
+			Platform:       acc.Platform,
+			Status:         acc.Status,
+			CooldownEnd:    acc.CooldownEnd,
+			CooldownReason: acc.CooldownReason,
 		})
 	}
 	return result, nil

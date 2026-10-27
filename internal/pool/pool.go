@@ -377,7 +377,10 @@ func (s *WeightedRandomSelector) UpdateHealth(platform, accountID, status string
 		// (the panel's enable/recover lifts it manually after an appeal).
 		account.FailCount++
 		account.Health = 0.0
-		account.TriggerCooldownReason(12*time.Hour, CooldownReasonRestricted)
+		// 72h: the restriction persists for days and every re-contact reads
+		// as more abnormal behavior — the probe cadence must be slower than
+		// the upstream's memory of the flag.
+		account.TriggerCooldownReason(72*time.Hour, CooldownReasonRestricted)
 	case "timeout":
 		account.FailCount++
 		account.Health = max(0.0, account.Health-0.02)

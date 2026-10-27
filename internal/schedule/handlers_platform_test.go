@@ -6,7 +6,11 @@ package schedule
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
+
+	"all2api/internal/adapter"
 )
 
 func TestBuildPlatformTasksNamingSourceAndCrons(t *testing.T) {
@@ -104,5 +108,52 @@ func TestRegisterPlatformHandlersBindsBuiltTasks(t *testing.T) {
 	s.mu.RUnlock()
 	if mysteryBound {
 		t.Fatal("unknown base task must not bind")
+	}
+}
+
+// TestTokenKeepaliveSkipsRestrictedAccount pins the 11140 red line on the
+// task side: an account cooling with the risk-control reason must be skipped
+// by token_keepalive (the looser predicate) — touching a restricted account
+// reads as more abnormal behavior — while a merely rate-limited one still
+// gets its refresh.
+func TestTokenKeepaliveSkipsRestrictedAccount(t *testing.T) {
+	restricted := &Account{ID: "r1", Platform: "workbuddy", Status: AccountCooling,
+		CooldownEnd:    time.Now().Add(time.Hour),
+		CooldownReason: CooldownReasonRestricted}
+	ratelimited := &Account{ID: "r2", Platform: "workbuddy", Status: AccountCooling,
+		CooldownEnd: time.Now().Add(time.Minute)}
+
+	if !skipDisabled(restricted) {
+		t.Fatal("restricted account must be skipped by token_keepalive")
+	}
+	if skipDisabled(ratelimited) {
+		t.Fatal("rate-limited account must still be refreshed by token_keepalive")
+	}
+}
+
+// TestWriteFailureParksRestrictedInsteadOfDisable: a credential-expired
+// failure whose underlying classification is account_restricted must
+// long-park (cooldown), never disable — disable is for genuinely dead
+// credentials and would brick the account until a human noticed.
+func TestWriteFailureParksRestrictedInsteadOfDisable(t *testing.T) {
+	store := &fakeStore{}
+	deps := &Deps{Store: store}
+	var ue *adapter.UpstreamError
+	// The task chain: the classified restriction wrapped by the schedule
+	// sentinel, exactly as translateTaskError + %w would produce it.
+	ue = &adapter.UpstreamError{Status: 403, Reason: adapter.ReasonAccountRestricted, Message: "workbuddy: request illegal"}
+	cause := fmt.Errorf("schedule upstream: token_keepalive: %s: %w", ue.Message, fmt.Errorf("%w: %w", ErrCredentialExpired, ue))
+
+	err := deps.writeFailure(context.Background(), &Account{ID: "a", Platform: "workbuddy"}, cause)
+	if err == nil {
+		t.Fatal("writeFailure must return non-nil for the restricted cause")
+	}
+	for _, e := range store.events {
+		if len(e) >= 7 && e[:7] == "status:" {
+			t.Fatalf("restricted account must not be disabled, got store event %q", e)
+		}
+	}
+	if len(store.events) != 1 || store.events[0][:9] != "cooldown:" {
+		t.Fatalf("store events = %v, want exactly one cooldown (the long park)", store.events)
 	}
 }

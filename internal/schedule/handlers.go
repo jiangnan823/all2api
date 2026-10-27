@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"all2api/internal/adapter"
 )
 
 // Task names — the stable registration keys shared by Scheduler.AddTask and
@@ -153,11 +155,24 @@ func skipDisabledOrCooling(acc *Account) bool {
 	return acc.Status == AccountDisabled || acc.IsCooling()
 }
 
-// skipDisabled excludes only manually disabled accounts. token_keepalive uses
-// this looser predicate on purpose: credential refresh must continue during a
-// rate-limit cooldown, or the token dies while the account merely cools.
+// restrictedParkWindow is how long a 11140-flagged account stays out of the
+// task batches after one contact: the restriction persists for days and
+// every touch reads as more abnormal behavior (2026-10-21 incident: four
+// accounts flagged within a day of retries).
+const restrictedParkWindow = 72 * time.Hour
+
+// skipDisabled excludes manually disabled accounts AND risk-control-
+// restricted ones. token_keepalive uses this looser predicate on purpose:
+// credential refresh must continue during a rate-limit cooldown, or the
+// token dies while the account merely cools — but a 11140-restricted
+// account must be left completely alone (the community red line: touching a
+// restricted account reads as more abnormal behavior and can extend the
+// restriction).
 func skipDisabled(acc *Account) bool {
-	return acc.Status == AccountDisabled
+	if acc.Status == AccountDisabled {
+		return true
+	}
+	return acc.IsCooling() && acc.CooldownReason == CooldownReasonRestricted
 }
 
 // writeFailure applies the per-account failure policy and always returns
@@ -166,12 +181,25 @@ func skipDisabled(acc *Account) bool {
 // that fails too. ErrUnsupportedTask is passed through untouched — the batch
 // loop classifies it as Skipped and nothing may be written back for it.
 // Credential expiry disables the account (pool.UpdateHealth auth_error
-// parity); any other error cools it for FailureCooldown.
+// parity) — except a risk-control restriction, which long-parks instead;
+// any other error cools it for FailureCooldown.
 func (d *Deps) writeFailure(ctx context.Context, acc *Account, cause error) error {
 	if errors.Is(cause, ErrUnsupportedTask) {
 		return cause // skip path: no write-back
 	}
 	if errors.Is(cause, ErrCredentialExpired) {
+		// A risk-control restriction surfacing through the auth chain is not
+		// a dead credential: disabling here would brick the account until a
+		// human noticed, while the restriction is upstream-side and
+		// temporary. Long-park instead (the auth chain already tried).
+		var ue *adapter.UpstreamError
+		if errors.As(cause, &ue) && ue.Reason == adapter.ReasonAccountRestricted {
+			until := time.Now().Add(restrictedParkWindow)
+			if err := d.Store.SetCooldown(ctx, acc.Platform, acc.ID, until); err != nil {
+				return fmt.Errorf("schedule: park %s/%s after restriction: %w", acc.Platform, acc.ID, err)
+			}
+			return fmt.Errorf("schedule: %s/%s restricted (parked %s): %w", acc.Platform, acc.ID, restrictedParkWindow, cause)
+		}
 		if err := d.Store.SetStatus(ctx, acc.Platform, acc.ID, AccountDisabled); err != nil {
 			return fmt.Errorf("schedule: disable %s/%s after credential expiry: %w", acc.Platform, acc.ID, err)
 		}

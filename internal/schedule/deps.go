@@ -23,7 +23,16 @@ type Account struct {
 	Platform    string    `json:"platform"` // source namespace: "workbuddy", "qoder", "trae"
 	Status      string    `json:"status"`   // AccountActive / AccountCooling / AccountDisabled
 	CooldownEnd time.Time `json:"cooldown_end,omitempty"`
+	// CooldownReason mirrors pool.Account.CooldownReason (the panel's
+	// status_note value) — task predicates key on it, e.g. token_keepalive
+	// must skip risk-control-restricted accounts while still refreshing
+	// merely rate-limited ones.
+	CooldownReason string `json:"cooldown_reason,omitempty"`
 }
+
+// CooldownReasonRestricted mirrors pool.CooldownReasonRestricted (schedule
+// stays pool-free by design, hence the duplicated literal).
+const CooldownReasonRestricted = "account restricted (risk control)"
 
 // Account lifecycle statuses — the raw string values of pool.Account.Status,
 // mirrored locally (same values, no import).
